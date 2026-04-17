@@ -121,10 +121,33 @@ export function pairSegments(a: string, b: string): [Segment[] | null, Segment[]
 }
 
 /**
- * Keep changed rows plus `context` equal rows on each side. Returns the same
- * array shape so the renderer stays simple. Pass Infinity to disable clipping.
+ * One block of contiguous rows that can be expanded on demand. `start` /
+ * `end` are inclusive indices into the full row array. `rows` is the full
+ * set of hidden rows so the renderer can reveal them on click without
+ * asking the diff library for them again.
  */
-export function clipContext(rows: DiffRow[], context = 3): DiffRow[] {
+export interface SkipBlock {
+  kind: "skip";
+  /** Hidden row count. */
+  hidden: number;
+  /** Full hidden rows, in order, ready to splice in on expand. */
+  rows: DiffRow[];
+}
+
+/** A renderable entry is either a normal diff row or a collapsible skip block. */
+export type DiffEntry = DiffRow | SkipBlock;
+
+/** Narrow helper used by the renderer. */
+export function isSkip(e: DiffEntry): e is SkipBlock {
+  return (e as SkipBlock).kind === "skip";
+}
+
+/**
+ * Keep changed rows plus `context` equal rows around every change; collapse
+ * the rest into interactive `SkipBlock`s. Returns a mixed entry stream the
+ * renderer can fold / unfold.
+ */
+export function clipContext(rows: DiffRow[], context = 3): DiffEntry[] {
   if (!Number.isFinite(context)) return rows;
   const keep = new Array(rows.length).fill(false);
   rows.forEach((r, i) => {
@@ -134,23 +157,22 @@ export function clipContext(rows: DiffRow[], context = 3): DiffRow[] {
       }
     }
   });
-  const out: DiffRow[] = [];
-  let hidden = 0;
+  const out: DiffEntry[] = [];
+  let buf: DiffRow[] = [];
+  const flush = () => {
+    if (buf.length) {
+      out.push({ kind: "skip", hidden: buf.length, rows: buf });
+      buf = [];
+    }
+  };
   rows.forEach((r, i) => {
     if (keep[i]) {
-      if (hidden > 0) {
-        out.push({
-          kind: "equal",
-          baseLine: null,
-          headLine: null,
-          text: `⋯ ${hidden} unchanged line${hidden === 1 ? "" : "s"}`,
-        });
-        hidden = 0;
-      }
+      flush();
       out.push(r);
     } else {
-      hidden += 1;
+      buf.push(r);
     }
   });
+  flush();
   return out;
 }

@@ -1,52 +1,114 @@
+import { useState } from "react";
 import { cn } from "@/lib/cn";
-import type { DiffRow, Segment } from "@/lib/diff";
+import type { DiffEntry, DiffRow, Segment, SkipBlock } from "@/lib/diff";
+import { isSkip } from "@/lib/diff";
 
 interface Props {
-  rows: DiffRow[];
+  entries: DiffEntry[];
 }
 
 /**
- * Unified-style diff. Each row wraps at the column width so reviewers never
- * have to horizontal-scroll on reasonable widths. The row body tint is the
- * "soft" layer; when `segments` are present from the word-level pass, the
- * actual changed spans get a second, stronger tint on top. That means an
- * unchanged prefix/suffix of a modified line reads nearly as calm context,
- * and the eye is pulled only to the pieces that really differ.
+ * Unified-style diff. Rows wrap at the column width; changed spans carry
+ * strong tint while shared prefixes/suffixes of modified lines stay soft;
+ * pure-new / pure-removed rows use the full strength. Collapsed context
+ * appears as a clickable skip block that expands in place.
  */
-export function DiffView({ rows }: Props) {
+export function DiffView({ entries }: Props) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   return (
     <div className="text-[12.5px] font-mono rounded border overflow-hidden">
-      {rows.map((r, i) => (
-        <Row key={i} row={r} />
-      ))}
+      {entries.map((entry, i) => {
+        if (isSkip(entry)) {
+          const isOpen = expanded.has(i);
+          return (
+            <Skip
+              key={`skip-${i}`}
+              block={entry}
+              open={isOpen}
+              onToggle={() =>
+                setExpanded((s) => {
+                  const next = new Set(s);
+                  if (next.has(i)) next.delete(i);
+                  else next.add(i);
+                  return next;
+                })
+              }
+            />
+          );
+        }
+        return <Row key={i} row={entry} />;
+      })}
     </div>
+  );
+}
+
+function Skip({
+  block,
+  open,
+  onToggle,
+}: {
+  block: SkipBlock;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  if (open) {
+    return (
+      <>
+        <button
+          onClick={onToggle}
+          className={cn(
+            "flex items-stretch w-full text-left",
+            "hover:bg-muted/50 transition-colors",
+          )}
+          aria-label={`Collapse ${block.hidden} unchanged lines`}
+        >
+          <div className="w-[6rem] shrink-0 flex items-center justify-center py-0.5 bg-muted/40 text-[10px] tracking-wide uppercase text-muted-foreground select-none">
+            collapse
+          </div>
+          <div className="flex-1" />
+        </button>
+        {block.rows.map((r, idx) => (
+          <Row key={idx} row={r} />
+        ))}
+      </>
+    );
+  }
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "flex items-stretch w-full text-left group",
+        "bg-muted/30 hover:bg-muted/60 transition-colors",
+      )}
+      aria-label={`Expand ${block.hidden} unchanged line${block.hidden === 1 ? "" : "s"}`}
+    >
+      <div className="w-[6rem] shrink-0 flex items-center justify-center py-1 text-[10px] tracking-wide uppercase text-muted-foreground group-hover:text-foreground select-none">
+        {block.hidden}
+      </div>
+      <div className="flex-1 px-3 py-1 text-[12px] text-muted-foreground group-hover:text-foreground">
+        ⋯ click to show {block.hidden} unchanged line{block.hidden === 1 ? "" : "s"}
+      </div>
+    </button>
   );
 }
 
 function Row({ row }: { row: DiffRow }) {
   const isAdd = row.kind === "add";
   const isRem = row.kind === "remove";
-  const isSkip = row.kind === "equal" && row.baseLine === null && row.headLine === null;
-  // A row with segments has some spans that are "equal" to the paired row.
-  // On such rows we tone the whole-row background down, since the strong
-  // span-level backgrounds will carry the real signal.
   const hasSegments = !!row.segments && row.segments.some((s) => s.kind === "equal");
 
   return (
     <div
       className={cn(
         "flex items-stretch",
-        // Pure new/removed rows (no shared spans) get a *strong* full-row tint —
-        // same intensity as the changed-span tint in paired rows, so "entirely
-        // new code" and "the new piece of a modified line" read with the same
-        // visual weight.
-        isAdd && (hasSegments
-          ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
-          : "bg-emerald-500/35 dark:bg-emerald-400/35"),
-        isRem && (hasSegments
-          ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
-          : "bg-rose-500/35 dark:bg-rose-400/35"),
-        isSkip && "bg-muted/40 text-muted-foreground italic",
+        isAdd &&
+          (hasSegments
+            ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
+            : "bg-emerald-500/35 dark:bg-emerald-400/35"),
+        isRem &&
+          (hasSegments
+            ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
+            : "bg-rose-500/35 dark:bg-rose-400/35"),
       )}
     >
       <Gutter value={row.baseLine} mark={isRem ? "−" : null} tone={isRem ? "rem" : "equal"} />

@@ -76,6 +76,13 @@ function HunkBody({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {
 /* Call                                                                       */
 /* -------------------------------------------------------------------------- */
 
+interface EdgeRef {
+  kind: "add" | "remove";
+  from: string;
+  to: string;
+  id: number;
+}
+
 function CallBody({
   artifact,
   added,
@@ -85,62 +92,152 @@ function CallBody({
   added: number[];
   removed: number[];
 }) {
+  const adds: EdgeRef[] = added
+    .map((id) => edgeToRef(artifact.head, id, "add"))
+    .filter((x): x is EdgeRef => x !== null);
+  const rems: EdgeRef[] = removed
+    .map((id) => edgeToRef(artifact.base, id, "remove"))
+    .filter((x): x is EdgeRef => x !== null);
+
+  // Pair adds with removes when they share a caller (the common
+  // "runJob's callee changed from enqueue → enqueueBatch" pattern).
+  // Each paired block renders with word-level tint: the shared caller is
+  // soft, the differing callee is strong. Unpaired edges keep full tint.
+  const pairs: Array<{ add?: EdgeRef; remove?: EdgeRef }> = [];
+  const remByCaller = new Map<string, EdgeRef[]>();
+  for (const r of rems) {
+    const list = remByCaller.get(r.from) ?? [];
+    list.push(r);
+    remByCaller.set(r.from, list);
+  }
+  for (const a of adds) {
+    const candidates = remByCaller.get(a.from);
+    if (candidates && candidates.length) {
+      pairs.push({ add: a, remove: candidates.shift() });
+    } else {
+      pairs.push({ add: a });
+    }
+  }
+  for (const [, remaining] of remByCaller) {
+    for (const r of remaining) pairs.push({ remove: r });
+  }
+
   return (
-    <ul className="space-y-0.5">
-      {added.map((id) => {
-        const e = edgeById(artifact.head, id);
-        if (!e) return null;
-        return (
-          <EdgeRow
-            key={`+${id}`}
-            kind="add"
-            from={nameOf(artifact.head, e.from)}
-            to={nameOf(artifact.head, e.to)}
-          />
-        );
-      })}
-      {removed.map((id) => {
-        const e = edgeById(artifact.base, id);
-        if (!e) return null;
-        return (
-          <EdgeRow
-            key={`-${id}`}
-            kind="remove"
-            from={nameOf(artifact.base, e.from)}
-            to={nameOf(artifact.base, e.to)}
-          />
-        );
-      })}
+    <ul className="space-y-1">
+      {pairs.map((p, i) => (
+        <EdgePair key={i} add={p.add} remove={p.remove} />
+      ))}
     </ul>
   );
 }
 
-function EdgeRow({
-  kind,
-  from,
-  to,
-}: {
-  kind: "add" | "remove";
-  from: string;
-  to: string;
-}) {
+function edgeToRef(
+  graph: Artifact["base"],
+  id: number,
+  kind: "add" | "remove",
+): EdgeRef | null {
+  const e = edgeById(graph, id);
+  if (!e) return null;
+  return { kind, from: nameOf(graph, e.from), to: nameOf(graph, e.to), id };
+}
+
+function EdgePair({ add, remove }: { add?: EdgeRef; remove?: EdgeRef }) {
+  const isPair = !!add && !!remove;
   return (
-    <li
+    <li className="space-y-0.5">
+      {remove && <EdgeRow edge={remove} paired={isPair} otherTo={add?.to} />}
+      {add && <EdgeRow edge={add} paired={isPair} otherTo={remove?.to} />}
+    </li>
+  );
+}
+
+function EdgeRow({
+  edge,
+  paired,
+  otherTo,
+}: {
+  edge: EdgeRef;
+  paired: boolean;
+  otherTo?: string;
+}) {
+  // When paired, build segments so the shared "caller → " reads soft and the
+  // differing callee reads strong.
+  const segments = paired && otherTo ? edgeSegments(edge, otherTo) : null;
+  const hasSegments = !!segments && segments.some((s) => s.kind === "equal");
+  const { kind } = edge;
+  return (
+    <div
       className={cn(
         "text-[13px] font-mono flex items-center gap-2 px-2 py-0.5 rounded",
-        kind === "add" && "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50",
-        kind === "remove" && "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50",
+        kind === "add" &&
+          (hasSegments
+            ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
+            : "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
+        kind === "remove" &&
+          (hasSegments
+            ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
+            : "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
       )}
     >
       <span className="w-3 inline-block text-center tabular-nums opacity-70" aria-hidden>
         {kind === "add" ? "+" : "−"}
       </span>
-      <span>{from}</span>
-      <span className="opacity-60" aria-hidden>
-        →
-      </span>
-      <span>{to}</span>
-    </li>
+      {segments ? (
+        <span className="inline-flex items-center gap-2">
+          {segments.map((s, i) => (
+            <SegmentPiece key={i} segment={s} kind={kind} />
+          ))}
+        </span>
+      ) : (
+        <>
+          <span>{edge.from}</span>
+          <span className="opacity-60" aria-hidden>
+            →
+          </span>
+          <span>{edge.to}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Segments for an edge row when paired by caller: caller+arrow are equal,
+ *  the callee is changed. */
+function edgeSegments(edge: EdgeRef, otherTo: string): Segment[] {
+  // We treat caller + " → " as the shared prefix (kind: equal) and the
+  // callee as the changed span. `otherTo` is the opposite side's callee,
+  // kept here so we could fall back to a word diff on the callee if
+  // callees happen to share a prefix — not needed at this scope.
+  void otherTo;
+  return [
+    { kind: "equal", text: edge.from },
+    { kind: "equal", text: " → " },
+    { kind: "changed", text: edge.to },
+  ];
+}
+
+function SegmentPiece({
+  segment,
+  kind,
+}: {
+  segment: Segment;
+  kind: "add" | "remove";
+}) {
+  if (segment.kind === "equal") {
+    return <span>{segment.text}</span>;
+  }
+  return (
+    <span
+      className={cn(
+        "rounded-[2px] px-0.5",
+        kind === "add" &&
+          "bg-emerald-500/35 dark:bg-emerald-400/35 text-emerald-950 dark:text-emerald-50",
+        kind === "remove" &&
+          "bg-rose-500/35 dark:bg-rose-400/35 text-rose-950 dark:text-rose-50",
+      )}
+    >
+      {segment.text}
+    </span>
   );
 }
 

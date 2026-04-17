@@ -87,6 +87,6 @@ function FileDiff({
   if (base === null || head === null) {
     return <div className="text-[12px] text-muted-foreground">Loading…</div>;
   }
-  const rows = enrichWordLevel(clipContext(lineDiff(base, head), 3));
-  return <DiffView rows={rows} />;
+  const entries = clipContext(enrichWordLevel(lineDiff(base, head)), 3);
+  return <DiffView entries={entries} />;
 }
