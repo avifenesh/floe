@@ -4,6 +4,7 @@ Cargo.lock.bak
 .adr/cache/
 .DS_Store
 node_modules/
+apps/web/src/types/artifact.ts
 dist/
 .env
 .env.local

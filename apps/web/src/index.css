@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Neutral starter palette — a near-white surface, near-black text, no grid /
+ * noise / paper texture. These are placeholders: every hue, weight, and
+ * contrast level is open to iteration. Color + weight carry emphasis; no
+ * italic-serif drama.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 99%;
+    --foreground: 220 10% 12%;
+
+    --muted: 220 8% 94%;
+    --muted-foreground: 220 6% 40%;
+
+    --primary: 220 10% 12%;
+    --primary-foreground: 0 0% 99%;
+
+    --accent: 220 8% 94%;
+    --accent-foreground: 220 10% 12%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 99%;
+
+    --border: 220 10% 88%;
+    --input: 220 10% 88%;
+    --ring: 220 10% 12%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+}
