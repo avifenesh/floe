@@ -153,10 +153,12 @@ function Row({
   // head only.
   const archKinds = rowArchKinds(row, touches);
 
+  const flagged = archKinds.size > 0;
+
   return (
     <div
       className={cn(
-        "flex items-stretch",
+        "flex items-stretch relative",
         isAdd &&
           (hasSegments
             ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
@@ -173,6 +175,7 @@ function Row({
       <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
         <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
       </pre>
+      {flagged && <ArchChip kinds={archKinds} />}
     </div>
   );
 }
@@ -337,6 +340,58 @@ function Segments({ segments, kind }: { segments: Segment[]; kind: "add" | "remo
       })}
     </>
   );
+}
+
+/**
+ * Small chip at the right edge of a flagged row. Compact initials by default
+ * (e.g. `C·A` for Call + API); on hover *of the chip itself* it expands to
+ * full labels. Hover scope is `group/chip` — hovering anywhere else on the
+ * row or the strip does nothing.
+ */
+function ArchChip({ kinds }: { kinds: Set<HunkClass> }) {
+  const list = Array.from(kinds);
+  const initials = list.map(kindInitial).join("·");
+  const full = list.map(kindLabel).join(" · ");
+  return (
+    <div
+      aria-label={`Architectural: ${full}`}
+      className={cn(
+        "absolute right-2 top-1/2 -translate-y-1/2",
+        "group/chip",
+        "text-[10px] font-mono font-medium tracking-wide rounded px-1.5 py-0.5",
+        "bg-amber-100/70 text-amber-900 border border-amber-300/60",
+        "dark:bg-amber-400/10 dark:text-amber-300 dark:border-amber-400/25",
+        "hover:bg-amber-100 hover:border-amber-400",
+        "dark:hover:bg-amber-400/20 dark:hover:border-amber-400/50",
+        "transition-colors",
+      )}
+    >
+      <span className="group-hover/chip:hidden">{initials}</span>
+      <span className="hidden group-hover/chip:inline">{full}</span>
+    </div>
+  );
+}
+
+function kindInitial(k: HunkClass): string {
+  switch (k) {
+    case "call":
+      return "C";
+    case "state":
+      return "S";
+    case "api":
+      return "A";
+  }
+}
+
+function kindLabel(k: HunkClass): string {
+  switch (k) {
+    case "call":
+      return "Call";
+    case "state":
+      return "State";
+    case "api":
+      return "API";
+  }
 }
 
 function Gutter({
