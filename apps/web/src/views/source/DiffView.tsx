@@ -207,37 +207,25 @@ function ArchStrip({ kinds }: { kinds: Set<HunkClass> }) {
   return (
     <div
       aria-hidden
-      className={cn(
-        "w-[3px] shrink-0 transition-all",
-        "bg-amber-500/70 dark:bg-amber-400/60",
-        "group-hover/row:w-[5px] group-hover/row:bg-amber-500 dark:group-hover/row:bg-amber-400",
-      )}
+      className="w-[3px] shrink-0 bg-amber-500/70 dark:bg-amber-400/60"
     />
   );
 }
 
 /**
- * Hover-revealed chip that appears at the right edge of a flagged row,
- * labelling which hunk kinds claim the line. Uses the whole row as the hover
- * zone so reviewers don't have to target the 3-px strip.
+ * Always-visible kind label at the right edge of a flagged row. Kept quiet —
+ * no background, no border, just a tiny amber monospace tag — so the row
+ * still reads as code while the reviewer sees "this line belongs to Call · API"
+ * at a glance.
  */
 function ArchChip({ kinds }: { kinds: Set<HunkClass> }) {
   const label = Array.from(kinds).map(kindLabel).join(" · ");
   return (
     <div
-      className={cn(
-        "absolute right-2 top-1/2 -translate-y-1/2",
-        "opacity-0 group-hover/row:opacity-100 transition-opacity duration-150",
-        "pointer-events-none",
-      )}
+      aria-hidden
+      className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
     >
-      <span
-        className={cn(
-          "text-[10px] font-mono font-medium tracking-wide px-1.5 py-0.5 rounded",
-          "bg-amber-100 text-amber-900 border border-amber-300",
-          "dark:bg-amber-400/15 dark:text-amber-200 dark:border-amber-400/30",
-        )}
-      >
+      <span className="text-[10px] font-mono font-medium tracking-wide text-amber-700 dark:text-amber-300">
         {label}
       </span>
     </div>
