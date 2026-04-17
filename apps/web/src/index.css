@@ -3,10 +3,14 @@
 @tailwind utilities;
 
 /*
- * Neutral starter palette — a near-white surface, near-black text, no grid /
- * noise / paper texture. These are placeholders: every hue, weight, and
- * contrast level is open to iteration. Color + weight carry emphasis; no
- * italic-serif drama.
+ * Typography rules (locked after the first iteration):
+ * - Inter for prose/labels; JetBrains Mono for every identifier, file path,
+ *   count, cost, percentage, hash, and keyboard glyph.
+ * - Three weights total: 400 body, 500 emphasis, 600 headers/active.
+ * - Mono ligatures OFF — reviewers pattern-match === / !== / >= as three
+ *   literal characters, not glyphs. Tabular figures ON so numbers align.
+ * - Color carries hierarchy (foreground / muted-foreground + alpha), weight
+ *   carries emphasis, no italics.
  */
 @layer base {
   :root {
@@ -14,7 +18,7 @@
     --foreground: 220 10% 12%;
 
     --muted: 220 8% 94%;
-    --muted-foreground: 220 6% 40%;
+    --muted-foreground: 220 6% 42%;
 
     --primary: 220 10% 12%;
     --primary-foreground: 0 0% 99%;
@@ -25,7 +29,7 @@
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 99%;
 
-    --border: 220 10% 88%;
+    --border: 220 10% 90%;
     --input: 220 10% 88%;
     --ring: 220 10% 12%;
   }
@@ -34,9 +38,21 @@
     border-color: hsl(var(--border));
   }
 
+  html,
   body {
     @apply bg-background text-foreground font-sans;
-    font-feature-settings: "ss01", "cv11";
+    font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .font-mono,
+  code,
+  kbd,
+  pre,
+  samp {
+    font-feature-settings: "tnum" 1, "calt" 0, "liga" 0, "clig" 0;
+    font-variant-ligatures: none;
+    font-variant-numeric: tabular-nums;
   }
 }
