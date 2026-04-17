@@ -153,12 +153,10 @@ function Row({
   // head only.
   const archKinds = rowArchKinds(row, touches);
 
-  const flagged = archKinds.size > 0;
-
   return (
     <div
       className={cn(
-        "flex items-stretch relative group/row",
+        "flex items-stretch",
         isAdd &&
           (hasSegments
             ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
@@ -175,7 +173,6 @@ function Row({
       <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
         <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
       </pre>
-      {flagged && <ArchChip kinds={archKinds} />}
     </div>
   );
 }
@@ -212,36 +209,6 @@ function ArchStrip({ kinds }: { kinds: Set<HunkClass> }) {
   );
 }
 
-/**
- * Always-visible kind label at the right edge of a flagged row. Kept quiet —
- * no background, no border, just a tiny amber monospace tag — so the row
- * still reads as code while the reviewer sees "this line belongs to Call · API"
- * at a glance.
- */
-function ArchChip({ kinds }: { kinds: Set<HunkClass> }) {
-  const label = Array.from(kinds).map(kindLabel).join(" · ");
-  return (
-    <div
-      aria-hidden
-      className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
-    >
-      <span className="text-[10px] font-mono font-medium tracking-wide text-amber-700 dark:text-amber-300">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function kindLabel(k: HunkClass): string {
-  switch (k) {
-    case "call":
-      return "Call";
-    case "state":
-      return "State";
-    case "api":
-      return "API";
-  }
-}
 
 function lineTokens(
   row: DiffRow,
