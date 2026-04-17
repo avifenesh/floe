@@ -153,10 +153,12 @@ function Row({
   // head only.
   const archKinds = rowArchKinds(row, touches);
 
+  const flagged = archKinds.size > 0;
+
   return (
     <div
       className={cn(
-        "flex items-stretch",
+        "flex items-stretch relative group/row",
         isAdd &&
           (hasSegments
             ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
@@ -173,6 +175,7 @@ function Row({
       <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
         <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
       </pre>
+      {flagged && <ArchChip kinds={archKinds} />}
     </div>
   );
 }
@@ -192,23 +195,64 @@ function rowArchKinds(row: DiffRow, touches?: LineTouches): Set<HunkClass> {
 }
 
 /**
- * 3px-wide vertical strip between the line-number gutters and the code. Present
- * only when the row belongs to an emitted hunk. Single-hue (amber) for v0 —
- * the reviewer learns "this line is architecturally flagged" from the strip,
- * and the specific class (Call/State/API) is available via the tooltip.
+ * 3-px vertical strip between the line-number gutters and the code. Present
+ * only when the row belongs to an emitted hunk. Brightens + thickens on
+ * row-hover (the companion `ArchChip` appears on the same hover), so the
+ * strip alone doesn't need to be a precise click target.
  */
 function ArchStrip({ kinds }: { kinds: Set<HunkClass> }) {
   if (kinds.size === 0) {
     return <div className="w-[3px] shrink-0" aria-hidden />;
   }
-  const label = Array.from(kinds).join(" · ");
   return (
     <div
-      className="w-[3px] shrink-0 bg-amber-500/80 dark:bg-amber-400/70"
-      aria-label={`Architectural: ${label}`}
-      title={`Architectural: ${label}`}
+      aria-hidden
+      className={cn(
+        "w-[3px] shrink-0 transition-all",
+        "bg-amber-500/70 dark:bg-amber-400/60",
+        "group-hover/row:w-[5px] group-hover/row:bg-amber-500 dark:group-hover/row:bg-amber-400",
+      )}
     />
   );
+}
+
+/**
+ * Hover-revealed chip that appears at the right edge of a flagged row,
+ * labelling which hunk kinds claim the line. Uses the whole row as the hover
+ * zone so reviewers don't have to target the 3-px strip.
+ */
+function ArchChip({ kinds }: { kinds: Set<HunkClass> }) {
+  const label = Array.from(kinds).map(kindLabel).join(" · ");
+  return (
+    <div
+      className={cn(
+        "absolute right-2 top-1/2 -translate-y-1/2",
+        "opacity-0 group-hover/row:opacity-100 transition-opacity duration-150",
+        "pointer-events-none",
+      )}
+    >
+      <span
+        className={cn(
+          "text-[10px] font-mono font-medium tracking-wide px-1.5 py-0.5 rounded",
+          "bg-amber-100 text-amber-900 border border-amber-300",
+          "dark:bg-amber-400/15 dark:text-amber-200 dark:border-amber-400/30",
+        )}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function kindLabel(k: HunkClass): string {
+  switch (k) {
+    case "call":
+      return "Call";
+    case "state":
+      return "State";
+    case "api":
+      return "API";
+  }
 }
 
 function lineTokens(
