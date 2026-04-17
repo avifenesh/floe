@@ -13,3 +13,7 @@ schemars = { workspace = true }
 thiserror = { workspace = true }
 blake3 = { workspace = true }
 petgraph = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+schemars = { workspace = true }

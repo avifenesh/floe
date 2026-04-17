@@ -1,0 +1,5 @@
+---
+source: crates/adr-hunks/tests/e2e.rs
+expression: hunks
+---
+[]

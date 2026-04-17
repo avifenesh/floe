@@ -1,0 +1,58 @@
+---
+source: crates/adr-hunks/tests/e2e.rs
+expression: hunks
+---
+[
+  {
+    "id": "[id]",
+    "kind": {
+      "kind": "call",
+      "added_edges": [
+        6,
+        7
+      ],
+      "removed_edges": [
+        5
+      ]
+    },
+    "provenance": {
+      "source": "adr-hunks/call",
+      "version": "0.1.0",
+      "pass_id": "hunks",
+      "hash": "[hash]"
+    }
+  },
+  {
+    "id": "[id]",
+    "kind": {
+      "kind": "state",
+      "node": 1,
+      "added_variants": [
+        "retrying",
+        "failed"
+      ],
+      "removed_variants": []
+    },
+    "provenance": {
+      "source": "adr-hunks/state",
+      "version": "0.1.0",
+      "pass_id": "hunks",
+      "hash": "[hash]"
+    }
+  },
+  {
+    "id": "[id]",
+    "kind": {
+      "kind": "api",
+      "node": 2,
+      "before_signature": "async function runJob(id: string): Promise<void> {",
+      "after_signature": "async function runJob(id: string, maxAttempts: number): Promise<void> {"
+    },
+    "provenance": {
+      "source": "adr-hunks/api",
+      "version": "0.1.0",
+      "pass_id": "hunks",
+      "hash": "[hash]"
+    }
+  }
+]

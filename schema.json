@@ -1,0 +1,452 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Artifact",
+  "description": "The top-level JSON artifact emitted by `adr diff`. Every downstream consumer (server, frontend, cost model, evidence collectors) reads this and only this.",
+  "type": "object",
+  "required": [
+    "base",
+    "head",
+    "hunks",
+    "pr",
+    "schema_version"
+  ],
+  "properties": {
+    "base": {
+      "$ref": "#/definitions/Graph"
+    },
+    "head": {
+      "$ref": "#/definitions/Graph"
+    },
+    "hunks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Hunk"
+      }
+    },
+    "pr": {
+      "$ref": "#/definitions/PrRef"
+    },
+    "schema_version": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "Edge": {
+      "type": "object",
+      "required": [
+        "from",
+        "id",
+        "kind",
+        "provenance",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "id": {
+          "$ref": "#/definitions/EdgeId"
+        },
+        "kind": {
+          "$ref": "#/definitions/EdgeKind"
+        },
+        "provenance": {
+          "$ref": "#/definitions/Provenance"
+        },
+        "to": {
+          "$ref": "#/definitions/NodeId"
+        }
+      }
+    },
+    "EdgeId": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "EdgeKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "calls",
+            "defines",
+            "exports"
+          ]
+        },
+        {
+          "description": "A transition between two [`NodeKind::State`] variants.",
+          "type": "object",
+          "required": [
+            "transitions"
+          ],
+          "properties": {
+            "transitions": {
+              "type": "object",
+              "required": [
+                "from",
+                "to"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Graph": {
+      "description": "Flat adjacency-list graph. `petgraph` is used internally for queries; the wire format stays flat so downstream languages can read the artifact without a graph library.",
+      "type": "object",
+      "required": [
+        "edges",
+        "nodes"
+      ],
+      "properties": {
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Edge"
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Node"
+          }
+        }
+      }
+    },
+    "Hunk": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/HunkKind"
+        },
+        "provenance": {
+          "$ref": "#/definitions/Provenance"
+        }
+      }
+    },
+    "HunkKind": {
+      "description": "The three semantic hunk types scope 1 delivers. The RFC lists more (lock, data, docs, deletion); they land in later scopes without a schema bump — new variants are additive.",
+      "oneOf": [
+        {
+          "description": "A call-graph edge appeared, disappeared, or moved.",
+          "type": "object",
+          "required": [
+            "added_edges",
+            "kind",
+            "removed_edges"
+          ],
+          "properties": {
+            "added_edges": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/EdgeId"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "call"
+              ]
+            },
+            "removed_edges": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/EdgeId"
+              }
+            }
+          }
+        },
+        {
+          "description": "A string-union state gained or lost variants, or transitions changed.",
+          "type": "object",
+          "required": [
+            "added_variants",
+            "kind",
+            "node",
+            "removed_variants"
+          ],
+          "properties": {
+            "added_variants": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "state"
+              ]
+            },
+            "node": {
+              "$ref": "#/definitions/NodeId"
+            },
+            "removed_variants": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "description": "An exported API surface changed shape or a route handler moved.",
+          "type": "object",
+          "required": [
+            "kind",
+            "node"
+          ],
+          "properties": {
+            "after_signature": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "before_signature": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "api"
+              ]
+            },
+            "node": {
+              "$ref": "#/definitions/NodeId"
+            }
+          }
+        }
+      ]
+    },
+    "Node": {
+      "type": "object",
+      "required": [
+        "file",
+        "id",
+        "kind",
+        "provenance",
+        "span"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "kind": {
+          "$ref": "#/definitions/NodeKind"
+        },
+        "provenance": {
+          "$ref": "#/definitions/Provenance"
+        },
+        "span": {
+          "$ref": "#/definitions/Span"
+        }
+      }
+    },
+    "NodeId": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "NodeKind": {
+      "oneOf": [
+        {
+          "description": "A TypeScript function, method, or arrow-function definition.",
+          "type": "object",
+          "required": [
+            "name",
+            "signature",
+            "type"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "signature": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "function"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A type alias, interface, or class declared in the surface.",
+          "type": "object",
+          "required": [
+            "name",
+            "type"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "type"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A string-union state (e.g. `type State = \"a\" | \"b\"`).",
+          "type": "object",
+          "required": [
+            "name",
+            "type",
+            "variants"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "state"
+              ]
+            },
+            "variants": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "description": "An HTTP / RPC endpoint exposed by the repo (Next.js handler, etc.).",
+          "type": "object",
+          "required": [
+            "method",
+            "path",
+            "type"
+          ],
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "api-endpoint"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A source file referenced by other nodes.",
+          "type": "object",
+          "required": [
+            "path",
+            "type"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "file"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PrRef": {
+      "type": "object",
+      "required": [
+        "base_sha",
+        "head_sha",
+        "repo"
+      ],
+      "properties": {
+        "base_sha": {
+          "type": "string"
+        },
+        "head_sha": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        }
+      }
+    },
+    "Provenance": {
+      "description": "Every node, edge, and hunk carries provenance so the UI can answer \"where did this fact come from?\" without guessing.\n\n`source` names the pass that produced the fact (e.g. `tree-sitter-typescript`, `scip-typescript`, `adr-hunks/call`). `version` is the tool version at the time of the run. `pass_id` is stable across a single analysis; `hash` is a blake3 of the raw input bytes the pass consumed — used to detect stale cached facts.",
+      "type": "object",
+      "required": [
+        "hash",
+        "pass_id",
+        "source",
+        "version"
+      ],
+      "properties": {
+        "hash": {
+          "type": "string"
+        },
+        "pass_id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "Span": {
+      "description": "Byte-range span in the indicated file. Line/column are derived on demand by the renderer; the artifact stays source-of-truth in bytes.",
+      "type": "object",
+      "required": [
+        "end",
+        "start"
+      ],
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}
