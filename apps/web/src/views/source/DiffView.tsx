@@ -36,8 +36,16 @@ function Row({ row }: { row: DiffRow }) {
     <div
       className={cn(
         "flex items-stretch",
-        isAdd && (hasSegments ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]" : "bg-emerald-500/20 dark:bg-emerald-400/15"),
-        isRem && (hasSegments ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]" : "bg-rose-500/20 dark:bg-rose-400/15"),
+        // Pure new/removed rows (no shared spans) get a *strong* full-row tint —
+        // same intensity as the changed-span tint in paired rows, so "entirely
+        // new code" and "the new piece of a modified line" read with the same
+        // visual weight.
+        isAdd && (hasSegments
+          ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
+          : "bg-emerald-500/35 dark:bg-emerald-400/35"),
+        isRem && (hasSegments
+          ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
+          : "bg-rose-500/35 dark:bg-rose-400/35"),
         isSkip && "bg-muted/40 text-muted-foreground italic",
       )}
     >
