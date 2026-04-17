@@ -128,12 +128,12 @@ function Row({
         "flex items-stretch",
         isAdd &&
           (hasSegments
-            ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
-            : "bg-emerald-500/35 dark:bg-emerald-400/35"),
+            ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
+            : "bg-emerald-100 dark:bg-emerald-400/35"),
         isRem &&
           (hasSegments
-            ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
-            : "bg-rose-500/35 dark:bg-rose-400/35"),
+            ? "bg-rose-50 dark:bg-rose-400/[0.06]"
+            : "bg-rose-100 dark:bg-rose-400/35"),
       )}
     >
       <Gutter value={row.baseLine} mark={isRem ? "−" : null} tone={isRem ? "rem" : "equal"} />
@@ -189,9 +189,9 @@ function LineContent({
           style={{ color: p.color }}
           className={cn(
             p.strong && kind === "add" &&
-              "bg-emerald-500/40 dark:bg-emerald-400/40 rounded-[2px]",
+              "bg-emerald-300 dark:bg-emerald-400/40 rounded-[2px]",
             p.strong && kind === "remove" &&
-              "bg-rose-500/40 dark:bg-rose-400/40 rounded-[2px]",
+              "bg-rose-300 dark:bg-rose-400/40 rounded-[2px]",
           )}
         >
           {p.content}
@@ -261,9 +261,9 @@ function Segments({ segments, kind }: { segments: Segment[]; kind: "add" | "remo
             className={cn(
               "rounded-[2px]",
               kind === "add" &&
-                "bg-emerald-500/35 dark:bg-emerald-400/35 text-emerald-950 dark:text-emerald-50",
+                "bg-emerald-300 dark:bg-emerald-400/35 text-emerald-950 dark:text-emerald-50",
               kind === "remove" &&
-                "bg-rose-500/35 dark:bg-rose-400/35 text-rose-950 dark:text-rose-50",
+                "bg-rose-300 dark:bg-rose-400/35 text-rose-950 dark:text-rose-50",
             )}
           >
             {s.text}
@@ -287,9 +287,11 @@ function Gutter({
     <div
       className={cn(
         "w-12 shrink-0 flex items-start justify-end gap-1 px-2 py-[2px] select-none",
-        "text-[11px] tabular-nums text-muted-foreground leading-5",
-        tone === "add" && "bg-emerald-500/25 dark:bg-emerald-400/25 text-emerald-800 dark:text-emerald-200",
-        tone === "rem" && "bg-rose-500/25 dark:bg-rose-400/25 text-rose-800 dark:text-rose-200",
+        "text-[11px] tabular-nums leading-5 text-muted-foreground",
+        tone === "add" &&
+          "bg-emerald-200 text-emerald-900 dark:bg-emerald-400/25 dark:text-emerald-200",
+        tone === "rem" &&
+          "bg-rose-200 text-rose-900 dark:bg-rose-400/25 dark:text-rose-200",
       )}
     >
       <span className="w-2 text-center">{mark ?? ""}</span>

@@ -171,12 +171,12 @@ function EdgeRow({
         "text-[13px] font-mono flex items-center gap-2 px-2 py-0.5 rounded",
         kind === "add" &&
           (hasSegments
-            ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
-            : "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
+            ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
+            : "bg-emerald-200 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
         kind === "remove" &&
           (hasSegments
-            ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
-            : "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
+            ? "bg-rose-50 dark:bg-rose-400/[0.06]"
+            : "bg-rose-200 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
       )}
     >
       <span className="w-3 inline-block text-center tabular-nums opacity-70" aria-hidden>
@@ -231,9 +231,9 @@ function SegmentPiece({
       className={cn(
         "rounded-[2px] px-0.5",
         kind === "add" &&
-          "bg-emerald-500/35 dark:bg-emerald-400/35 text-emerald-950 dark:text-emerald-50",
+          "bg-emerald-300 dark:bg-emerald-400/35 text-emerald-950 dark:text-emerald-50",
         kind === "remove" &&
-          "bg-rose-500/35 dark:bg-rose-400/35 text-rose-950 dark:text-rose-50",
+          "bg-rose-300 dark:bg-rose-400/35 text-rose-950 dark:text-rose-50",
       )}
     >
       {segment.text}
@@ -278,8 +278,8 @@ function VariantChip({ kind, value }: { kind: "add" | "remove"; value: string })
     <span
       className={cn(
         "inline-flex items-center gap-1 text-[12px] font-mono px-2 py-0.5 rounded",
-        kind === "add" && "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50",
-        kind === "remove" && "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50",
+        kind === "add" && "bg-emerald-200 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50",
+        kind === "remove" && "bg-rose-200 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50",
       )}
     >
       <span className="opacity-70" aria-hidden>
@@ -343,12 +343,12 @@ function SignatureRow({
         "text-[12px] font-mono flex items-start gap-2 px-2 py-0.5 rounded min-w-0",
         kind === "add" &&
           (hasSegments
-            ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
-            : "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
+            ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
+            : "bg-emerald-200 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
         kind === "remove" &&
           (hasSegments
-            ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
-            : "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
+            ? "bg-rose-50 dark:bg-rose-400/[0.06]"
+            : "bg-rose-200 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
       )}
     >
       <span className="w-3 inline-block text-center tabular-nums text-muted-foreground shrink-0" aria-hidden>

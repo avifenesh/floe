@@ -1,7 +1,9 @@
-import type { Config } from "tailwindcss";
-
+/** @type {import('tailwindcss').Config} */
 // shadcn-compatible: colors read HSL CSS variables declared in src/index.css.
-// No visual opinions baked in yet — we iterate on every hue/weight together.
+// darkMode "class" toggles by an explicit `.dark` class on <html> — the
+// toggle in the spine is the single source of truth for theme (set via
+// src/lib/theme.ts). We do not follow prefers-color-scheme automatically
+// after the user has made a choice.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   darkMode: "class",
@@ -36,4 +38,4 @@ export default {
       },
     },
   },
-} satisfies Config;
+};
