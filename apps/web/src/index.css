@@ -3,35 +3,48 @@
 @tailwind utilities;
 
 /*
- * Typography rules (locked after the first iteration):
+ * Typography rules (locked):
  * - Inter for prose/labels; JetBrains Mono for every identifier, file path,
  *   count, cost, percentage, hash, and keyboard glyph.
  * - Three weights total: 400 body, 500 emphasis, 600 headers/active.
  * - Mono ligatures OFF — reviewers pattern-match === / !== / >= as three
- *   literal characters, not glyphs. Tabular figures ON so numbers align.
- * - Color carries hierarchy (foreground / muted-foreground + alpha), weight
- *   carries emphasis, no italics.
+ *   literal characters. Tabular figures ON so numbers align.
+ * - Color carries hierarchy, weight carries emphasis, no italics.
+ *
+ * Palette (locked for chrome; revisit for data):
+ * - Pure neutral scale — hue 0, saturation 0. No cool/warm mood.
+ * - Only one non-neutral: destructive red for alarms.
+ *
+ * Deferred visual decisions (settle once we can see them on real views):
+ * - [accent] should we reserve one saturated hue for high-signal data
+ *   moments (net-negative cost, strong evidence, the changed hop)? Decide
+ *   on first data-heavy view.
+ * - [active-underline placement] hugging the label vs anchored to the
+ *   bottom edge of the spine.
+ * - [muted-foreground lightness] current 45% — may need to go quieter.
+ * - [empty pr-identity] hide the left zone when no PR loaded vs show
+ *   placeholder.
  */
 @layer base {
   :root {
-    --background: 0 0% 99%;
-    --foreground: 220 10% 12%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 12%;
 
-    --muted: 220 8% 94%;
-    --muted-foreground: 220 6% 42%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
 
-    --primary: 220 10% 12%;
-    --primary-foreground: 0 0% 99%;
+    --primary: 0 0% 12%;
+    --primary-foreground: 0 0% 100%;
 
-    --accent: 220 8% 94%;
-    --accent-foreground: 220 10% 12%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 12%;
 
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 99%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 220 10% 90%;
-    --input: 220 10% 88%;
-    --ring: 220 10% 12%;
+    --border: 0 0% 90%;
+    --input: 0 0% 88%;
+    --ring: 0 0% 12%;
   }
 
   * {
