@@ -95,6 +95,18 @@ expression: graph
     {
       "id": 1,
       "from": 0,
+      "to": 1,
+      "kind": "exports",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 2,
+      "from": 0,
       "to": 2,
       "kind": "defines",
       "provenance": {
@@ -105,7 +117,19 @@ expression: graph
       }
     },
     {
-      "id": 2,
+      "id": 3,
+      "from": 0,
+      "to": 2,
+      "kind": "exports",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 4,
       "from": 0,
       "to": 3,
       "kind": "defines",
@@ -117,7 +141,7 @@ expression: graph
       }
     },
     {
-      "id": 3,
+      "id": 5,
       "from": 2,
       "to": 3,
       "kind": "calls",

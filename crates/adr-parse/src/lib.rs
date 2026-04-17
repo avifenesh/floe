@@ -1,10 +1,12 @@
 //! TypeScript parsing → `adr-core` graph.
 //!
-//! Day-2: walk a directory, parse each `.ts` / `.tsx`, emit `File` + top-level
-//! `Function` / `Type` nodes with `Defines` edges.
-//! Day-3: second pass per file resolving `call_expression` → `Calls` edge when the
-//! callee is a bare identifier bound to a same-file function. Cross-file + method
-//! call resolution lands with scip-typescript.
+//! Scope 1 coverage:
+//! - `File` · `Function` · `Type` · `State` nodes from top-level declarations
+//! - `Defines` edge from file → def for every emitted node
+//! - `Exports` edge when the declaration is wrapped in `export_statement`
+//! - `Calls` edges for within-file, bare-identifier callsites
+//!
+//! Cross-file call + method resolution awaits scip-typescript.
 
 use std::collections::HashMap;
 use std::fs;
@@ -26,8 +28,6 @@ pub struct Ingest {
     pass_id: String,
 }
 
-/// Function definition captured during phase 1 so phase 2 can resolve its
-/// callsites without re-walking the whole tree.
 struct FnDef<'tree> {
     id: NodeId,
     name: String,
@@ -117,7 +117,6 @@ impl Ingest {
             provenance: file_prov,
         });
 
-        // Phase 1: emit top-level defs, remember function bodies for phase 2.
         let mut fns: Vec<FnDef<'_>> = Vec::new();
         let mut cursor = tree.root_node().walk();
         let root = tree.root_node();
@@ -125,8 +124,6 @@ impl Ingest {
             self.visit_top_level(child, source, rel_path, file_id, &mut fns);
         }
 
-        // Phase 2: within-file callsite resolution. Callee names resolve against
-        // other functions in the same file only; cross-file awaits scip.
         let name_to_id: HashMap<&str, NodeId> =
             fns.iter().map(|f| (f.name.as_str(), f.id)).collect();
         for f in &fns {
@@ -144,16 +141,16 @@ impl Ingest {
         file_id: NodeId,
         fns: &mut Vec<FnDef<'tree>>,
     ) {
-        let effective = if node.kind() == "export_statement" {
-            node.child_by_field_name("declaration").unwrap_or(node)
+        let (effective, exported) = if node.kind() == "export_statement" {
+            (node.child_by_field_name("declaration").unwrap_or(node), true)
         } else {
-            node
+            (node, false)
         };
         match effective.kind() {
             "function_declaration" => {
                 if let Some(name) = field_text(effective, "name", source) {
                     let sig = first_line(effective, source);
-                    let id = self.emit_definition(
+                    let id = self.emit_def(
                         NodeKind::Function {
                             name: name.clone(),
                             signature: sig,
@@ -162,6 +159,7 @@ impl Ingest {
                         source,
                         rel_path,
                         file_id,
+                        exported,
                     );
                     fns.push(FnDef {
                         id,
@@ -172,24 +170,23 @@ impl Ingest {
             }
             "class_declaration" | "interface_declaration" => {
                 if let Some(name) = field_text(effective, "name", source) {
-                    self.emit_definition(
+                    self.emit_def(
                         NodeKind::Type { name },
                         effective,
                         source,
                         rel_path,
                         file_id,
+                        exported,
                     );
                 }
             }
             "type_alias_declaration" => {
                 if let Some(name) = field_text(effective, "name", source) {
-                    self.emit_definition(
-                        NodeKind::Type { name },
-                        effective,
-                        source,
-                        rel_path,
-                        file_id,
-                    );
+                    let kind = match string_union_variants(effective, source) {
+                        Some(variants) => NodeKind::State { name, variants },
+                        None => NodeKind::Type { name },
+                    };
+                    self.emit_def(kind, effective, source, rel_path, file_id, exported);
                 }
             }
             "lexical_declaration" | "variable_declaration" => {
@@ -208,7 +205,7 @@ impl Ingest {
                         continue;
                     };
                     let sig = first_line(decl, source);
-                    let id = self.emit_definition(
+                    let id = self.emit_def(
                         NodeKind::Function {
                             name: name.clone(),
                             signature: sig,
@@ -217,6 +214,7 @@ impl Ingest {
                         source,
                         rel_path,
                         file_id,
+                        exported,
                     );
                     fns.push(FnDef {
                         id,
@@ -229,13 +227,14 @@ impl Ingest {
         }
     }
 
-    fn emit_definition(
+    fn emit_def(
         &mut self,
         kind: NodeKind,
         node: TsNode<'_>,
         source: &[u8],
         rel_path: &str,
         file_id: NodeId,
+        exported: bool,
     ) -> NodeId {
         let span = Span {
             start: node.start_byte() as u32,
@@ -259,8 +258,19 @@ impl Ingest {
             from: file_id,
             to: def_id,
             kind: EdgeKind::Defines,
-            provenance: prov,
+            provenance: prov.clone(),
         });
+
+        if exported {
+            let eid = self.fresh_edge();
+            self.graph.edges.push(Edge {
+                id: eid,
+                from: file_id,
+                to: def_id,
+                kind: EdgeKind::Exports,
+                provenance: prov,
+            });
+        }
         def_id
     }
 
@@ -298,6 +308,44 @@ impl Ingest {
             }
         });
     }
+}
+
+/// Return `Some(variants)` iff the type alias RHS is a union of string literal
+/// types (the classical state-machine idiom). Otherwise `None`.
+fn string_union_variants(alias: TsNode<'_>, source: &[u8]) -> Option<Vec<String>> {
+    let value = alias.child_by_field_name("value")?;
+    if value.kind() != "union_type" {
+        return None;
+    }
+    let mut out = Vec::new();
+    flatten_union(value, source, &mut out)?;
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+/// Union types nest left-associatively for 3+ variants
+/// (`union_type(union_type(a, b), c)`). Walk recursively, collecting every
+/// string-literal variant. Return `None` if any member is not a string literal.
+fn flatten_union(node: TsNode<'_>, source: &[u8], out: &mut Vec<String>) -> Option<()> {
+    let mut cursor = node.walk();
+    for member in node.named_children(&mut cursor) {
+        match member.kind() {
+            "union_type" => flatten_union(member, source, out)?,
+            "literal_type" => {
+                let lit = member.named_child(0)?;
+                if lit.kind() != "string" {
+                    return None;
+                }
+                let text = lit.utf8_text(source).ok()?;
+                out.push(text.trim_matches(|c| c == '"' || c == '\'').to_string());
+            }
+            _ => return None,
+        }
+    }
+    Some(())
 }
 
 fn walk_call_expressions<'tree>(node: TsNode<'tree>, f: &mut dyn FnMut(TsNode<'tree>)) {
