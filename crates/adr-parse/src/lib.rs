@@ -130,6 +130,29 @@ impl Ingest {
             self.resolve_calls_in(f.id, f.body, source, &name_to_id);
         }
 
+        // Phase 3: classical state-machine transition detection. For every
+        // State node in this file, scan function bodies for the idiom
+        // `if (x === "a") return "b";` / `if (x === "a") x = "b";` where "a"
+        // and "b" are declared variants. Emit Transitions edges (self-loop on
+        // the State node) — the variant strings live in EdgeKind::Transitions.
+        let states: Vec<(NodeId, Vec<String>)> = self
+            .graph
+            .nodes
+            .iter()
+            .filter(|n| n.file == rel_path)
+            .filter_map(|n| match &n.kind {
+                NodeKind::State { variants, .. } => Some((n.id, variants.clone())),
+                _ => None,
+            })
+            .collect();
+        if !states.is_empty() {
+            for f in &fns {
+                for (state_id, variants) in &states {
+                    self.resolve_transitions_in(*state_id, variants, f.body, source);
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -346,6 +369,118 @@ fn flatten_union(node: TsNode<'_>, source: &[u8], out: &mut Vec<String>) -> Opti
         }
     }
     Some(())
+}
+
+impl Ingest {
+    fn resolve_transitions_in(
+        &mut self,
+        state_id: NodeId,
+        variants: &[String],
+        body: TsNode<'_>,
+        source: &[u8],
+    ) {
+        walk_if_statements(body, &mut |iff| {
+            let Some(condition) = iff.child_by_field_name("condition") else {
+                return;
+            };
+            let from_variant = match extract_equality_literal(condition, source) {
+                Some(s) if variants.iter().any(|v| v == &s) => s,
+                _ => return,
+            };
+            let Some(cons) = iff.child_by_field_name("consequence") else {
+                return;
+            };
+            let mut targets: Vec<String> = Vec::new();
+            walk_target_literals(cons, source, &mut targets);
+            for to_variant in targets {
+                if to_variant == from_variant {
+                    continue;
+                }
+                if !variants.iter().any(|v| v == &to_variant) {
+                    continue;
+                }
+                let key = format!("{from_variant}→{to_variant}");
+                let prov = self.prov(key.as_bytes());
+                let id = self.fresh_edge();
+                self.graph.edges.push(Edge {
+                    id,
+                    from: state_id,
+                    to: state_id,
+                    kind: EdgeKind::Transitions {
+                        from: from_variant.clone(),
+                        to: to_variant,
+                    },
+                    provenance: prov,
+                });
+            }
+        });
+    }
+}
+
+/// If `expr` is `x === "lit"` or `"lit" === x`, return "lit". Recurses through
+/// `parenthesized_expression` so `(x === "lit")` works too.
+fn extract_equality_literal(expr: TsNode<'_>, source: &[u8]) -> Option<String> {
+    let e = if expr.kind() == "parenthesized_expression" {
+        expr.named_child(0)?
+    } else {
+        expr
+    };
+    if e.kind() != "binary_expression" {
+        return None;
+    }
+    let op = e.child_by_field_name("operator")?;
+    let op_text = op.utf8_text(source).ok()?;
+    if op_text != "===" && op_text != "==" {
+        return None;
+    }
+    let left = e.child_by_field_name("left")?;
+    let right = e.child_by_field_name("right")?;
+    string_literal(left, source).or_else(|| string_literal(right, source))
+}
+
+fn string_literal(n: TsNode<'_>, source: &[u8]) -> Option<String> {
+    if n.kind() != "string" {
+        return None;
+    }
+    let t = n.utf8_text(source).ok()?;
+    Some(t.trim_matches(|c| c == '"' || c == '\'').to_string())
+}
+
+/// Collect every string-literal value appearing as a return value or an
+/// assignment RHS anywhere inside `n`. Recurses freely — this is a proxy
+/// for "what values does this branch produce?", not a precise analysis.
+fn walk_target_literals(n: TsNode<'_>, source: &[u8], out: &mut Vec<String>) {
+    match n.kind() {
+        "return_statement" => {
+            if let Some(expr) = n.named_child(0) {
+                if let Some(v) = string_literal(expr, source) {
+                    out.push(v);
+                }
+            }
+        }
+        "assignment_expression" => {
+            if let Some(right) = n.child_by_field_name("right") {
+                if let Some(v) = string_literal(right, source) {
+                    out.push(v);
+                }
+            }
+        }
+        _ => {}
+    }
+    let mut cursor = n.walk();
+    for c in n.named_children(&mut cursor) {
+        walk_target_literals(c, source, out);
+    }
+}
+
+fn walk_if_statements<'tree>(node: TsNode<'tree>, f: &mut dyn FnMut(TsNode<'tree>)) {
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if child.kind() == "if_statement" {
+            f(child);
+        }
+        walk_if_statements(child, f);
+    }
 }
 
 fn walk_call_expressions<'tree>(node: TsNode<'tree>, f: &mut dyn FnMut(TsNode<'tree>)) {

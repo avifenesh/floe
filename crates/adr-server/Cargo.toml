@@ -1,0 +1,36 @@
+[package]
+name = "adr-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Axum orchestrator: POST /analyze, GET /analyze/:id, SSE progress stream."
+
+[[bin]]
+name = "adr-server"
+path = "src/main.rs"
+
+[dependencies]
+adr-core = { workspace = true }
+adr-parse = { workspace = true }
+adr-cfg = { workspace = true }
+adr-hunks = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+uuid = { workspace = true }
+dashmap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+tokio = { workspace = true }

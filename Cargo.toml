@@ -5,6 +5,7 @@ members = [
     "crates/adr-parse",
     "crates/adr-hunks",
     "crates/adr-cfg",
+    "crates/adr-server",
     "crates/adr-cli",
 ]
 
@@ -28,11 +29,22 @@ tree-sitter = "0.22"
 tree-sitter-typescript = "0.21"
 walkdir = "2"
 insta = { version = "1", features = ["json", "redactions"] }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+futures = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+dashmap = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 
 adr-core = { path = "crates/adr-core" }
 adr-parse = { path = "crates/adr-parse" }
 adr-hunks = { path = "crates/adr-hunks" }
 adr-cfg = { path = "crates/adr-cfg" }
+adr-server = { path = "crates/adr-server" }
 
 [profile.release]
 lto = "thin"
