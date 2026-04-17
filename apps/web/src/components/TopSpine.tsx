@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { useTheme } from "@/lib/theme";
 import { VIEW_KEYS, type ViewKey } from "@/views/types";
 import { Kbd } from "./Kbd";
 
@@ -18,6 +19,7 @@ interface Props {
  * No border-bottom — chrome dissolves into the view.
  */
 export function TopSpine({ view, onView, prLabel }: Props) {
+  const [theme, setTheme] = useTheme();
   return (
     <header className="h-10 flex items-center">
       <div className="w-full max-w-6xl mx-auto px-6 grid grid-cols-[1fr,auto,1fr] items-center">
@@ -48,9 +50,18 @@ export function TopSpine({ view, onView, prLabel }: Props) {
           ))}
         </nav>
 
-        <div className="justify-self-end flex items-center gap-1.5">
-          <span className="text-[11px] font-mono text-muted-foreground">palette</span>
-          <Kbd>/</Kbd>
+        <div className="justify-self-end flex items-center gap-3">
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={`switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? "◐ dark" : "○ light"}
+          </button>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-mono text-muted-foreground">palette</span>
+            <Kbd>/</Kbd>
+          </div>
         </div>
       </div>
     </header>

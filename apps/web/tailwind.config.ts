@@ -4,6 +4,7 @@ import type { Config } from "tailwindcss";
 // No visual opinions baked in yet — we iterate on every hue/weight together.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {

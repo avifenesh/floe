@@ -47,6 +47,29 @@
     --ring: 0 0% 12%;
   }
 
+  /* Dark mode — deep neutral, not pure black (eye strain). Same hue rule:
+     no cool/warm borrowed mood. */
+  .dark {
+    --background: 0 0% 9%;
+    --foreground: 0 0% 92%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 60%;
+
+    --primary: 0 0% 92%;
+    --primary-foreground: 0 0% 9%;
+
+    --accent: 0 0% 14%;
+    --accent-foreground: 0 0% 92%;
+
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 22%;
+    --ring: 0 0% 92%;
+  }
+
   * {
     border-color: hsl(var(--border));
   }
