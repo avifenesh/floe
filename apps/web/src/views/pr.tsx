@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { analyze, pollUntilDone, type JobView } from "@/api";
 import type { Artifact } from "@/types/artifact";
+import { PrHeader } from "./pr/PrHeader";
+import { PrStats } from "./pr/PrStats";
+import { PrHunks } from "./pr/PrHunks";
 
 interface Props {
   artifact: Artifact | null;
@@ -8,17 +11,43 @@ interface Props {
 }
 
 /**
- * Temporary PR entry screen. No design opinions yet beyond the typography
- * rules — base/head path inputs, one button, a raw JSON dump below when a
- * job completes. We replace the JSON dump with real PR overview once we
- * settle on the pr-view layout.
+ * PR view. First screen a reviewer sees once a PR is loaded:
+ *   identity header · stats strip · architectural delta list
+ *
+ * No proposal chips yet — we don't parse proposal sheets (scope 4). When the
+ * artifact is null we show the load form; once analyzed, we swap in the
+ * overview. The form re-appears through the palette later.
  */
 export function PrView({ artifact, onArtifact }: Props) {
+  if (!artifact) {
+    return <LoadForm onArtifact={onArtifact} />;
+  }
+  return (
+    <div className="space-y-8">
+      <PrHeader artifact={artifact} />
+      <PrStats artifact={artifact} />
+      <section className="space-y-4">
+        <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
+          Architectural delta
+        </h2>
+        <PrHunks artifact={artifact} />
+      </section>
+      <div>
+        <button
+          onClick={() => onArtifact(null)}
+          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Load another PR
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LoadForm({ onArtifact }: { onArtifact: (a: Artifact | null) => void }) {
   const [base, setBase] = useState(localStorage.getItem("adr.base") ?? "");
   const [head, setHead] = useState(localStorage.getItem("adr.head") ?? "");
-  const [job, setJob] = useState<JobView | null>(
-    artifact ? { status: "ready", artifact } : null,
-  );
+  const [job, setJob] = useState<JobView | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,16 +72,17 @@ export function PrView({ artifact, onArtifact }: Props) {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-2 items-center max-w-3xl">
-        <label className="text-[12px] font-mono text-muted-foreground">base</label>
+    <div className="space-y-5 max-w-3xl">
+      <h1 className="text-[15px] font-semibold text-foreground">Load a PR</h1>
+      <section className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-2 items-center">
+        <label className="text-[12px] text-muted-foreground">Base</label>
         <input
           className="text-[12px] font-mono border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
           placeholder="/absolute/path/to/pr/base"
           value={base}
           onChange={(e) => setBase(e.target.value)}
         />
-        <label className="text-[12px] font-mono text-muted-foreground">head</label>
+        <label className="text-[12px] text-muted-foreground">Head</label>
         <input
           className="text-[12px] font-mono border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
           placeholder="/absolute/path/to/pr/head"
@@ -66,7 +96,7 @@ export function PrView({ artifact, onArtifact }: Props) {
             disabled={busy || !base || !head}
             className="text-[12px] font-medium border rounded px-3 py-1 hover:bg-muted disabled:opacity-50 transition-colors"
           >
-            {busy ? "analyzing…" : "analyze"}
+            {busy ? "Analyzing…" : "Analyze"}
           </button>
         </div>
       </section>
@@ -77,18 +107,8 @@ export function PrView({ artifact, onArtifact }: Props) {
         </section>
       )}
 
-      {job && (
-        <section className="space-y-2">
-          <div className="text-[12px] font-mono text-muted-foreground">
-            status: <span className="text-foreground">{job.status}</span>
-            {job.message && <> · {job.message}</>}
-          </div>
-          {job.artifact && (
-            <pre className="text-[12px] font-mono bg-muted/60 rounded p-3 overflow-x-auto max-h-[70vh]">
-              {JSON.stringify(job.artifact, null, 2)}
-            </pre>
-          )}
-        </section>
+      {job?.status === "pending" && (
+        <section className="text-[12px] text-muted-foreground">Analyzing…</section>
       )}
     </div>
   );

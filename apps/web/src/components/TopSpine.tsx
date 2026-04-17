@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 import { useTheme } from "@/lib/theme";
-import { VIEW_KEYS, type ViewKey } from "@/views/types";
+import { VIEW_KEYS, VIEW_LABELS, type ViewKey } from "@/views/types";
 import { Kbd } from "./Kbd";
 
 interface Props {
@@ -24,7 +24,7 @@ export function TopSpine({ view, onView, prLabel }: Props) {
     <header className="h-10 flex items-center">
       <div className="w-full max-w-6xl mx-auto px-6 grid grid-cols-[1fr,auto,1fr] items-center">
         <div className="justify-self-start text-[12px] font-mono text-muted-foreground truncate">
-          {prLabel ?? "no pr loaded"}
+          {prLabel ?? "No PR loaded"}
         </div>
 
         <nav className="flex items-center gap-5">
@@ -39,7 +39,7 @@ export function TopSpine({ view, onView, prLabel }: Props) {
                   : "text-muted-foreground font-medium hover:text-foreground",
               )}
             >
-              {k}
+              {VIEW_LABELS[k]}
               {k === view && (
                 <span
                   aria-hidden
@@ -54,12 +54,12 @@ export function TopSpine({ view, onView, prLabel }: Props) {
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={`switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
           >
-            {theme === "dark" ? "◐ dark" : "○ light"}
+            {theme === "dark" ? "◐ Dark" : "○ Light"}
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-mono text-muted-foreground">palette</span>
+            <span className="text-[11px] font-mono text-muted-foreground">Palette</span>
             <Kbd>/</Kbd>
           </div>
         </div>

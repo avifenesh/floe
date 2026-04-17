@@ -4,14 +4,13 @@ import { PrView } from "@/views/pr";
 import { PlaceholderView } from "@/views/placeholder";
 import type { ViewKey } from "@/views/types";
 import type { Artifact } from "@/types/artifact";
+import { deriveSlug, isPathSha, shortSha } from "@/lib/artifact";
 
 export default function App() {
   const [view, setView] = useState<ViewKey>("pr");
   const [artifact, setArtifact] = useState<Artifact | null>(null);
 
-  const prLabel = artifact
-    ? `${artifact.pr.repo} · ${short(artifact.pr.head_sha)}`
-    : null;
+  const prLabel = artifact ? spineLabel(artifact) : null;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -27,9 +26,11 @@ export default function App() {
   );
 }
 
-/** Last path segment, trimmed for the spine label. */
-function short(sha: string) {
-  const s = sha.replace(/\\/g, "/");
-  const seg = s.split("/").pop() ?? s;
-  return seg.length > 24 ? seg.slice(0, 24) + "…" : seg;
+/** Spine identity: real `repo · sha` when we have them, otherwise the
+ *  fixture slug derived from common-parent of base/head paths. */
+function spineLabel(a: Artifact): string {
+  if (a.pr.repo !== "unknown" && !isPathSha(a.pr.head_sha)) {
+    return `${a.pr.repo} · ${shortSha(a.pr.head_sha)}`;
+  }
+  return deriveSlug(a.pr.base_sha, a.pr.head_sha);
 }
