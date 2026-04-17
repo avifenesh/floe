@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+.adr/cache/
+.DS_Store
+node_modules/
+dist/
+.env
+.env.local
+*.log

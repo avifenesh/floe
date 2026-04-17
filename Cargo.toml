@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/adr-core",
+    "crates/adr-parse",
+    "crates/adr-hunks",
+    "crates/adr-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/aviarchi/architetural-review"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "0.8"
+thiserror = "1"
+anyhow = "1"
+blake3 = "1"
+petgraph = { version = "0.6", features = ["serde-1"] }
+clap = { version = "4", features = ["derive"] }
+tree-sitter = "0.22"
+tree-sitter-typescript = "0.21"
+
+adr-core = { path = "crates/adr-core" }
+adr-parse = { path = "crates/adr-parse" }
+adr-hunks = { path = "crates/adr-hunks" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

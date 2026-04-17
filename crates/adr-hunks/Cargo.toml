@@ -1,0 +1,11 @@
+[package]
+name = "adr-hunks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Semantic hunk extractors (call, state, api) over base/head graphs."
+
+[dependencies]
+adr-core = { workspace = true }
+anyhow = { workspace = true }
