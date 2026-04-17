@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchFile } from "@/api";
 import { changedFiles } from "@/lib/artifact";
 import { clipContext, enrichWordLevel, lineDiff } from "@/lib/diff";
+import { highlight, langForPath, type HighlightedLines } from "@/lib/highlight";
+import { useTheme } from "@/lib/theme";
 import type { Artifact } from "@/types/artifact";
 import { DiffView } from "./source/DiffView";
 import { FileTabs } from "./source/FileTabs";
@@ -52,12 +54,17 @@ function FileDiff({
   const [base, setBase] = useState<string | null>(null);
   const [head, setHead] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [theme] = useTheme();
+  const [baseTokens, setBaseTokens] = useState<HighlightedLines | null>(null);
+  const [headTokens, setHeadTokens] = useState<HighlightedLines | null>(null);
 
   useEffect(() => {
     let abandoned = false;
     setBase(null);
     setHead(null);
     setErr(null);
+    setBaseTokens(null);
+    setHeadTokens(null);
     const load = async () => {
       try {
         const [b, h] = await Promise.all([
@@ -77,6 +84,29 @@ function FileDiff({
     };
   }, [jobId, path, status]);
 
+  // Tokenize in a separate effect so a theme flip re-highlights without
+  // re-fetching the files.
+  useEffect(() => {
+    if (base === null || head === null) return;
+    let abandoned = false;
+    const lang = langForPath(path);
+    Promise.all([
+      base ? highlight(base, lang, theme) : Promise.resolve<HighlightedLines>([]),
+      head ? highlight(head, lang, theme) : Promise.resolve<HighlightedLines>([]),
+    ])
+      .then(([b, h]) => {
+        if (abandoned) return;
+        setBaseTokens(b);
+        setHeadTokens(h);
+      })
+      .catch(() => {
+        // Highlighter failure is non-fatal; fall through to plain text below.
+      });
+    return () => {
+      abandoned = true;
+    };
+  }, [base, head, path, theme]);
+
   if (err) {
     return (
       <div className="text-[12px] font-mono text-destructive border border-destructive/40 rounded px-3 py-2">
@@ -88,5 +118,5 @@ function FileDiff({
     return <div className="text-[12px] text-muted-foreground">Loading…</div>;
   }
   const entries = clipContext(enrichWordLevel(lineDiff(base, head)), 3);
-  return <DiffView entries={entries} />;
+  return <DiffView entries={entries} baseTokens={baseTokens} headTokens={headTokens} />;
 }

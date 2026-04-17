@@ -2,18 +2,25 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import type { DiffEntry, DiffRow, Segment, SkipBlock } from "@/lib/diff";
 import { isSkip } from "@/lib/diff";
+import type { HighlightedLines, Token } from "@/lib/highlight";
 
 interface Props {
   entries: DiffEntry[];
+  baseTokens: HighlightedLines | null;
+  headTokens: HighlightedLines | null;
 }
 
 /**
- * Unified-style diff. Rows wrap at the column width; changed spans carry
- * strong tint while shared prefixes/suffixes of modified lines stay soft;
- * pure-new / pure-removed rows use the full strength. Collapsed context
- * appears as a clickable skip block that expands in place.
+ * Unified-style diff with syntax highlighting and a segment overlay.
+ * Row body logic:
+ *   - pure add / remove rows take full-strength tint;
+ *   - paired rows (segments present) use a soft body so the strong
+ *     per-span tint carries the real signal;
+ *   - syntax colours come from shiki tokens, the segment background is
+ *     layered *on top* so red/green strong tints win over the token
+ *     colour for the changed spans.
  */
-export function DiffView({ entries }: Props) {
+export function DiffView({ entries, baseTokens, headTokens }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   return (
     <div className="text-[12.5px] font-mono rounded border overflow-hidden">
@@ -33,10 +40,12 @@ export function DiffView({ entries }: Props) {
                   return next;
                 })
               }
+              baseTokens={baseTokens}
+              headTokens={headTokens}
             />
           );
         }
-        return <Row key={i} row={entry} />;
+        return <Row key={i} row={entry} baseTokens={baseTokens} headTokens={headTokens} />;
       })}
     </div>
   );
@@ -46,10 +55,14 @@ function Skip({
   block,
   open,
   onToggle,
+  baseTokens,
+  headTokens,
 }: {
   block: SkipBlock;
   open: boolean;
   onToggle: () => void;
+  baseTokens: HighlightedLines | null;
+  headTokens: HighlightedLines | null;
 }) {
   if (open) {
     return (
@@ -68,7 +81,7 @@ function Skip({
           <div className="flex-1" />
         </button>
         {block.rows.map((r, idx) => (
-          <Row key={idx} row={r} />
+          <Row key={idx} row={r} baseTokens={baseTokens} headTokens={headTokens} />
         ))}
       </>
     );
@@ -92,10 +105,22 @@ function Skip({
   );
 }
 
-function Row({ row }: { row: DiffRow }) {
+function Row({
+  row,
+  baseTokens,
+  headTokens,
+}: {
+  row: DiffRow;
+  baseTokens: HighlightedLines | null;
+  headTokens: HighlightedLines | null;
+}) {
   const isAdd = row.kind === "add";
   const isRem = row.kind === "remove";
   const hasSegments = !!row.segments && row.segments.some((s) => s.kind === "equal");
+
+  // Pick the tokens for this row: added → head, removed → base, equal →
+  // either (they match). Line numbers in the diff are 1-based.
+  const tokens = lineTokens(row, baseTokens, headTokens);
 
   return (
     <div
@@ -114,10 +139,113 @@ function Row({ row }: { row: DiffRow }) {
       <Gutter value={row.baseLine} mark={isRem ? "−" : null} tone={isRem ? "rem" : "equal"} />
       <Gutter value={row.headLine} mark={isAdd ? "+" : null} tone={isAdd ? "add" : "equal"} />
       <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
-        {row.segments ? <Segments segments={row.segments} kind={row.kind} /> : row.text || " "}
+        <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
       </pre>
     </div>
   );
+}
+
+function lineTokens(
+  row: DiffRow,
+  baseTokens: HighlightedLines | null,
+  headTokens: HighlightedLines | null,
+): Token[] | null {
+  if (row.kind === "remove" && baseTokens && row.baseLine !== null) {
+    return baseTokens[row.baseLine - 1] ?? null;
+  }
+  if (row.kind === "add" && headTokens && row.headLine !== null) {
+    return headTokens[row.headLine - 1] ?? null;
+  }
+  if (row.kind === "equal") {
+    if (headTokens && row.headLine !== null) return headTokens[row.headLine - 1] ?? null;
+    if (baseTokens && row.baseLine !== null) return baseTokens[row.baseLine - 1] ?? null;
+  }
+  return null;
+}
+
+function LineContent({
+  tokens,
+  segments,
+  kind,
+  fallback,
+}: {
+  tokens: Token[] | null;
+  segments: Segment[] | null;
+  kind: "add" | "remove" | "equal";
+  fallback: string;
+}) {
+  // No tokens (still loading or highlighter failed): fall back to segments
+  // or plain text. The row background + span tint still carry the diff.
+  if (!tokens) {
+    if (!segments) return <>{fallback || " "}</>;
+    return <Segments segments={segments} kind={kind} />;
+  }
+  const pieces = mergeTokensAndSegments(tokens, segments);
+  return (
+    <>
+      {pieces.map((p, i) => (
+        <span
+          key={i}
+          style={{ color: p.color }}
+          className={cn(
+            p.strong && kind === "add" &&
+              "bg-emerald-500/40 dark:bg-emerald-400/40 rounded-[2px]",
+            p.strong && kind === "remove" &&
+              "bg-rose-500/40 dark:bg-rose-400/40 rounded-[2px]",
+          )}
+        >
+          {p.content}
+        </span>
+      ))}
+    </>
+  );
+}
+
+interface MergedPiece {
+  content: string;
+  color?: string;
+  strong: boolean;
+}
+
+/** Partition the line by both token boundaries and segment boundaries so
+ *  each output piece carries one token colour + one segment kind. */
+function mergeTokensAndSegments(
+  tokens: Token[],
+  segments: Segment[] | null,
+): MergedPiece[] {
+  if (!segments) {
+    return tokens.map((t) => ({ content: t.content, color: t.color, strong: false }));
+  }
+  const out: MergedPiece[] = [];
+  let ti = 0;
+  let tOff = 0;
+  let si = 0;
+  let sOff = 0;
+  while (ti < tokens.length && si < segments.length) {
+    const t = tokens[ti];
+    const s = segments[si];
+    const tRem = t.content.length - tOff;
+    const sRem = s.text.length - sOff;
+    const take = Math.min(tRem, sRem);
+    if (take > 0) {
+      out.push({
+        content: t.content.slice(tOff, tOff + take),
+        color: t.color,
+        strong: s.kind === "changed",
+      });
+    }
+    tOff += take;
+    sOff += take;
+    if (tOff >= t.content.length) {
+      ti += 1;
+      tOff = 0;
+    }
+    if (sOff >= s.text.length) {
+      si += 1;
+      sOff = 0;
+    }
+  }
+  return out;
 }
 
 function Segments({ segments, kind }: { segments: Segment[]; kind: "add" | "remove" | "equal" }) {
