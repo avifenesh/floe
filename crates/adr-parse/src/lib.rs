@@ -26,12 +26,37 @@ pub struct Ingest {
     next_node: u32,
     next_edge: u32,
     pass_id: String,
+    /// Per-file map of exported Function name -> NodeId, populated while walking
+    /// top-level defs. Used during the cross-file resolution pass.
+    exports_by_file: HashMap<String, HashMap<String, NodeId>>,
+    /// Per-file import bindings. `local_name` is what appears in call sites
+    /// inside this file; `source_file` is the resolved absolute relative path
+    /// (e.g. "src/queue.ts"); `imported_name` is the export's name at the source.
+    imports_by_file: HashMap<String, Vec<ImportBinding>>,
+    /// Call sites that didn't resolve to a same-file function. The cross-file
+    /// pass walks these once every file is parsed.
+    pending_calls: Vec<PendingCall>,
 }
 
 struct FnDef<'tree> {
     id: NodeId,
     name: String,
     body: TsNode<'tree>,
+}
+
+#[derive(Debug, Clone)]
+struct ImportBinding {
+    local_name: String,
+    imported_name: String,
+    source_file: String,
+}
+
+#[derive(Debug, Clone)]
+struct PendingCall {
+    caller: NodeId,
+    caller_file: String,
+    callee_name: String,
+    provenance: Provenance,
 }
 
 impl Ingest {
@@ -41,6 +66,9 @@ impl Ingest {
             next_node: 0,
             next_edge: 0,
             pass_id: pass_id.into(),
+            exports_by_file: HashMap::new(),
+            imports_by_file: HashMap::new(),
+            pending_calls: Vec::new(),
         }
     }
 
@@ -59,15 +87,21 @@ impl Ingest {
             .collect();
         paths.sort();
 
-        for path in paths {
-            let rel = path
-                .strip_prefix(root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
-            let bytes = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
-            self.ingest_file(&rel, &bytes)?;
+        let rels: Vec<String> = paths
+            .iter()
+            .map(|p| {
+                p.strip_prefix(root)
+                    .unwrap_or(p)
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        let all_files: Vec<String> = rels.clone();
+        for (path, rel) in paths.iter().zip(rels.iter()) {
+            let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+            self.ingest_file(rel, &bytes, &all_files)?;
         }
+        self.resolve_cross_file_calls();
         Ok(self.graph)
     }
 
@@ -87,7 +121,12 @@ impl Ingest {
         Provenance::new(PARSE_SOURCE, PARSE_VERSION, &self.pass_id, bytes)
     }
 
-    fn ingest_file(&mut self, rel_path: &str, source: &[u8]) -> Result<()> {
+    fn ingest_file(
+        &mut self,
+        rel_path: &str,
+        source: &[u8],
+        all_files: &[String],
+    ) -> Result<()> {
         let tsx = rel_path.ends_with(".tsx");
         let mut parser = Parser::new();
         let lang = if tsx {
@@ -121,13 +160,18 @@ impl Ingest {
         let mut cursor = tree.root_node().walk();
         let root = tree.root_node();
         for child in root.named_children(&mut cursor) {
-            self.visit_top_level(child, source, rel_path, file_id, &mut fns);
+            match child.kind() {
+                "import_statement" => {
+                    self.collect_imports(child, source, rel_path, all_files);
+                }
+                _ => self.visit_top_level(child, source, rel_path, file_id, &mut fns),
+            }
         }
 
         let name_to_id: HashMap<&str, NodeId> =
             fns.iter().map(|f| (f.name.as_str(), f.id)).collect();
         for f in &fns {
-            self.resolve_calls_in(f.id, f.body, source, &name_to_id);
+            self.resolve_calls_in(f.id, f.body, source, rel_path, &name_to_id);
         }
 
         // Phase 3: classical state-machine transition detection. For every
@@ -293,6 +337,12 @@ impl Ingest {
                 kind: EdgeKind::Exports,
                 provenance: prov,
             });
+            if let NodeKind::Function { name, .. } = &self.graph.nodes[def_id.0 as usize].kind {
+                self.exports_by_file
+                    .entry(rel_path.to_string())
+                    .or_default()
+                    .insert(name.clone(), def_id);
+            }
         }
         def_id
     }
@@ -302,8 +352,11 @@ impl Ingest {
         caller: NodeId,
         body: TsNode<'_>,
         source: &[u8],
+        rel_path: &str,
         name_to_id: &HashMap<&str, NodeId>,
     ) {
+        let mut local_edges: Vec<(NodeId, Provenance)> = Vec::new();
+        let mut cross_file: Vec<PendingCall> = Vec::new();
         walk_call_expressions(body, &mut |call| {
             let Some(fn_field) = call.child_by_field_name("function") else {
                 return;
@@ -314,22 +367,112 @@ impl Ingest {
             let Ok(name) = fn_field.utf8_text(source) else {
                 return;
             };
+            let slice = &source[call.start_byte()..call.end_byte()];
+            let prov = Provenance::new(PARSE_SOURCE, PARSE_VERSION, &self.pass_id, slice);
             if let Some(&callee) = name_to_id.get(name) {
                 if callee == caller {
                     return;
                 }
-                let slice = &source[call.start_byte()..call.end_byte()];
-                let prov = self.prov(slice);
-                let id = self.fresh_edge();
-                self.graph.edges.push(Edge {
-                    id,
-                    from: caller,
-                    to: callee,
-                    kind: EdgeKind::Calls,
+                local_edges.push((callee, prov));
+            } else {
+                cross_file.push(PendingCall {
+                    caller,
+                    caller_file: rel_path.to_string(),
+                    callee_name: name.to_string(),
                     provenance: prov,
                 });
             }
         });
+        for (callee, prov) in local_edges {
+            let id = self.fresh_edge();
+            self.graph.edges.push(Edge {
+                id,
+                from: caller,
+                to: callee,
+                kind: EdgeKind::Calls,
+                provenance: prov,
+            });
+        }
+        self.pending_calls.extend(cross_file);
+    }
+
+    /// Parse named-imports (`import { a, b as c } from "./x"`) and record
+    /// bindings keyed by the name used locally in this file. Default + namespace
+    /// + side-effect imports are ignored — cross-file Calls edges only fire for
+    /// named function imports in v0.
+    fn collect_imports(
+        &mut self,
+        node: TsNode<'_>,
+        source: &[u8],
+        rel_path: &str,
+        all_files: &[String],
+    ) {
+        let Some(source_node) = node.child_by_field_name("source") else {
+            return;
+        };
+        let Some(module) = string_literal_text(source_node, source) else {
+            return;
+        };
+        let Some(resolved) = resolve_relative_module(&module, rel_path, all_files) else {
+            return;
+        };
+        let Some(import_clause) = node.named_children(&mut node.walk()).find(|c| c.kind() == "import_clause") else {
+            return;
+        };
+        let mut cursor = import_clause.walk();
+        for child in import_clause.named_children(&mut cursor) {
+            if child.kind() != "named_imports" {
+                continue;
+            }
+            let mut c2 = child.walk();
+            for specifier in child.named_children(&mut c2) {
+                if specifier.kind() != "import_specifier" {
+                    continue;
+                }
+                let name_node = specifier.child_by_field_name("name");
+                let alias_node = specifier.child_by_field_name("alias");
+                let imported = name_node.and_then(|n| n.utf8_text(source).ok());
+                let local = alias_node.or(name_node).and_then(|n| n.utf8_text(source).ok());
+                if let (Some(imported), Some(local)) = (imported, local) {
+                    self.imports_by_file
+                        .entry(rel_path.to_string())
+                        .or_default()
+                        .push(ImportBinding {
+                            local_name: local.to_string(),
+                            imported_name: imported.to_string(),
+                            source_file: resolved.clone(),
+                        });
+                }
+            }
+        }
+    }
+
+    /// Walk buffered pending calls, attempt to resolve each to an exported
+    /// function in the imported source file, and emit cross-file Calls edges.
+    fn resolve_cross_file_calls(&mut self) {
+        let pending = std::mem::take(&mut self.pending_calls);
+        for pc in pending {
+            let Some(bindings) = self.imports_by_file.get(&pc.caller_file) else {
+                continue;
+            };
+            let Some(binding) = bindings.iter().find(|b| b.local_name == pc.callee_name) else {
+                continue;
+            };
+            let Some(exports) = self.exports_by_file.get(&binding.source_file) else {
+                continue;
+            };
+            let Some(&callee) = exports.get(&binding.imported_name) else {
+                continue;
+            };
+            let id = self.fresh_edge();
+            self.graph.edges.push(Edge {
+                id,
+                from: pc.caller,
+                to: callee,
+                kind: EdgeKind::Calls,
+                provenance: pc.provenance,
+            });
+        }
     }
 }
 
@@ -471,6 +614,64 @@ fn walk_target_literals(n: TsNode<'_>, source: &[u8], out: &mut Vec<String>) {
     for c in n.named_children(&mut cursor) {
         walk_target_literals(c, source, out);
     }
+}
+
+fn string_literal_text(n: TsNode<'_>, source: &[u8]) -> Option<String> {
+    if n.kind() != "string" {
+        return None;
+    }
+    let t = n.utf8_text(source).ok()?;
+    Some(t.trim_matches(|c| c == '"' || c == '\'').to_string())
+}
+
+/// Resolve a relative module specifier to an actual file in `all_files`.
+/// Tries, in order:
+/// - `<spec>.ts`, `<spec>.tsx`, `<spec>/index.ts`, `<spec>/index.tsx`
+/// - the spec as-is (when it already has an extension)
+///
+/// Non-relative specifiers (bare package names, `@scope/…`) return `None`:
+/// v0 only tracks intra-repo imports.
+fn resolve_relative_module(spec: &str, from_file: &str, all_files: &[String]) -> Option<String> {
+    if !spec.starts_with('.') {
+        return None;
+    }
+    let from_dir = std::path::Path::new(from_file)
+        .parent()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default();
+    let joined = if from_dir.is_empty() {
+        spec.trim_start_matches("./").to_string()
+    } else {
+        format!("{from_dir}/{}", spec.trim_start_matches("./"))
+    };
+    let norm = normalize_relative(&joined);
+    let candidates = [
+        format!("{norm}.ts"),
+        format!("{norm}.tsx"),
+        format!("{norm}/index.ts"),
+        format!("{norm}/index.tsx"),
+        norm.clone(),
+    ];
+    candidates.iter().find(|c| all_files.iter().any(|f| f == *c)).cloned()
+}
+
+/// Collapse `a/b/../c` -> `a/c`. Preserves leading `../` runs.
+fn normalize_relative(path: &str) -> String {
+    let mut out: Vec<&str> = Vec::new();
+    for seg in path.split('/') {
+        match seg {
+            "" | "." => continue,
+            ".." => {
+                if matches!(out.last(), Some(&s) if s != "..") {
+                    out.pop();
+                } else {
+                    out.push("..");
+                }
+            }
+            s => out.push(s),
+        }
+    }
+    out.join("/")
 }
 
 fn walk_if_statements<'tree>(node: TsNode<'tree>, f: &mut dyn FnMut(TsNode<'tree>)) {

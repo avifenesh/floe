@@ -36,3 +36,4 @@ macro_rules! e2e {
 e2e!(pr0001_add_retry, "pr-0001-add-retry");
 e2e!(pr0004_combined, "pr-0004-combined");
 e2e!(pr0005_noop, "pr-0005-noop");
+e2e!(pr0006_cross_file, "pr-0006-cross-file");
