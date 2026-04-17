@@ -8,3 +8,6 @@ dist/
 .env
 .env.local
 *.log
+.remember/
+archticture_*
+spike-plan.md

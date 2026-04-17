@@ -1,6 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::cfg::CfgMap;
 use crate::graph::Graph;
 use crate::hunks::Hunk;
 
@@ -16,6 +17,12 @@ pub struct Artifact {
     pub pr: PrRef,
     pub base: Graph,
     pub head: Graph,
+    /// Per-function CFGs for the base snapshot, keyed by Function `NodeId` in `base`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub base_cfg: CfgMap,
+    /// Per-function CFGs for the head snapshot, keyed by Function `NodeId` in `head`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub head_cfg: CfgMap,
     pub hunks: Vec<Hunk>,
 }
 
@@ -26,6 +33,8 @@ impl Artifact {
             pr,
             base: Graph::default(),
             head: Graph::default(),
+            base_cfg: CfgMap::default(),
+            head_cfg: CfgMap::default(),
             hunks: Vec::new(),
         }
     }

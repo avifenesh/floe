@@ -14,8 +14,22 @@
     "base": {
       "$ref": "#/definitions/Graph"
     },
+    "base_cfg": {
+      "description": "Per-function CFGs for the base snapshot, keyed by Function `NodeId` in `base`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CfgEntry"
+      }
+    },
     "head": {
       "$ref": "#/definitions/Graph"
+    },
+    "head_cfg": {
+      "description": "Per-function CFGs for the head snapshot, keyed by Function `NodeId` in `head`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CfgEntry"
+      }
     },
     "hunks": {
       "type": "array",
@@ -31,6 +45,214 @@
     }
   },
   "definitions": {
+    "Cfg": {
+      "type": "object",
+      "required": [
+        "edges",
+        "nodes"
+      ],
+      "properties": {
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CfgEdge"
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CfgNode"
+          }
+        }
+      }
+    },
+    "CfgEdge": {
+      "type": "object",
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/definitions/CfgNodeId"
+        },
+        "to": {
+          "$ref": "#/definitions/CfgNodeId"
+        }
+      }
+    },
+    "CfgEntry": {
+      "description": "Per-function CFG binding. Keyed by the Function's `NodeId` in the enclosing [`crate::graph::Graph`]. Stored as a flat list (not a map) because JSON doesn't allow non-string map keys, and a wire-format map would waste tokens when the NodeId is already a u32.",
+      "type": "object",
+      "required": [
+        "cfg",
+        "function"
+      ],
+      "properties": {
+        "cfg": {
+          "$ref": "#/definitions/Cfg"
+        },
+        "function": {
+          "$ref": "#/definitions/NodeId"
+        }
+      }
+    },
+    "CfgNode": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "span"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/CfgNodeId"
+        },
+        "kind": {
+          "$ref": "#/definitions/CfgNodeKind"
+        },
+        "span": {
+          "$ref": "#/definitions/Span"
+        }
+      }
+    },
+    "CfgNodeId": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "CfgNodeKind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "entry"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "exit"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A straight-line sequence of statements; collapsed into one node for navigation purposes (we don't care about per-statement granularity at the CFG level — the source view keeps that).",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "seq"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "loop"
+              ]
+            }
+          }
+        },
+        {
+          "description": "An `await` expression — a yield point that the flow view draws as a packet hop. `Throw` + `Try` capture exception edges.",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "async-boundary"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "throw"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "try"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "return"
+              ]
+            }
+          }
+        }
+      ]
+    },
     "Edge": {
       "type": "object",
       "required": [

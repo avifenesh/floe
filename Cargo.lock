@@ -3,9 +3,23 @@
 version = 3
 
 [[package]]
+name = "adr-cfg"
+version = "0.1.0"
+dependencies = [
+ "adr-core",
+ "adr-parse",
+ "anyhow",
+ "insta",
+ "tree-sitter",
+ "tree-sitter-typescript",
+ "walkdir",
+]
+
+[[package]]
 name = "adr-cli"
 version = "0.1.0"
 dependencies = [
+ "adr-cfg",
  "adr-core",
  "adr-hunks",
  "adr-parse",

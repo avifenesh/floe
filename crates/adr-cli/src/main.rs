@@ -36,6 +36,8 @@ fn main() -> Result<()> {
             let mut artifact = Artifact::new(pr);
             artifact.base = adr_parse::Ingest::new("base").ingest_dir(&base)?;
             artifact.head = adr_parse::Ingest::new("head").ingest_dir(&head)?;
+            artifact.base_cfg = adr_cfg::build_for_graph(&artifact.base, &base)?;
+            artifact.head_cfg = adr_cfg::build_for_graph(&artifact.head, &head)?;
             artifact.hunks = adr_hunks::extract_all(&artifact.base, &artifact.head);
             let out = serde_json::to_string_pretty(&artifact)?;
             println!("{out}");

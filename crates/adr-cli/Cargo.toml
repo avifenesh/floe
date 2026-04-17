@@ -14,6 +14,7 @@ path = "src/main.rs"
 adr-core = { workspace = true }
 adr-parse = { workspace = true }
 adr-hunks = { workspace = true }
+adr-cfg = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
 schemars = { workspace = true }

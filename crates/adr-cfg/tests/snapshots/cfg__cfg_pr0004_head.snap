@@ -1,0 +1,229 @@
+---
+source: crates/adr-cfg/tests/cfg.rs
+expression: cfg
+---
+[
+  {
+    "function": 2,
+    "cfg": {
+      "nodes": [
+        {
+          "id": 0,
+          "kind": {
+            "type": "entry"
+          },
+          "span": {
+            "start": 146,
+            "end": 146
+          }
+        },
+        {
+          "id": 1,
+          "kind": {
+            "type": "exit"
+          },
+          "span": {
+            "start": 192,
+            "end": 192
+          }
+        },
+        {
+          "id": 2,
+          "kind": {
+            "type": "async-boundary"
+          },
+          "span": {
+            "start": 150,
+            "end": 190
+          }
+        }
+      ],
+      "edges": [
+        {
+          "from": 0,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 1
+        }
+      ]
+    }
+  },
+  {
+    "function": 3,
+    "cfg": {
+      "nodes": [
+        {
+          "id": 0,
+          "kind": {
+            "type": "entry"
+          },
+          "span": {
+            "start": 271,
+            "end": 271
+          }
+        },
+        {
+          "id": 1,
+          "kind": {
+            "type": "exit"
+          },
+          "span": {
+            "start": 409,
+            "end": 409
+          }
+        },
+        {
+          "id": 2,
+          "kind": {
+            "type": "loop"
+          },
+          "span": {
+            "start": 275,
+            "end": 407
+          }
+        },
+        {
+          "id": 3,
+          "kind": {
+            "type": "try"
+          },
+          "span": {
+            "start": 316,
+            "end": 403
+          }
+        },
+        {
+          "id": 4,
+          "kind": {
+            "type": "async-boundary"
+          },
+          "span": {
+            "start": 328,
+            "end": 346
+          }
+        },
+        {
+          "id": 5,
+          "kind": {
+            "type": "return"
+          },
+          "span": {
+            "start": 353,
+            "end": 360
+          }
+        },
+        {
+          "id": 6,
+          "kind": {
+            "type": "seq"
+          },
+          "span": {
+            "start": 367,
+            "end": 403
+          }
+        },
+        {
+          "id": 7,
+          "kind": {
+            "type": "seq"
+          },
+          "span": {
+            "start": 316,
+            "end": 403
+          }
+        }
+      ],
+      "edges": [
+        {
+          "from": 0,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 1
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 1
+        }
+      ]
+    }
+  },
+  {
+    "function": 4,
+    "cfg": {
+      "nodes": [
+        {
+          "id": 0,
+          "kind": {
+            "type": "entry"
+          },
+          "span": {
+            "start": 461,
+            "end": 461
+          }
+        },
+        {
+          "id": 1,
+          "kind": {
+            "type": "exit"
+          },
+          "span": {
+            "start": 490,
+            "end": 490
+          }
+        },
+        {
+          "id": 2,
+          "kind": {
+            "type": "seq"
+          },
+          "span": {
+            "start": 465,
+            "end": 488
+          }
+        }
+      ],
+      "edges": [
+        {
+          "from": 0,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 1
+        }
+      ]
+    }
+  }
+]

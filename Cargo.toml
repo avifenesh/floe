@@ -4,6 +4,7 @@ members = [
     "crates/adr-core",
     "crates/adr-parse",
     "crates/adr-hunks",
+    "crates/adr-cfg",
     "crates/adr-cli",
 ]
 
@@ -31,6 +32,7 @@ insta = { version = "1", features = ["json", "redactions"] }
 adr-core = { path = "crates/adr-core" }
 adr-parse = { path = "crates/adr-parse" }
 adr-hunks = { path = "crates/adr-hunks" }
+adr-cfg = { path = "crates/adr-cfg" }
 
 [profile.release]
 lto = "thin"
