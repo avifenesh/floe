@@ -4,6 +4,7 @@ import { changedFiles } from "@/lib/artifact";
 import { clipContext, enrichWordLevel, lineDiff } from "@/lib/diff";
 import { highlight, langForPath, type HighlightedLines } from "@/lib/highlight";
 import { useTheme } from "@/lib/theme";
+
 import type { Artifact } from "@/types/artifact";
 import { DiffView } from "./source/DiffView";
 import { FileTabs } from "./source/FileTabs";

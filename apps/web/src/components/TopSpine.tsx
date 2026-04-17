@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn";
 import { useTheme } from "@/lib/theme";
+
 import { VIEW_KEYS, VIEW_LABELS, type ViewKey } from "@/views/types";
 import { Kbd } from "./Kbd";
 
