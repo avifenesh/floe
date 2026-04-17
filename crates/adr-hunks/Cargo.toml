@@ -9,3 +9,9 @@ description = "Semantic hunk extractors (call, state, api) over base/head graphs
 [dependencies]
 adr-core = { workspace = true }
 anyhow = { workspace = true }
+serde_json = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+adr-parse = { workspace = true }
+insta = { workspace = true }

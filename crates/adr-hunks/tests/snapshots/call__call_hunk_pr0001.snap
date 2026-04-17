@@ -1,0 +1,23 @@
+---
+source: crates/adr-hunks/tests/call.rs
+expression: hunk
+---
+{
+  "id": "[id]",
+  "kind": {
+    "kind": "call",
+    "added_edges": [
+      4,
+      5
+    ],
+    "removed_edges": [
+      3
+    ]
+  },
+  "provenance": {
+    "source": "adr-hunks/call",
+    "version": "0.1.0",
+    "pass_id": "hunks",
+    "hash": "[hash]"
+  }
+}

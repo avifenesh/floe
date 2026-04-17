@@ -1,0 +1,175 @@
+---
+source: crates/adr-parse/tests/ingest.rs
+expression: graph
+---
+{
+  "nodes": [
+    {
+      "id": 0,
+      "kind": {
+        "type": "file",
+        "path": "src/queue.ts"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 0,
+        "end": 431
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 1,
+      "kind": {
+        "type": "type",
+        "name": "Job"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 7,
+        "end": 76
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 2,
+      "kind": {
+        "type": "function",
+        "name": "enqueue",
+        "signature": "async function enqueue(job: Job): Promise<void> {"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 85,
+        "end": 164
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 3,
+      "kind": {
+        "type": "function",
+        "name": "sendWithRetry",
+        "signature": "async function sendWithRetry(job: Job): Promise<void> {"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 166,
+        "end": 349
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 4,
+      "kind": {
+        "type": "function",
+        "name": "send",
+        "signature": "async function send(job: Job): Promise<void> {"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 351,
+        "end": 430
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": 0,
+      "from": 0,
+      "to": 1,
+      "kind": "defines",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 1,
+      "from": 0,
+      "to": 2,
+      "kind": "defines",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 2,
+      "from": 0,
+      "to": 3,
+      "kind": "defines",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 3,
+      "from": 0,
+      "to": 4,
+      "kind": "defines",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 4,
+      "from": 2,
+      "to": 3,
+      "kind": "calls",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 5,
+      "from": 3,
+      "to": 4,
+      "kind": "calls",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    }
+  ]
+}

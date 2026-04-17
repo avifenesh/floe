@@ -1,0 +1,132 @@
+---
+source: crates/adr-parse/tests/ingest.rs
+expression: graph
+---
+{
+  "nodes": [
+    {
+      "id": 0,
+      "kind": {
+        "type": "file",
+        "path": "src/queue.ts"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 0,
+        "end": 217
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 1,
+      "kind": {
+        "type": "type",
+        "name": "Job"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 7,
+        "end": 56
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 2,
+      "kind": {
+        "type": "function",
+        "name": "enqueue",
+        "signature": "async function enqueue(job: Job): Promise<void> {"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 65,
+        "end": 135
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 3,
+      "kind": {
+        "type": "function",
+        "name": "send",
+        "signature": "async function send(job: Job): Promise<void> {"
+      },
+      "file": "src/queue.ts",
+      "span": {
+        "start": 137,
+        "end": 216
+      },
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": 0,
+      "from": 0,
+      "to": 1,
+      "kind": "defines",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 1,
+      "from": 0,
+      "to": 2,
+      "kind": "defines",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 2,
+      "from": 0,
+      "to": 3,
+      "kind": "defines",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    },
+    {
+      "id": 3,
+      "from": 2,
+      "to": 3,
+      "kind": "calls",
+      "provenance": {
+        "source": "tree-sitter-typescript",
+        "version": "0.21.2",
+        "pass_id": "test",
+        "hash": "[hash]"
+      }
+    }
+  ]
+}

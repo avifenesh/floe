@@ -10,4 +10,8 @@ description = "TypeScript parsing via tree-sitter into adr-core graph nodes."
 adr-core = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-typescript = { workspace = true }
+walkdir = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
