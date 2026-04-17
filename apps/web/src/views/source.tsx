@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchFile } from "@/api";
-import { changedFiles } from "@/lib/artifact";
+import { byteToLine, changedFiles, hunkTouches, type HunkClass } from "@/lib/artifact";
 import { clipContext, enrichWordLevel, lineDiff } from "@/lib/diff";
 import { highlight, langForPath, type HighlightedLines } from "@/lib/highlight";
 import { useTheme } from "@/lib/theme";
 
 import type { Artifact } from "@/types/artifact";
-import { DiffView } from "./source/DiffView";
+import { DiffView, type LineTouches } from "./source/DiffView";
 import { FileTabs } from "./source/FileTabs";
 
 interface Props {
@@ -31,6 +31,7 @@ export function SourceView({ artifact, jobId }: Props) {
       <div>
         {selected ? (
           <FileDiff
+            artifact={artifact}
             jobId={jobId}
             path={selected}
             status={files.find((f) => f.path === selected)?.status ?? "unchanged"}
@@ -44,10 +45,12 @@ export function SourceView({ artifact, jobId }: Props) {
 }
 
 function FileDiff({
+  artifact,
   jobId,
   path,
   status,
 }: {
+  artifact: Artifact;
   jobId: string;
   path: string;
   status: "added" | "removed" | "modified" | "unchanged";
@@ -108,6 +111,28 @@ function FileDiff({
     };
   }, [base, head, path, theme]);
 
+  // Architectural overlay: for each hunk that points at this file, map its
+  // byte span to a line number on the appropriate side. The DiffView gutter
+  // uses this to draw a thin accent strip so reviewers can see which lines
+  // belong to an emitted Call / State / API hunk.
+  const touches = useMemo(() => {
+    if (base === null || head === null) return { base: new Map(), head: new Map() };
+    const all = hunkTouches(artifact).filter((t) => t.file === path);
+    const acc = { base: new Map<number, Set<HunkClass>>(), head: new Map<number, Set<HunkClass>>() };
+    for (const t of all) {
+      const src = t.side === "base" ? base : head;
+      const start = byteToLine(src, t.span.start);
+      const end = byteToLine(src, t.span.end);
+      const map = acc[t.side];
+      for (let ln = start; ln <= end; ln++) {
+        const set = map.get(ln) ?? new Set<HunkClass>();
+        set.add(t.kind);
+        map.set(ln, set);
+      }
+    }
+    return acc;
+  }, [artifact, path, base, head]);
+
   if (err) {
     return (
       <div className="text-[12px] font-mono text-destructive border border-destructive/40 rounded px-3 py-2">
@@ -119,5 +144,13 @@ function FileDiff({
     return <div className="text-[12px] text-muted-foreground">Loading…</div>;
   }
   const entries = clipContext(enrichWordLevel(lineDiff(base, head)), 3);
-  return <DiffView entries={entries} baseTokens={baseTokens} headTokens={headTokens} />;
+  const lineTouches: LineTouches = touches;
+  return (
+    <DiffView
+      entries={entries}
+      baseTokens={baseTokens}
+      headTokens={headTokens}
+      touches={lineTouches}
+    />
+  );
 }

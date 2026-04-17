@@ -72,22 +72,20 @@ function Tab({
 }
 
 function StatusDot({ status }: { status: ChangedFile["status"] }) {
+  // Single glyph, color-differentiated — matches VS Code's gutter pattern.
+  // One visual weight, eye scans by hue not by character shape.
   const tone =
     status === "added"
-      ? "text-emerald-500"
+      ? "bg-emerald-500"
       : status === "removed"
-        ? "text-rose-500"
+        ? "bg-rose-500"
         : status === "modified"
-          ? "text-amber-500"
-          : "text-muted-foreground/50";
-  const mark =
-    status === "added" ? "+" : status === "removed" ? "−" : status === "modified" ? "●" : "·";
+          ? "bg-amber-500"
+          : "bg-muted-foreground/40";
   return (
     <span
-      className={cn("w-3 inline-block text-center text-[12px] leading-none", tone)}
       aria-hidden
-    >
-      {mark}
-    </span>
+      className={cn("inline-block w-1.5 h-1.5 rounded-full shrink-0", tone)}
+    />
   );
 }

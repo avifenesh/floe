@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
+import type { HunkClass } from "@/lib/artifact";
 import type { DiffEntry, DiffRow, Segment, SkipBlock } from "@/lib/diff";
 import { isSkip } from "@/lib/diff";
 import type { HighlightedLines, Token } from "@/lib/highlight";
+
+export interface LineTouches {
+  base: Map<number, Set<HunkClass>>;
+  head: Map<number, Set<HunkClass>>;
+}
 
 interface Props {
   entries: DiffEntry[];
   baseTokens: HighlightedLines | null;
   headTokens: HighlightedLines | null;
+  touches?: LineTouches;
 }
 
 /**
@@ -20,7 +27,7 @@ interface Props {
  *     layered *on top* so red/green strong tints win over the token
  *     colour for the changed spans.
  */
-export function DiffView({ entries, baseTokens, headTokens }: Props) {
+export function DiffView({ entries, baseTokens, headTokens, touches }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   return (
     <div className="text-[12.5px] font-mono rounded border overflow-hidden">
@@ -42,10 +49,19 @@ export function DiffView({ entries, baseTokens, headTokens }: Props) {
               }
               baseTokens={baseTokens}
               headTokens={headTokens}
+              touches={touches}
             />
           );
         }
-        return <Row key={i} row={entry} baseTokens={baseTokens} headTokens={headTokens} />;
+        return (
+          <Row
+            key={i}
+            row={entry}
+            baseTokens={baseTokens}
+            headTokens={headTokens}
+            touches={touches}
+          />
+        );
       })}
     </div>
   );
@@ -57,12 +73,14 @@ function Skip({
   onToggle,
   baseTokens,
   headTokens,
+  touches,
 }: {
   block: SkipBlock;
   open: boolean;
   onToggle: () => void;
   baseTokens: HighlightedLines | null;
   headTokens: HighlightedLines | null;
+  touches?: LineTouches;
 }) {
   if (open) {
     return (
@@ -81,7 +99,13 @@ function Skip({
           <div className="flex-1" />
         </button>
         {block.rows.map((r, idx) => (
-          <Row key={idx} row={r} baseTokens={baseTokens} headTokens={headTokens} />
+          <Row
+            key={idx}
+            row={r}
+            baseTokens={baseTokens}
+            headTokens={headTokens}
+            touches={touches}
+          />
         ))}
       </>
     );
@@ -109,10 +133,12 @@ function Row({
   row,
   baseTokens,
   headTokens,
+  touches,
 }: {
   row: DiffRow;
   baseTokens: HighlightedLines | null;
   headTokens: HighlightedLines | null;
+  touches?: LineTouches;
 }) {
   const isAdd = row.kind === "add";
   const isRem = row.kind === "remove";
@@ -121,6 +147,11 @@ function Row({
   // Pick the tokens for this row: added → head, removed → base, equal →
   // either (they match). Line numbers in the diff are 1-based.
   const tokens = lineTokens(row, baseTokens, headTokens);
+
+  // Architectural flag: is this row's line part of an emitted hunk? Check
+  // both sides — equal rows map to both; removed to base only; added to
+  // head only.
+  const archKinds = rowArchKinds(row, touches);
 
   return (
     <div
@@ -138,10 +169,45 @@ function Row({
     >
       <Gutter value={row.baseLine} mark={isRem ? "−" : null} tone={isRem ? "rem" : "equal"} />
       <Gutter value={row.headLine} mark={isAdd ? "+" : null} tone={isAdd ? "add" : "equal"} />
+      <ArchStrip kinds={archKinds} />
       <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
         <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
       </pre>
     </div>
+  );
+}
+
+function rowArchKinds(row: DiffRow, touches?: LineTouches): Set<HunkClass> {
+  const out = new Set<HunkClass>();
+  if (!touches) return out;
+  if (row.baseLine !== null) {
+    const set = touches.base.get(row.baseLine);
+    if (set) set.forEach((k) => out.add(k));
+  }
+  if (row.headLine !== null) {
+    const set = touches.head.get(row.headLine);
+    if (set) set.forEach((k) => out.add(k));
+  }
+  return out;
+}
+
+/**
+ * 3px-wide vertical strip between the line-number gutters and the code. Present
+ * only when the row belongs to an emitted hunk. Single-hue (amber) for v0 —
+ * the reviewer learns "this line is architecturally flagged" from the strip,
+ * and the specific class (Call/State/API) is available via the tooltip.
+ */
+function ArchStrip({ kinds }: { kinds: Set<HunkClass> }) {
+  if (kinds.size === 0) {
+    return <div className="w-[3px] shrink-0" aria-hidden />;
+  }
+  const label = Array.from(kinds).join(" · ");
+  return (
+    <div
+      className="w-[3px] shrink-0 bg-amber-500/80 dark:bg-amber-400/70"
+      aria-label={`Architectural: ${label}`}
+      title={`Architectural: ${label}`}
+    />
   );
 }
 

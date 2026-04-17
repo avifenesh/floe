@@ -110,3 +110,76 @@ export function shortSha(s: string): string {
 export function nodeById(graph: Artifact["base"], id: NodeId): Node | undefined {
   return graph.nodes.find((n) => n.id === id);
 }
+
+export type HunkClass = "call" | "state" | "api";
+
+export interface HunkTouch {
+  /** Which snapshot this touch refers to. */
+  side: "base" | "head";
+  file: string;
+  /** Byte range in the side's file. */
+  span: { start: number; end: number };
+  kind: HunkClass;
+}
+
+/**
+ * Derive per-side, per-file byte ranges that an emitted hunk points at.
+ * The Source view renders these as a gutter strip so a reviewer can see
+ * "this line is part of the Call/State/API hunk the PR view lists".
+ *
+ * For Call hunks the resolved range is the *caller* function's span —
+ * the callsite itself has no explicit span in the schema, but every
+ * call originates inside the caller's body.
+ */
+export function hunkTouches(artifact: Artifact): HunkTouch[] {
+  const out: HunkTouch[] = [];
+  for (const h of artifact.hunks) {
+    const k = h.kind;
+    switch (k.kind) {
+      case "call": {
+        for (const id of k.added_edges) {
+          const e = edgeById(artifact.head, id);
+          if (!e) continue;
+          const caller = nodeById(artifact.head, e.from);
+          if (caller) push(out, "head", caller, "call");
+        }
+        for (const id of k.removed_edges) {
+          const e = edgeById(artifact.base, id);
+          if (!e) continue;
+          const caller = nodeById(artifact.base, e.from);
+          if (caller) push(out, "base", caller, "call");
+        }
+        break;
+      }
+      case "state": {
+        const headN = nodeById(artifact.head, k.node);
+        if (headN) push(out, "head", headN, "state");
+        const baseN = nodeById(artifact.base, k.node);
+        if (baseN && baseN !== headN) push(out, "base", baseN, "state");
+        break;
+      }
+      case "api": {
+        const headN = nodeById(artifact.head, k.node);
+        if (headN) push(out, "head", headN, "api");
+        const baseN = nodeById(artifact.base, k.node);
+        if (baseN && baseN !== headN) push(out, "base", baseN, "api");
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function push(out: HunkTouch[], side: "base" | "head", n: Node, kind: HunkClass) {
+  out.push({ side, file: n.file, span: { start: n.span.start, end: n.span.end }, kind });
+}
+
+/** Convert a 0-based byte offset into a 1-based line number. */
+export function byteToLine(content: string, byte: number): number {
+  let line = 1;
+  const end = Math.min(byte, content.length);
+  for (let i = 0; i < end; i++) {
+    if (content.charCodeAt(i) === 10) line++;
+  }
+  return line;
+}
