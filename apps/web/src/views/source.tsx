@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchFile } from "@/api";
 import { changedFiles } from "@/lib/artifact";
-import { clipContext, lineDiff } from "@/lib/diff";
+import { clipContext, enrichWordLevel, lineDiff } from "@/lib/diff";
 import type { Artifact } from "@/types/artifact";
 import { DiffView } from "./source/DiffView";
 import { FileList } from "./source/FileList";
@@ -24,16 +24,21 @@ export function SourceView({ artifact, jobId }: Props) {
   );
 
   return (
-    <div className="grid grid-cols-[220px,1fr] gap-6">
-      <aside>
-        <h2 className="text-[11px] font-medium text-muted-foreground mb-2 tracking-wide">
-          Files
-        </h2>
-        <FileList files={visible.length > 0 ? visible : files} selected={selected} onSelect={setSelected} />
+    <div className="flex gap-4 items-start">
+      <aside className="pt-5 shrink-0">
+        <FileList
+          files={visible.length > 0 ? visible : files}
+          selected={selected}
+          onSelect={setSelected}
+        />
       </aside>
-      <section>
+      <section className="flex-1 min-w-0">
         {selected ? (
-          <FileDiff jobId={jobId} path={selected} status={files.find((f) => f.path === selected)?.status ?? "unchanged"} />
+          <FileDiff
+            jobId={jobId}
+            path={selected}
+            status={files.find((f) => f.path === selected)?.status ?? "unchanged"}
+          />
         ) : (
           <div className="text-[12px] text-muted-foreground">Select a file.</div>
         )}
@@ -89,7 +94,7 @@ function FileDiff({
   if (base === null || head === null) {
     return <div className="text-[12px] text-muted-foreground">Loading…</div>;
   }
-  const rows = clipContext(lineDiff(base, head), 3);
+  const rows = enrichWordLevel(clipContext(lineDiff(base, head), 3));
   return (
     <div className="space-y-2">
       <div className="text-[12px] font-mono text-muted-foreground">
