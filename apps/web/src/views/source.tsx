@@ -4,7 +4,7 @@ import { changedFiles } from "@/lib/artifact";
 import { clipContext, enrichWordLevel, lineDiff } from "@/lib/diff";
 import type { Artifact } from "@/types/artifact";
 import { DiffView } from "./source/DiffView";
-import { FileList } from "./source/FileList";
+import { FileTabs } from "./source/FileTabs";
 
 interface Props {
   artifact: Artifact;
@@ -12,27 +12,20 @@ interface Props {
 }
 
 /**
- * Source view · pass 1. Shows the list of files on the left, the selected
- * file's unified diff on the right. No syntax highlighting yet — we add
- * shiki next. Word-level highlights land in the pass after that.
+ * Source view. IDE-style tab bar up top, one tab per changed file; the
+ * active tab's unified diff renders below. No sidebar — the file list
+ * lives in the tab row, keeping the full page width for the code.
  */
 export function SourceView({ artifact, jobId }: Props) {
   const files = useMemo(() => changedFiles(artifact), [artifact]);
   const visible = files.filter((f) => f.status !== "unchanged");
-  const [selected, setSelected] = useState<string | null>(
-    visible[0]?.path ?? files[0]?.path ?? null,
-  );
+  const list = visible.length > 0 ? visible : files;
+  const [selected, setSelected] = useState<string | null>(list[0]?.path ?? null);
 
   return (
-    <div className="flex gap-4 items-start">
-      <aside className="pt-5 shrink-0">
-        <FileList
-          files={visible.length > 0 ? visible : files}
-          selected={selected}
-          onSelect={setSelected}
-        />
-      </aside>
-      <section className="flex-1 min-w-0">
+    <div className="flex flex-col gap-3">
+      <FileTabs files={list} selected={selected} onSelect={setSelected} />
+      <div>
         {selected ? (
           <FileDiff
             jobId={jobId}
@@ -40,9 +33,9 @@ export function SourceView({ artifact, jobId }: Props) {
             status={files.find((f) => f.path === selected)?.status ?? "unchanged"}
           />
         ) : (
-          <div className="text-[12px] text-muted-foreground">Select a file.</div>
+          <div className="text-[12px] text-muted-foreground">No files.</div>
         )}
-      </section>
+      </div>
     </div>
   );
 }
@@ -95,14 +88,5 @@ function FileDiff({
     return <div className="text-[12px] text-muted-foreground">Loading…</div>;
   }
   const rows = enrichWordLevel(clipContext(lineDiff(base, head), 3));
-  return (
-    <div className="space-y-2">
-      <div className="text-[12px] font-mono text-muted-foreground">
-        <span className="text-foreground">{path}</span>
-        <span className="mx-2">·</span>
-        <span>{status}</span>
-      </div>
-      <DiffView rows={rows} />
-    </div>
-  );
+  return <DiffView rows={rows} />;
 }
