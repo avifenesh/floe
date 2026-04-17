@@ -38,3 +38,17 @@ export async function pollUntilDone(jobId: string, signal?: AbortSignal): Promis
     await new Promise((res) => setTimeout(res, 200));
   }
 }
+
+/** Fetch the raw bytes of a file from the job's base or head snapshot. */
+export async function fetchFile(
+  jobId: string,
+  side: "base" | "head",
+  path: string,
+): Promise<string> {
+  const u = new URL(`/analyze/${jobId}/file`, window.location.origin);
+  u.searchParams.set("side", side);
+  u.searchParams.set("path", path);
+  const r = await fetch(u.pathname + u.search);
+  if (!r.ok) throw new Error(`fetchFile(${side}, ${path}): ${r.status} ${await r.text()}`);
+  return r.text();
+}

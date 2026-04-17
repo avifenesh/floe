@@ -1,12 +1,12 @@
 use std::convert::Infallible;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
-    extract::{Path as AxumPath, State},
-    http::StatusCode,
-    response::{sse::Event, Sse},
+    extract::{Path as AxumPath, Query, State},
+    http::{header, StatusCode},
+    response::{sse::Event, IntoResponse, Response, Sse},
     routing::{get, post},
     Json, Router,
 };
@@ -40,6 +40,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/analyze", post(analyze))
         .route("/analyze/:id", get(get_job))
         .route("/analyze/:id/stream", get(stream_job))
+        .route("/analyze/:id/file", get(get_file))
         .route("/health", get(|| async { "ok" }))
         .with_state(state)
         .layer(CorsLayer::permissive())
@@ -66,14 +67,20 @@ async fn analyze(
     if !req.head_path.exists() {
         return Err((StatusCode::BAD_REQUEST, format!("head_path missing: {}", req.head_path.display())));
     }
-    let job = Job::new();
+    let base_root = req
+        .base_path
+        .canonicalize()
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("canonicalize base: {e}")))?;
+    let head_root = req
+        .head_path
+        .canonicalize()
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("canonicalize head: {e}")))?;
+    let job = Job::new(base_root.clone(), head_root.clone());
     let id = job.id;
     state.jobs.insert(id, job.clone());
     let cache = state.cache.clone();
-    let base = req.base_path;
-    let head = req.head_path;
     tokio::spawn(async move {
-        run_pipeline(job, base, head, cache).await;
+        run_pipeline(job, base_root, head_root, cache).await;
     });
     Ok(Json(AnalyzeResponse { job_id: id }))
 }
@@ -98,6 +105,73 @@ async fn get_job(
     let status = job.status.read().await.clone();
     let artifact = job.artifact.read().await.clone();
     Ok(Json(JobView { status, artifact }))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct FileQuery {
+    pub side: Side,
+    pub path: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Side {
+    Base,
+    Head,
+}
+
+/// GET /analyze/:id/file?side=base|head&path=<relative>
+///
+/// Returns the file bytes as `text/plain; charset=utf-8`. Path is joined
+/// against the job's canonicalized root and the result must stay inside it
+/// (reject any `..` escape). Binary files return 415 — v0 only serves text.
+async fn get_file(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<uuid::Uuid>,
+    Query(q): Query<FileQuery>,
+) -> Result<Response, (StatusCode, String)> {
+    let job = state
+        .jobs
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "unknown job".into()))?
+        .clone();
+    let root = match q.side {
+        Side::Base => &job.base_root,
+        Side::Head => &job.head_root,
+    };
+    let resolved = resolve_inside(root, &q.path)
+        .map_err(|msg| (StatusCode::BAD_REQUEST, msg))?;
+    let bytes = tokio::fs::read(&resolved)
+        .await
+        .map_err(|e| (StatusCode::NOT_FOUND, format!("read {}: {e}", resolved.display())))?;
+    let Ok(text) = String::from_utf8(bytes) else {
+        return Err((
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "binary file; only text served".into(),
+        ));
+    };
+    Ok((
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        text,
+    )
+        .into_response())
+}
+
+/// Join `rel` onto `root` and refuse the result if it escapes `root`.
+fn resolve_inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    // Reject absolute + drive-relative inputs up front — they bypass the join.
+    let p = Path::new(rel);
+    if p.is_absolute() || rel.starts_with('\\') || rel.contains(':') {
+        return Err("absolute paths not allowed".into());
+    }
+    let joined = root.join(p);
+    let canonical = joined
+        .canonicalize()
+        .map_err(|e| format!("canonicalize: {e}"))?;
+    if !canonical.starts_with(root) {
+        return Err("path escapes job root".into());
+    }
+    Ok(canonical)
 }
 
 async fn stream_job(

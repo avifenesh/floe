@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { analyze, pollUntilDone, type JobView } from "@/api";
-import type { Artifact } from "@/types/artifact";
+import type { LoadedJob } from "@/App";
 import { PrHeader } from "./pr/PrHeader";
 import { PrStats } from "./pr/PrStats";
 import { PrHunks } from "./pr/PrHunks";
 
 interface Props {
-  artifact: Artifact | null;
-  onArtifact: (a: Artifact | null) => void;
+  job: LoadedJob | null;
+  onJob: (j: LoadedJob | null) => void;
 }
 
 /**
@@ -18,10 +18,11 @@ interface Props {
  * artifact is null we show the load form; once analyzed, we swap in the
  * overview. The form re-appears through the palette later.
  */
-export function PrView({ artifact, onArtifact }: Props) {
-  if (!artifact) {
-    return <LoadForm onArtifact={onArtifact} />;
+export function PrView({ job, onJob }: Props) {
+  if (!job) {
+    return <LoadForm onJob={onJob} />;
   }
+  const { artifact } = job;
   return (
     <div className="space-y-8">
       <PrHeader artifact={artifact} />
@@ -34,7 +35,7 @@ export function PrView({ artifact, onArtifact }: Props) {
       </section>
       <div>
         <button
-          onClick={() => onArtifact(null)}
+          onClick={() => onJob(null)}
           className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
         >
           ← Load another PR
@@ -44,7 +45,7 @@ export function PrView({ artifact, onArtifact }: Props) {
   );
 }
 
-function LoadForm({ onArtifact }: { onArtifact: (a: Artifact | null) => void }) {
+function LoadForm({ onJob }: { onJob: (j: LoadedJob | null) => void }) {
   const [base, setBase] = useState(localStorage.getItem("adr.base") ?? "");
   const [head, setHead] = useState(localStorage.getItem("adr.head") ?? "");
   const [job, setJob] = useState<JobView | null>(null);
@@ -61,11 +62,15 @@ function LoadForm({ onArtifact }: { onArtifact: (a: Artifact | null) => void }) 
       const id = await analyze(base, head);
       const done = await pollUntilDone(id);
       setJob(done);
-      onArtifact(done.artifact ?? null);
+      if (done.artifact) {
+        onJob({ jobId: id, artifact: done.artifact });
+      } else {
+        onJob(null);
+      }
     } catch (e) {
       setErr(String(e));
       setJob(null);
-      onArtifact(null);
+      onJob(null);
     } finally {
       setBusy(false);
     }

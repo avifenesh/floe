@@ -35,6 +35,40 @@ export function filesTouched(a: Artifact): string[] {
   return Array.from(paths).sort();
 }
 
+export type ChangedFile = {
+  path: string;
+  /** `added` = only in head · `removed` = only in base · `modified` = both sides
+   *  with different File-node provenance hashes · `unchanged` = both sides, equal. */
+  status: "added" | "removed" | "modified" | "unchanged";
+};
+
+/** Walk File nodes on both sides; pair by path. Modified = hash mismatch. */
+export function changedFiles(a: Artifact): ChangedFile[] {
+  const baseByPath = new Map<string, string>();
+  const headByPath = new Map<string, string>();
+  for (const n of a.base.nodes) {
+    if ("type" in n.kind && n.kind.type === "file") {
+      baseByPath.set(n.kind.path, n.provenance.hash);
+    }
+  }
+  for (const n of a.head.nodes) {
+    if ("type" in n.kind && n.kind.type === "file") {
+      headByPath.set(n.kind.path, n.provenance.hash);
+    }
+  }
+  const paths = new Set<string>([...baseByPath.keys(), ...headByPath.keys()]);
+  const out: ChangedFile[] = [];
+  for (const path of paths) {
+    const b = baseByPath.get(path);
+    const h = headByPath.get(path);
+    if (b && !h) out.push({ path, status: "removed" });
+    else if (!b && h) out.push({ path, status: "added" });
+    else if (b !== h) out.push({ path, status: "modified" });
+    else out.push({ path, status: "unchanged" });
+  }
+  return out.sort((x, y) => x.path.localeCompare(y.path));
+}
+
 export function countFunctions(graph: Artifact["base"]): number {
   return graph.nodes.filter((n) => "type" in n.kind && n.kind.type === "function").length;
 }

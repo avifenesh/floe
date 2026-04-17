@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use adr_core::Artifact;
@@ -27,6 +28,10 @@ pub struct Job {
     pub id: uuid::Uuid,
     pub status: RwLock<JobStatus>,
     pub artifact: RwLock<Option<Artifact>>,
+    /// Root directories for the two sides, canonicalized. Used by the file
+    /// endpoint to serve source bytes with path-traversal protection.
+    pub base_root: PathBuf,
+    pub head_root: PathBuf,
     /// Broadcast channel — SSE subscribers receive every event fired after they
     /// subscribe. Events from before a subscription are not replayed (we emit
     /// a terminal `ready`/`error` event so a late subscriber still learns the
@@ -35,12 +40,14 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn new() -> Arc<Self> {
+    pub fn new(base_root: PathBuf, head_root: PathBuf) -> Arc<Self> {
         let (tx, _rx) = broadcast::channel(64);
         Arc::new(Self {
             id: uuid::Uuid::new_v4(),
             status: RwLock::new(JobStatus::Pending),
             artifact: RwLock::new(None),
+            base_root,
+            head_root,
             progress: tx,
         })
     }

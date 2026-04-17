@@ -83,7 +83,12 @@ impl Ingest {
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_file())
             .map(|e| e.into_path())
-            .filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("ts") | Some("tsx")))
+            .filter(|p| {
+                matches!(
+                    p.extension().and_then(|x| x.to_str()),
+                    Some("ts") | Some("tsx")
+                )
+            })
             .collect();
         paths.sort();
 
@@ -121,12 +126,7 @@ impl Ingest {
         Provenance::new(PARSE_SOURCE, PARSE_VERSION, &self.pass_id, bytes)
     }
 
-    fn ingest_file(
-        &mut self,
-        rel_path: &str,
-        source: &[u8],
-        all_files: &[String],
-    ) -> Result<()> {
+    fn ingest_file(&mut self, rel_path: &str, source: &[u8], all_files: &[String]) -> Result<()> {
         let tsx = rel_path.ends_with(".tsx");
         let mut parser = Parser::new();
         let lang = if tsx {
@@ -209,7 +209,10 @@ impl Ingest {
         fns: &mut Vec<FnDef<'tree>>,
     ) {
         let (effective, exported) = if node.kind() == "export_statement" {
-            (node.child_by_field_name("declaration").unwrap_or(node), true)
+            (
+                node.child_by_field_name("declaration").unwrap_or(node),
+                true,
+            )
         } else {
             (node, false)
         };
@@ -399,7 +402,7 @@ impl Ingest {
     /// Parse named-imports (`import { a, b as c } from "./x"`) and record
     /// bindings keyed by the name used locally in this file. Default + namespace
     /// + side-effect imports are ignored — cross-file Calls edges only fire for
-    /// named function imports in v0.
+    ///   named function imports in v0.
     fn collect_imports(
         &mut self,
         node: TsNode<'_>,
@@ -416,7 +419,10 @@ impl Ingest {
         let Some(resolved) = resolve_relative_module(&module, rel_path, all_files) else {
             return;
         };
-        let Some(import_clause) = node.named_children(&mut node.walk()).find(|c| c.kind() == "import_clause") else {
+        let Some(import_clause) = node
+            .named_children(&mut node.walk())
+            .find(|c| c.kind() == "import_clause")
+        else {
             return;
         };
         let mut cursor = import_clause.walk();
@@ -432,7 +438,9 @@ impl Ingest {
                 let name_node = specifier.child_by_field_name("name");
                 let alias_node = specifier.child_by_field_name("alias");
                 let imported = name_node.and_then(|n| n.utf8_text(source).ok());
-                let local = alias_node.or(name_node).and_then(|n| n.utf8_text(source).ok());
+                let local = alias_node
+                    .or(name_node)
+                    .and_then(|n| n.utf8_text(source).ok());
                 if let (Some(imported), Some(local)) = (imported, local) {
                     self.imports_by_file
                         .entry(rel_path.to_string())
@@ -652,7 +660,10 @@ fn resolve_relative_module(spec: &str, from_file: &str, all_files: &[String]) ->
         format!("{norm}/index.tsx"),
         norm.clone(),
     ];
-    candidates.iter().find(|c| all_files.iter().any(|f| f == *c)).cloned()
+    candidates
+        .iter()
+        .find(|c| all_files.iter().any(|f| f == *c))
+        .cloned()
 }
 
 /// Collapse `a/b/../c` -> `a/c`. Preserves leading `../` runs.

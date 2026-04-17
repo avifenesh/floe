@@ -1,18 +1,13 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use adr_core::{Artifact, artifact::PrRef};
+use adr_core::{artifact::PrRef, Artifact};
 use anyhow::{Context, Result};
 
 use crate::cache::Cache;
 use crate::job::{Job, JobStatus, ProgressEvent};
 
-pub async fn run_pipeline(
-    job: Arc<Job>,
-    base: PathBuf,
-    head: PathBuf,
-    cache: Arc<Cache>,
-) {
+pub async fn run_pipeline(job: Arc<Job>, base: PathBuf, head: PathBuf, cache: Arc<Cache>) {
     match run_inner(&job, &base, &head, &cache).await {
         Ok(()) => {}
         Err(e) => {
@@ -27,7 +22,7 @@ pub async fn run_pipeline(
     }
 }
 
-async fn run_inner(job: &Arc<Job>, base: &PathBuf, head: &PathBuf, cache: &Cache) -> Result<()> {
+async fn run_inner(job: &Arc<Job>, base: &Path, head: &Path, cache: &Cache) -> Result<()> {
     let key = cache.key(base, head);
 
     // Cache hit → skip the pipeline, publish a single "ready" event.
@@ -44,7 +39,7 @@ async fn run_inner(job: &Arc<Job>, base: &PathBuf, head: &PathBuf, cache: &Cache
 
     emit(job, "parse-base", 10, "walking base tree").await;
     let base_graph = {
-        let base = base.clone();
+        let base = base.to_path_buf();
         tokio::task::spawn_blocking(move || adr_parse::Ingest::new("base").ingest_dir(&base))
             .await
             .context("parse-base join")??
@@ -52,7 +47,7 @@ async fn run_inner(job: &Arc<Job>, base: &PathBuf, head: &PathBuf, cache: &Cache
 
     emit(job, "parse-head", 30, "walking head tree").await;
     let head_graph = {
-        let head = head.clone();
+        let head = head.to_path_buf();
         tokio::task::spawn_blocking(move || adr_parse::Ingest::new("head").ingest_dir(&head))
             .await
             .context("parse-head join")??
@@ -61,14 +56,14 @@ async fn run_inner(job: &Arc<Job>, base: &PathBuf, head: &PathBuf, cache: &Cache
     emit(job, "cfg", 55, "building control-flow graphs").await;
     let base_cfg = {
         let g = base_graph.clone();
-        let root = base.clone();
+        let root = base.to_path_buf();
         tokio::task::spawn_blocking(move || adr_cfg::build_for_graph(&g, &root))
             .await
             .context("cfg-base join")??
     };
     let head_cfg = {
         let g = head_graph.clone();
-        let root = head.clone();
+        let root = head.to_path_buf();
         tokio::task::spawn_blocking(move || adr_cfg::build_for_graph(&g, &root))
             .await
             .context("cfg-head join")??
