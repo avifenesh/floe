@@ -87,7 +87,7 @@ export function enrichWordLevel(rows: DiffRow[]): DiffRow[] {
 
 /** Returns segments for (base, head) if a useful word-level overlap exists,
  *  otherwise [null, null] so the row stays fully tinted. */
-function pairSegments(a: string, b: string): [Segment[] | null, Segment[] | null] {
+export function pairSegments(a: string, b: string): [Segment[] | null, Segment[] | null] {
   const changes = diffWordsWithSpace(a, b);
   let equalLen = 0;
   let totalA = 0;

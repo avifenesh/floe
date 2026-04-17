@@ -89,9 +89,14 @@ export function deriveSlug(basePath: string, headPath: string): string {
 }
 
 /** Path-like shas (our v0 fixture stand-in) aren't useful to show. Treat
- *  anything starting with a drive letter or `/` as a path. */
+ *  anything starting with a drive letter, `/`, or Windows UNC prefix as a path. */
 export function isPathSha(s: string): boolean {
-  return /^[a-zA-Z]:/.test(s) || s.startsWith("/");
+  return (
+    /^[a-zA-Z]:/.test(s) ||
+    s.startsWith("/") ||
+    s.startsWith("\\\\") ||
+    s.startsWith("\\?\\")
+  );
 }
 
 /** Shorten a long path or sha into a 12-char tail. */

@@ -1,5 +1,7 @@
 import type { Artifact, Hunk } from "@/types/artifact";
 import { edgeById, nameOf, nodeById } from "@/lib/artifact";
+import { pairSegments, type Segment } from "@/lib/diff";
+import { cn } from "@/lib/cn";
 
 export function PrHunks({ artifact }: { artifact: Artifact }) {
   if (artifact.hunks.length === 0) {
@@ -70,6 +72,10 @@ function HunkBody({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Call                                                                       */
+/* -------------------------------------------------------------------------- */
+
 function CallBody({
   artifact,
   added,
@@ -80,14 +86,14 @@ function CallBody({
   removed: number[];
 }) {
   return (
-    <div className="space-y-1">
+    <ul className="space-y-0.5">
       {added.map((id) => {
         const e = edgeById(artifact.head, id);
         if (!e) return null;
         return (
-          <EdgeLine
+          <EdgeRow
             key={`+${id}`}
-            mark="+"
+            kind="add"
             from={nameOf(artifact.head, e.from)}
             to={nameOf(artifact.head, e.to)}
           />
@@ -97,35 +103,50 @@ function CallBody({
         const e = edgeById(artifact.base, id);
         if (!e) return null;
         return (
-          <EdgeLine
+          <EdgeRow
             key={`-${id}`}
-            mark="−"
+            kind="remove"
             from={nameOf(artifact.base, e.from)}
             to={nameOf(artifact.base, e.to)}
           />
         );
       })}
-    </div>
+    </ul>
   );
 }
 
-function EdgeLine({ mark, from, to }: { mark: string; from: string; to: string }) {
+function EdgeRow({
+  kind,
+  from,
+  to,
+}: {
+  kind: "add" | "remove";
+  from: string;
+  to: string;
+}) {
   return (
-    <div className="text-[13px] font-mono flex items-center gap-2">
-      <span
-        className="w-3 inline-block text-muted-foreground tabular-nums"
-        aria-hidden
-      >
-        {mark}
+    <li
+      className={cn(
+        "text-[13px] font-mono flex items-center gap-2 px-2 py-0.5 rounded",
+        kind === "add" && "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50",
+        kind === "remove" && "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50",
+      )}
+    >
+      <span className="w-3 inline-block text-center tabular-nums opacity-70" aria-hidden>
+        {kind === "add" ? "+" : "−"}
       </span>
-      <span className="text-foreground">{from}</span>
-      <span className="text-muted-foreground" aria-hidden>
+      <span>{from}</span>
+      <span className="opacity-60" aria-hidden>
         →
       </span>
-      <span className="text-foreground">{to}</span>
-    </div>
+      <span>{to}</span>
+    </li>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* State                                                                      */
+/* -------------------------------------------------------------------------- */
 
 function StateBody({
   artifact,
@@ -141,30 +162,40 @@ function StateBody({
   const n = nodeById(artifact.head, node) ?? nodeById(artifact.base, node);
   const name = n && "type" in n.kind && n.kind.type === "state" ? n.kind.name : `node ${node}`;
   return (
-    <div className="text-[13px] font-mono space-y-1">
-      <div className="font-medium text-foreground">{name}</div>
-      <div className="flex flex-wrap gap-x-2 gap-y-1">
+    <div className="space-y-2">
+      <div className="text-[13px] font-mono font-medium text-foreground">{name}</div>
+      <div className="flex flex-wrap gap-1.5">
         {added.map((v) => (
-          <Variant key={`+${v}`} mark="+" value={v} />
+          <VariantChip key={`+${v}`} kind="add" value={v} />
         ))}
         {removed.map((v) => (
-          <Variant key={`-${v}`} mark="−" value={v} />
+          <VariantChip key={`-${v}`} kind="remove" value={v} />
         ))}
       </div>
     </div>
   );
 }
 
-function Variant({ mark, value }: { mark: string; value: string }) {
+function VariantChip({ kind, value }: { kind: "add" | "remove"; value: string }) {
   return (
-    <span className="inline-flex items-center gap-1">
-      <span className="text-muted-foreground tabular-nums" aria-hidden>
-        {mark}
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-[12px] font-mono px-2 py-0.5 rounded",
+        kind === "add" && "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50",
+        kind === "remove" && "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50",
+      )}
+    >
+      <span className="opacity-70" aria-hidden>
+        {kind === "add" ? "+" : "−"}
       </span>
-      <span className="text-foreground">{value}</span>
+      <span>{value}</span>
     </span>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* API                                                                        */
+/* -------------------------------------------------------------------------- */
 
 function ApiBody({
   artifact,
@@ -180,27 +211,79 @@ function ApiBody({
   const n = nodeById(artifact.head, node) ?? nodeById(artifact.base, node);
   const name =
     n && "type" in n.kind && n.kind.type === "function" ? n.kind.name : `node ${node}`;
+
+  const [beforeSegs, afterSegs] =
+    before && after ? pairSegments(before, after) : [null, null];
+
   return (
-    <div className="text-[13px] font-mono space-y-1">
-      <div className="font-medium text-foreground">{name}</div>
-      <div className="space-y-1 text-muted-foreground text-[12px]">
-        {before && (
-          <div className="flex gap-2">
-            <span className="w-3 inline-block tabular-nums" aria-hidden>
-              −
-            </span>
-            <span className="break-all">{before}</span>
-          </div>
+    <div className="space-y-1.5">
+      <div className="text-[13px] font-mono font-medium text-foreground">{name}</div>
+      <div className="space-y-0.5">
+        {before !== null && (
+          <SignatureRow kind="remove" text={before} segments={beforeSegs} />
         )}
-        {after && (
-          <div className="flex gap-2">
-            <span className="w-3 inline-block tabular-nums" aria-hidden>
-              +
-            </span>
-            <span className="text-foreground break-all">{after}</span>
-          </div>
+        {after !== null && (
+          <SignatureRow kind="add" text={after} segments={afterSegs} />
         )}
       </div>
     </div>
+  );
+}
+
+function SignatureRow({
+  kind,
+  text,
+  segments,
+}: {
+  kind: "add" | "remove";
+  text: string;
+  segments: Segment[] | null;
+}) {
+  const hasSegments = !!segments && segments.some((s) => s.kind === "equal");
+  return (
+    <div
+      className={cn(
+        "text-[12px] font-mono flex items-start gap-2 px-2 py-0.5 rounded min-w-0",
+        kind === "add" &&
+          (hasSegments
+            ? "bg-emerald-500/[0.06] dark:bg-emerald-400/[0.06]"
+            : "bg-emerald-500/30 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
+        kind === "remove" &&
+          (hasSegments
+            ? "bg-rose-500/[0.06] dark:bg-rose-400/[0.06]"
+            : "bg-rose-500/30 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
+      )}
+    >
+      <span className="w-3 inline-block text-center tabular-nums text-muted-foreground shrink-0" aria-hidden>
+        {kind === "add" ? "+" : "−"}
+      </span>
+      <span className="whitespace-pre-wrap break-words">
+        {segments ? <SegmentedText segments={segments} kind={kind} /> : text}
+      </span>
+    </div>
+  );
+}
+
+function SegmentedText({ segments, kind }: { segments: Segment[]; kind: "add" | "remove" }) {
+  return (
+    <>
+      {segments.map((s, i) => {
+        if (s.kind === "equal") return <span key={i}>{s.text}</span>;
+        return (
+          <span
+            key={i}
+            className={cn(
+              "rounded-[2px]",
+              kind === "add" &&
+                "bg-emerald-500/35 dark:bg-emerald-400/35 text-emerald-950 dark:text-emerald-50",
+              kind === "remove" &&
+                "bg-rose-500/35 dark:bg-rose-400/35 text-rose-950 dark:text-rose-50",
+            )}
+          >
+            {s.text}
+          </span>
+        );
+      })}
+    </>
   );
 }
