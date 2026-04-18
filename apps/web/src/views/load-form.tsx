@@ -1,53 +1,15 @@
 import { useState } from "react";
 import { analyze, pollUntilDone, type JobView } from "@/api";
 import type { LoadedJob } from "@/App";
-import { PrHeader } from "./pr/PrHeader";
-import { PrStats } from "./pr/PrStats";
-import { PrHunks } from "./pr/PrHunks";
-import { PrFlows } from "./pr/PrFlows";
 
 interface Props {
-  job: LoadedJob | null;
   onJob: (j: LoadedJob | null) => void;
 }
 
-/**
- * PR view. First screen a reviewer sees once a PR is loaded:
- *   identity header · stats strip · architectural delta list
- *
- * No proposal chips yet — we don't parse proposal sheets (scope 4). When the
- * artifact is null we show the load form; once analyzed, we swap in the
- * overview. The form re-appears through the palette later.
- */
-export function PrView({ job, onJob }: Props) {
-  if (!job) {
-    return <LoadForm onJob={onJob} />;
-  }
-  const { artifact } = job;
-  return (
-    <div className="space-y-8">
-      <PrHeader artifact={artifact} />
-      <PrStats artifact={artifact} />
-      <PrFlows artifact={artifact} />
-      <section className="space-y-4">
-        <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
-          Architectural delta
-        </h2>
-        <PrHunks artifact={artifact} />
-      </section>
-      <div>
-        <button
-          onClick={() => onJob(null)}
-          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          ← Load another PR
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LoadForm({ onJob }: { onJob: (j: LoadedJob | null) => void }) {
+/** Landing form — base/head paths + analyze button. Shown when no PR is
+ *  loaded. The palette will eventually provide a faster path to reloading
+ *  a recent PR, but for v0 this is the entry point. */
+export function LoadForm({ onJob }: Props) {
   const [base, setBase] = useState(localStorage.getItem("adr.base") ?? "");
   const [head, setHead] = useState(localStorage.getItem("adr.head") ?? "");
   const [job, setJob] = useState<JobView | null>(null);

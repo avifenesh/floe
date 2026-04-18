@@ -3,6 +3,7 @@ import { cn } from "@/lib/cn";
 
 interface Props {
   artifact: Artifact;
+  onPick?: (flowId: string) => void;
 }
 
 /**
@@ -14,7 +15,7 @@ interface Props {
  * No scope switching yet — this is the simplest cut. Click-to-scope lands
  * when the flow ribbon in the spine comes online.
  */
-export function PrFlows({ artifact }: Props) {
+export function PrFlows({ artifact, onPick }: Props) {
   const flows = artifact.flows ?? [];
   if (flows.length === 0) {
     return null;
@@ -31,7 +32,7 @@ export function PrFlows({ artifact }: Props) {
       <ol className="space-y-2">
         {flows.map((f) => (
           <li key={f.id}>
-            <FlowCard flow={f} />
+            <FlowCard flow={f} onPick={onPick} />
           </li>
         ))}
       </ol>
@@ -39,16 +40,31 @@ export function PrFlows({ artifact }: Props) {
   );
 }
 
-function FlowCard({ flow }: { flow: Flow }) {
+function FlowCard({ flow, onPick }: { flow: Flow; onPick?: (id: string) => void }) {
   const source = flow.source as { kind: string; model?: string; version?: string };
   const isStructural = source.kind === "structural";
+  const clickable = !!onPick;
   return (
     <div
+      onClick={clickable ? () => onPick!(flow.id) : undefined}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPick!(flow.id);
+              }
+            }
+          : undefined
+      }
       className={cn(
-        "rounded border px-3 py-2 space-y-1",
+        "rounded border px-3 py-2 space-y-1 transition-colors",
         isStructural
           ? "bg-muted/30 border-border/60"
           : "bg-amber-50 dark:bg-amber-400/5 border-amber-200 dark:border-amber-400/20",
+        clickable && "cursor-pointer hover:bg-muted/60",
       )}
     >
       <div className="flex items-baseline gap-2">
