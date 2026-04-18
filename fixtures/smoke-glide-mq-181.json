@@ -1,0 +1,160 @@
+{
+  "hunks": [
+    {
+      "id": "hunk-afa9ded7",
+      "kind": "call",
+      "summary": "+ Job.streamChunk -> Job.stream",
+      "entities": [
+        "Job.streamChunk",
+        "Job.stream"
+      ]
+    },
+    {
+      "id": "hunk-944822e1",
+      "kind": "call",
+      "summary": "+ TestJob.streamChunk -> TestJob.stream",
+      "entities": [
+        "TestJob.streamChunk",
+        "TestJob.stream"
+      ]
+    },
+    {
+      "id": "hunk-ee66f86b",
+      "kind": "api",
+      "summary": "Queue.getFlowUsage  |  before: async getFlowUsage(parentJobId: string): Promise<{ totalInputTokens: number; totalOutputTokens: number; totalCostUsd: nu  |  after: async getFlowUsage(parentJobId: string): Promise<{ tokens: Record<string, number>; totalTokens: number; costs: Record<st",
+      "entities": [
+        "Queue.getFlowUsage"
+      ]
+    },
+    {
+      "id": "hunk-c12b7a23",
+      "kind": "api",
+      "summary": "Queue.getFlowBudget  |  before: async getFlowBudget(flowId: string): Promise<{ maxTotalTokens?: number; maxCostUsd?: number; usedTokens: number; usedCos  |  after: async getFlowBudget(flowId: string): Promise<{ maxTotalTokens?: number; maxTokens?: Record<string, number>; tokenWeights",
+      "entities": [
+        "Queue.getFlowBudget"
+      ]
+    },
+    {
+      "id": "hunk-573c02b4",
+      "kind": "api",
+      "summary": "recordUsageAndCheckBudget  |  before: async function recordUsageAndCheckBudget( client: Client, budgetKey: string, tokens: number, costUsd: number, ): Promise  |  after: async function recordUsageAndCheckBudget( client: Client, budgetKey: string, tokens: Record<string, number>, costs: Reco",
+      "entities": [
+        "recordUsageAndCheckBudget"
+      ]
+    },
+    {
+      "id": "hunk-f8dc6de5",
+      "kind": "api",
+      "summary": "Queue.readStream  |  before: async readStream( jobId: string, opts?: ReadStreamOptions, ): Promise<{ id: string; fields: Record<string, string> }[]>  |  after: async readStream(jobId: string, opts?: ReadStreamOptions): Promise<{ id: string; fields: Record<string, string> }[]>",
+      "entities": [
+        "Queue.readStream"
+      ]
+    },
+    {
+      "id": "hunk-c5a32bfc",
+      "kind": "api",
+      "summary": "TestQueue.recordBudgetUsage  |  before: recordBudgetUsage(budgetKey: string, tokens: number, costUsd: number): string  |  after: recordBudgetUsage( budgetKey: string, tokens: Record<string, number>, costs: Record<string, number>, weightedTotal: numb",
+      "entities": [
+        "TestQueue.recordBudgetUsage"
+      ]
+    },
+    {
+      "id": "hunk-785d2536",
+      "kind": "api",
+      "summary": "TestQueue.getFlowBudget  |  before: async getFlowBudget(flowId: string): Promise<{ maxTotalTokens?: number; maxCostUsd?: number; usedTokens: number; usedCos  |  after: async getFlowBudget(flowId: string): Promise<{ maxTotalTokens?: number; maxTokens?: Record<string, number>; tokenWeights",
+      "entities": [
+        "TestQueue.getFlowBudget"
+      ]
+    },
+    {
+      "id": "hunk-909c77d1",
+      "kind": "api",
+      "summary": "TestQueue.getFlowUsage  |  before: async getFlowUsage(parentJobId: string): Promise<{ totalInputTokens: number; totalOutputTokens: number; totalCostUsd: nu  |  after: async getFlowUsage(parentJobId: string): Promise<{ tokens: Record<string, number>; totalTokens: number; costs: Record<st",
+      "entities": [
+        "TestQueue.getFlowUsage"
+      ]
+    },
+    {
+      "id": "hunk-c94bc377",
+      "kind": "api",
+      "summary": "TestQueue.setBudget  |  before: setBudget(flowId: string, budget: { maxTotalTokens?: number; maxCostUsd?: number; onExceeded?: 'pause' | 'fail'; }): voi  |  after: setBudget( flowId: string, budget: { maxTotalTokens?: number; maxTokens?: Record<string, number>; tokenWeights?: Record<",
+      "entities": [
+        "TestQueue.setBudget"
+      ]
+    },
+    {
+      "id": "hunk-d07b5b5d",
+      "kind": "api",
+      "summary": "Job.consumeSuspendRequest  |  before: consumeSuspendRequest(): { reason?: string; timeout?: number; onResume?: (signals: SignalEntry[]) => Promise<any> } | un  |  after: consumeSuspendRequest(): | { reason?: string; timeout?: number; onResume?: (signals: SignalEntry[]) => Promise<any> } | ",
+      "entities": [
+        "Job.consumeSuspendRequest"
+      ]
+    },
+    {
+      "id": "hunk-e6fc302d",
+      "kind": "api",
+      "summary": "TestJob.streamChunk  |  before:   |  after: async streamChunk(type: string, content?: string): Promise<string>",
+      "entities": [
+        "TestJob.streamChunk"
+      ]
+    },
+    {
+      "id": "hunk-6ffb548c",
+      "kind": "api",
+      "summary": "Job.streamChunk  |  before:   |  after: async streamChunk(type: string, content?: string): Promise<string>",
+      "entities": [
+        "Job.streamChunk"
+      ]
+    }
+  ],
+  "initial_clusters": [
+    {
+      "id": "structural-0",
+      "name": "<structural: Job>",
+      "hunk_ids": [
+        "hunk-afa9ded7",
+        "hunk-d07b5b5d",
+        "hunk-6ffb548c"
+      ],
+      "rationale": "shared class prefix: Job"
+    },
+    {
+      "id": "structural-1",
+      "name": "<structural: Queue>",
+      "hunk_ids": [
+        "hunk-ee66f86b",
+        "hunk-c12b7a23",
+        "hunk-f8dc6de5"
+      ],
+      "rationale": "shared class prefix: Queue"
+    },
+    {
+      "id": "structural-2",
+      "name": "<structural: TestJob>",
+      "hunk_ids": [
+        "hunk-944822e1",
+        "hunk-e6fc302d"
+      ],
+      "rationale": "shared class prefix: TestJob"
+    },
+    {
+      "id": "structural-3",
+      "name": "<structural: TestQueue>",
+      "hunk_ids": [
+        "hunk-c5a32bfc",
+        "hunk-785d2536",
+        "hunk-909c77d1",
+        "hunk-c94bc377"
+      ],
+      "rationale": "shared class prefix: TestQueue"
+    },
+    {
+      "id": "structural-4",
+      "name": "<structural: top-level>",
+      "hunk_ids": [
+        "hunk-573c02b4"
+      ],
+      "rationale": "shared class prefix: top-level"
+    }
+  ]
+}
