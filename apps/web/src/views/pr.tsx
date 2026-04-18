@@ -4,6 +4,7 @@ import type { LoadedJob } from "@/App";
 import { PrHeader } from "./pr/PrHeader";
 import { PrStats } from "./pr/PrStats";
 import { PrHunks } from "./pr/PrHunks";
+import { PrFlows } from "./pr/PrFlows";
 
 interface Props {
   job: LoadedJob | null;
@@ -27,6 +28,7 @@ export function PrView({ job, onJob }: Props) {
     <div className="space-y-8">
       <PrHeader artifact={artifact} />
       <PrStats artifact={artifact} />
+      <PrFlows artifact={artifact} />
       <section className="space-y-4">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
           Architectural delta
