@@ -204,11 +204,24 @@ function ArchStrip({ kinds }: { kinds: Set<HunkClass> }) {
   if (kinds.size === 0) {
     return <div className="w-[3px] shrink-0" aria-hidden />;
   }
+  // The strip is the hover trigger for the sibling <ArchChip>. 3 px is a small
+  // target visually, so we widen the *hit box* with a same-sized invisible
+  // padding layer — visual weight stays 3 px, pointer can land on ~10 px.
   return (
     <div
       aria-hidden
-      className="w-[3px] shrink-0 bg-amber-500/70 dark:bg-amber-400/60"
-    />
+      className={cn(
+        "shrink-0 relative peer/strip",
+        "w-[3px] hover:w-[5px] transition-[width] duration-100",
+      )}
+    >
+      {/* invisible pointer padding — strip is 3 px visually, hit box ~11 px */}
+      <div
+        className="absolute inset-y-0 -inset-x-[4px]"
+        style={{ pointerEvents: "auto" }}
+      />
+      <div className="w-full h-full bg-amber-500/70 hover:bg-amber-500 dark:bg-amber-400/60 dark:hover:bg-amber-400 relative transition-colors" />
+    </div>
   );
 }
 
@@ -348,39 +361,28 @@ function Segments({ segments, kind }: { segments: Segment[]; kind: "add" | "remo
  * full labels. Hover scope is `group/chip` — hovering anywhere else on the
  * row or the strip does nothing.
  */
+/**
+ * Label that reveals on strip-hover only. Hidden by default (`opacity-0`);
+ * becomes visible when the sibling `peer/strip` is hovered. No hover state
+ * of its own — pointer-events-none so it never steals the hover focus
+ * from the strip or lets the cursor enter it.
+ */
 function ArchChip({ kinds }: { kinds: Set<HunkClass> }) {
-  const list = Array.from(kinds);
-  const initials = list.map(kindInitial).join("·");
-  const full = list.map(kindLabel).join(" · ");
+  const full = Array.from(kinds).map(kindLabel).join(" · ");
   return (
     <div
       aria-label={`Architectural: ${full}`}
       className={cn(
-        "absolute right-2 top-1/2 -translate-y-1/2",
-        "group/chip",
+        "absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none",
+        "opacity-0 peer-hover/strip:opacity-100 transition-opacity duration-100",
         "text-[10px] font-mono font-medium tracking-wide rounded px-1.5 py-0.5",
-        "bg-amber-100/70 text-amber-900 border border-amber-300/60",
-        "dark:bg-amber-400/10 dark:text-amber-300 dark:border-amber-400/25",
-        "hover:bg-amber-100 hover:border-amber-400",
-        "dark:hover:bg-amber-400/20 dark:hover:border-amber-400/50",
-        "transition-colors",
+        "bg-amber-100 text-amber-900 border border-amber-300",
+        "dark:bg-amber-400/15 dark:text-amber-200 dark:border-amber-400/30",
       )}
     >
-      <span className="group-hover/chip:hidden">{initials}</span>
-      <span className="hidden group-hover/chip:inline">{full}</span>
+      {full}
     </div>
   );
-}
-
-function kindInitial(k: HunkClass): string {
-  switch (k) {
-    case "call":
-      return "C";
-    case "state":
-      return "S";
-    case "api":
-      return "A";
-  }
 }
 
 function kindLabel(k: HunkClass): string {
