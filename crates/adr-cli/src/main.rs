@@ -39,6 +39,7 @@ fn main() -> Result<()> {
             artifact.base_cfg = adr_cfg::build_for_graph(&artifact.base, &base)?;
             artifact.head_cfg = adr_cfg::build_for_graph(&artifact.head, &head)?;
             artifact.hunks = adr_hunks::extract_all(&artifact.base, &artifact.head);
+            artifact.flows = adr_flows::cluster(&artifact);
             let out = serde_json::to_string_pretty(&artifact)?;
             println!("{out}");
         }

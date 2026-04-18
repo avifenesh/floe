@@ -15,6 +15,7 @@ adr-core = { workspace = true }
 adr-parse = { workspace = true }
 adr-cfg = { workspace = true }
 adr-hunks = { workspace = true }
+adr-flows = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true }
 tokio = { workspace = true }

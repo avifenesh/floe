@@ -5,6 +5,7 @@ members = [
     "crates/adr-parse",
     "crates/adr-hunks",
     "crates/adr-cfg",
+    "crates/adr-flows",
     "crates/adr-server",
     "crates/adr-cli",
 ]
@@ -44,6 +45,7 @@ adr-core = { path = "crates/adr-core" }
 adr-parse = { path = "crates/adr-parse" }
 adr-hunks = { path = "crates/adr-hunks" }
 adr-cfg = { path = "crates/adr-cfg" }
+adr-flows = { path = "crates/adr-flows" }
 adr-server = { path = "crates/adr-server" }
 
 [profile.release]

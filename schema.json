@@ -21,6 +21,13 @@
         "$ref": "#/definitions/CfgEntry"
       }
     },
+    "flows": {
+      "description": "Flows — groups of hunks that belong to one architectural story. The primary unit of review in v0.2. Deterministic structural clustering always produces this list; the `adr` PI extension may replace it with LLM-validated flows.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Flow"
+      }
+    },
     "head": {
       "$ref": "#/definitions/Graph"
     },
@@ -319,6 +326,111 @@
             }
           },
           "additionalProperties": false
+        }
+      ]
+    },
+    "Flow": {
+      "description": "A flow — the primary unit of review in v0.2. Lives at `artifact.flows[]` (schema update lands with this crate).\n\nThe structural floor produces flows with `FlowSource::Structural`. The `adr` PI extension replaces the list with LLM-validated flows tagged `FlowSource::Llm`. If the LLM run is rejected, we ship the structural list unchanged and the UI surfaces a \"structural only\" banner.",
+      "type": "object",
+      "required": [
+        "entities",
+        "extra_entities",
+        "hunk_ids",
+        "id",
+        "name",
+        "order",
+        "rationale",
+        "source"
+      ],
+      "properties": {
+        "entities": {
+          "description": "Qualified entity names participating in this flow. Kept as strings so they match across base/head snapshots.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extra_entities": {
+          "description": "Entities the LLM added beyond the hunk-derived set — unchanged callers/callees the reviewer should see in context. Empty for structural flows.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hunk_ids": {
+          "description": "Every hunk that belongs to this flow. A hunk may appear in multiple flows (explicitly allowed). Every hunk in the artifact must appear in at least one flow (host-enforced when the LLM produces flows; guaranteed by construction when structural).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "description": "Stable id — `flow-<blake3>` computed from the bucket name and hunk-id list. Two runs of the structural clustering on the same artifact produce identical ids.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Reviewer-facing name. Structural flows use `<structural: <bucket>>`; LLM flows use an intent-shaped name.",
+          "type": "string"
+        },
+        "order": {
+          "description": "Render order — stable in structural output; LLM runs preserve whatever order the host finalises.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "rationale": {
+          "description": "One-or-two-sentence explanation of why these hunks are together.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Provenance of this flow — structural or LLM-synthesised.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/FlowSource"
+            }
+          ]
+        }
+      }
+    },
+    "FlowSource": {
+      "oneOf": [
+        {
+          "description": "Structural clustering ran. No LLM involved or LLM output rejected.",
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structural"
+              ]
+            }
+          }
+        },
+        {
+          "description": "LLM synthesis ran, validated, and was accepted by the host.",
+          "type": "object",
+          "required": [
+            "kind",
+            "model",
+            "version"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "llm"
+              ]
+            },
+            "model": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          }
         }
       ]
     },

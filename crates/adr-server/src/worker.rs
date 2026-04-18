@@ -69,7 +69,7 @@ async fn run_inner(job: &Arc<Job>, base: &Path, head: &Path, cache: &Cache) -> R
             .context("cfg-head join")??
     };
 
-    emit(job, "hunks", 80, "extracting semantic hunks").await;
+    emit(job, "hunks", 75, "extracting semantic hunks").await;
     let hunks = adr_hunks::extract_all(&base_graph, &head_graph);
 
     let mut artifact = Artifact::new(PrRef {
@@ -82,6 +82,9 @@ async fn run_inner(job: &Arc<Job>, base: &Path, head: &Path, cache: &Cache) -> R
     artifact.base_cfg = base_cfg;
     artifact.head_cfg = head_cfg;
     artifact.hunks = hunks;
+
+    emit(job, "flows", 90, "structural flow clustering").await;
+    artifact.flows = adr_flows::cluster(&artifact);
 
     cache.put(&key, &artifact)?;
     *job.artifact.write().await = Some(artifact);

@@ -21,6 +21,7 @@ version = "0.1.0"
 dependencies = [
  "adr-cfg",
  "adr-core",
+ "adr-flows",
  "adr-hunks",
  "adr-parse",
  "anyhow",
@@ -39,6 +40,20 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "adr-flows"
+version = "0.1.0"
+dependencies = [
+ "adr-core",
+ "adr-hunks",
+ "adr-parse",
+ "blake3",
+ "insta",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -71,6 +86,7 @@ version = "0.1.0"
 dependencies = [
  "adr-cfg",
  "adr-core",
+ "adr-flows",
  "adr-hunks",
  "adr-parse",
  "anyhow",

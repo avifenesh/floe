@@ -8,10 +8,12 @@ pub mod graph;
 pub mod provenance;
 pub mod hunks;
 pub mod cfg;
+pub mod flow;
 pub mod artifact;
 
 pub use artifact::{Artifact, SCHEMA_VERSION};
 pub use cfg::{Cfg, CfgEdge, CfgEntry, CfgMap, CfgNode, CfgNodeId, CfgNodeKind};
+pub use flow::{Flow, FlowSource};
 pub use graph::{Edge, EdgeId, EdgeKind, Graph, Node, NodeId, NodeKind};
 pub use hunks::{Hunk, HunkKind};
 pub use provenance::Provenance;

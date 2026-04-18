@@ -1,0 +1,19 @@
+[package]
+name = "adr-flows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Deterministic flow clustering — hybrid call-graph components + type-propagation. The structural floor; LLM synthesis validates and refines this."
+
+[dependencies]
+adr-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+adr-parse = { workspace = true }
+adr-hunks = { workspace = true }
+insta = { workspace = true }

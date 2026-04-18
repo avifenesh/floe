@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::cfg::CfgMap;
+use crate::flow::Flow;
 use crate::graph::Graph;
 use crate::hunks::Hunk;
 
@@ -24,6 +25,12 @@ pub struct Artifact {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub head_cfg: CfgMap,
     pub hunks: Vec<Hunk>,
+    /// Flows — groups of hunks that belong to one architectural story. The
+    /// primary unit of review in v0.2. Deterministic structural clustering
+    /// always produces this list; the `adr` PI extension may replace it
+    /// with LLM-validated flows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flows: Vec<Flow>,
 }
 
 impl Artifact {
@@ -36,6 +43,7 @@ impl Artifact {
             base_cfg: CfgMap::default(),
             head_cfg: CfgMap::default(),
             hunks: Vec::new(),
+            flows: Vec::new(),
         }
     }
 }

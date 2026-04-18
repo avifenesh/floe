@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 /// Tool versions baked into the cache key. Bump any of these and all entries
 /// silently invalidate.
-const PIPELINE_VERSION: &str = "0.1.0";
+const PIPELINE_VERSION: &str = "0.2.0";
 
 pub struct Cache {
     dir: PathBuf,
