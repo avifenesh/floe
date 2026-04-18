@@ -43,12 +43,12 @@ export function TopSpine({
   return (
     <header className="flex flex-col">
       <div className="h-10 flex items-center">
-        <div className="w-full max-w-6xl mx-auto px-6 grid grid-cols-[1fr,auto,1fr] items-center">
-          <div className="justify-self-start text-[12px] font-mono text-muted-foreground truncate">
+        <div className="w-full max-w-6xl mx-auto px-6 flex items-center gap-6">
+          <div className="text-[12px] font-mono text-muted-foreground shrink-0 truncate max-w-[180px]">
             {prLabel ?? "No PR loaded"}
           </div>
 
-          <nav className="flex items-center gap-4 min-w-0 overflow-x-auto no-scrollbar">
+          <nav className="flex items-center gap-4 min-w-0 flex-1 overflow-x-auto no-scrollbar">
             {flows.map((f) => (
               <TopTabButton
                 key={f.id}
@@ -66,7 +66,7 @@ export function TopSpine({
             )}
           </nav>
 
-          <div className="justify-self-end flex items-center gap-3">
+          <div className="shrink-0 flex items-center gap-3">
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               className="text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
