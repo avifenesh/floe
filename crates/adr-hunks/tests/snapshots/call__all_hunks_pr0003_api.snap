@@ -8,8 +8,8 @@ expression: hunks
     "kind": {
       "kind": "api",
       "node": 2,
-      "before_signature": "async function createUser(input: CreateUserInput): Promise<{ id: string }> {",
-      "after_signature": "async function createUser(input: CreateUserInput): Promise<{ id: string; tenantId: string }> {"
+      "before_signature": "async function createUser(input: CreateUserInput): Promise<{ id: string }>",
+      "after_signature": "async function createUser(input: CreateUserInput): Promise<{ id: string; tenantId: string }>"
     },
     "provenance": {
       "source": "adr-hunks/api",

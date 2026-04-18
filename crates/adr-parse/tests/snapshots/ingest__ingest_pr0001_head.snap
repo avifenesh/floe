@@ -45,7 +45,7 @@ expression: graph
       "kind": {
         "type": "function",
         "name": "enqueue",
-        "signature": "async function enqueue(job: Job): Promise<void> {"
+        "signature": "async function enqueue(job: Job): Promise<void>"
       },
       "file": "src/queue.ts",
       "span": {
@@ -64,7 +64,7 @@ expression: graph
       "kind": {
         "type": "function",
         "name": "sendWithRetry",
-        "signature": "async function sendWithRetry(job: Job): Promise<void> {"
+        "signature": "async function sendWithRetry(job: Job): Promise<void>"
       },
       "file": "src/queue.ts",
       "span": {
@@ -83,7 +83,7 @@ expression: graph
       "kind": {
         "type": "function",
         "name": "send",
-        "signature": "async function send(job: Job): Promise<void> {"
+        "signature": "async function send(job: Job): Promise<void>"
       },
       "file": "src/queue.ts",
       "span": {

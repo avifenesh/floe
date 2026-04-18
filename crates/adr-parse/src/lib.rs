@@ -171,7 +171,7 @@ impl Ingest {
         let name_to_id: HashMap<&str, NodeId> =
             fns.iter().map(|f| (f.name.as_str(), f.id)).collect();
         for f in &fns {
-            self.resolve_calls_in(f.id, f.body, source, rel_path, &name_to_id);
+            self.resolve_calls_in(f.id, &f.name, f.body, source, rel_path, &name_to_id);
         }
 
         // Phase 3: classical state-machine transition detection. For every
@@ -239,15 +239,60 @@ impl Ingest {
                 }
             }
             "class_declaration" | "interface_declaration" => {
-                if let Some(name) = field_text(effective, "name", source) {
+                if let Some(class_name) = field_text(effective, "name", source) {
                     self.emit_def(
-                        NodeKind::Type { name },
+                        NodeKind::Type {
+                            name: class_name.clone(),
+                        },
                         effective,
                         source,
                         rel_path,
                         file_id,
                         exported,
                     );
+                    // Walk the class body for methods. Each method becomes a
+                    // Function node named `ClassName.methodName` so hunk
+                    // extractors can key by qualified name across sides.
+                    if let Some(body) = effective.child_by_field_name("body") {
+                        let mut bc = body.walk();
+                        for member in body.named_children(&mut bc) {
+                            match member.kind() {
+                                "method_definition" | "method_signature" => {
+                                    let Some(method_name) = field_text(member, "name", source)
+                                    else {
+                                        continue;
+                                    };
+                                    let qualified = format!("{class_name}.{method_name}");
+                                    let sig = first_line(member, source);
+                                    let id = self.emit_def(
+                                        NodeKind::Function {
+                                            name: qualified.clone(),
+                                            signature: sig,
+                                        },
+                                        member,
+                                        source,
+                                        rel_path,
+                                        file_id,
+                                        // Methods inherit the class's export
+                                        // status — re-exporting a class
+                                        // exposes all public methods.
+                                        exported,
+                                    );
+                                    // Include method bodies in the callsite
+                                    // scan so calls inside methods contribute
+                                    // to the call graph.
+                                    if let Some(m_body) = member.child_by_field_name("body") {
+                                        fns.push(FnDef {
+                                            id,
+                                            name: qualified,
+                                            body: m_body,
+                                        });
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                 }
             }
             "type_alias_declaration" => {
@@ -353,26 +398,46 @@ impl Ingest {
     fn resolve_calls_in(
         &mut self,
         caller: NodeId,
+        caller_name: &str,
         body: TsNode<'_>,
         source: &[u8],
         rel_path: &str,
         name_to_id: &HashMap<&str, NodeId>,
     ) {
+        // If caller is a class method "Foo.bar", peel out "Foo" so we can
+        // resolve `this.baz()` back to `Foo.baz` inside the same class.
+        let enclosing_class: Option<&str> = caller_name.split_once('.').map(|(c, _)| c);
+
         let mut local_edges: Vec<(NodeId, Provenance)> = Vec::new();
         let mut cross_file: Vec<PendingCall> = Vec::new();
         walk_call_expressions(body, &mut |call| {
             let Some(fn_field) = call.child_by_field_name("function") else {
                 return;
             };
-            if fn_field.kind() != "identifier" {
-                return;
-            }
-            let Ok(name) = fn_field.utf8_text(source) else {
+            let resolved_name: Option<String> = match fn_field.kind() {
+                "identifier" => fn_field.utf8_text(source).ok().map(ToString::to_string),
+                "member_expression" => {
+                    // Only `this.foo()` — other member calls (o.x, foo.bar.baz)
+                    // require type info we don't have yet.
+                    let object = fn_field.child_by_field_name("object");
+                    let property = fn_field.child_by_field_name("property");
+                    match (object.map(|o| o.kind()), property, enclosing_class) {
+                        (Some("this"), Some(p), Some(cls))
+                            if p.kind() == "property_identifier" =>
+                        {
+                            p.utf8_text(source).ok().map(|prop| format!("{cls}.{prop}"))
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            let Some(name) = resolved_name else {
                 return;
             };
             let slice = &source[call.start_byte()..call.end_byte()];
             let prov = Provenance::new(PARSE_SOURCE, PARSE_VERSION, &self.pass_id, slice);
-            if let Some(&callee) = name_to_id.get(name) {
+            if let Some(&callee) = name_to_id.get(name.as_str()) {
                 if callee == caller {
                     return;
                 }
@@ -381,7 +446,7 @@ impl Ingest {
                 cross_file.push(PendingCall {
                     caller,
                     caller_file: rel_path.to_string(),
-                    callee_name: name.to_string(),
+                    callee_name: name,
                     provenance: prov,
                 });
             }
@@ -711,12 +776,27 @@ fn field_text(node: TsNode<'_>, field: &str, source: &[u8]) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// Capture the declaration signature: everything from the node's start up to
+/// the body's start brace, whitespace-flattened. Falls back to the first
+/// physical line when no body field is present.
+///
+/// Multi-line signatures (common in real TS: long parameter lists, nested
+/// object types) get collapsed into one readable line so the API-hunk diff
+/// shows the full shape, not just `foo(`.
 fn first_line(node: TsNode<'_>, source: &[u8]) -> String {
-    node.utf8_text(source)
-        .unwrap_or("")
-        .lines()
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_string()
+    let start = node.start_byte();
+    let end = match node.child_by_field_name("body") {
+        Some(body) => body.start_byte(),
+        None => node.end_byte(),
+    };
+    let slice = std::str::from_utf8(&source[start..end]).unwrap_or("");
+    let collapsed: String = slice
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if collapsed.is_empty() {
+        slice.lines().next().unwrap_or("").trim().to_string()
+    } else {
+        collapsed
+    }
 }

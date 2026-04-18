@@ -27,8 +27,8 @@ expression: hunks
     "kind": {
       "kind": "api",
       "node": 5,
-      "before_signature": "async function runJob(id: string): Promise<void> {",
-      "after_signature": "async function runJob(ids: string[]): Promise<void> {"
+      "before_signature": "async function runJob(id: string): Promise<void>",
+      "after_signature": "async function runJob(ids: string[]): Promise<void>"
     },
     "provenance": {
       "source": "adr-hunks/api",
@@ -43,7 +43,7 @@ expression: hunks
       "kind": "api",
       "node": 2,
       "before_signature": null,
-      "after_signature": "async function enqueueBatch(ids: string[]): Promise<void> {"
+      "after_signature": "async function enqueueBatch(ids: string[]): Promise<void>"
     },
     "provenance": {
       "source": "adr-hunks/api",
