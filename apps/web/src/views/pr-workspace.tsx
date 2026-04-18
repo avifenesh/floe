@@ -30,11 +30,26 @@ export function PrWorkspace({ artifact, jobId, sub, onTop }: Props) {
       return <FlowsMap artifact={artifact} onTop={onTop} />;
     case "diff":
       return <SourceView artifact={artifact} jobId={jobId} />;
+    case "structure":
+      return <StructureStub />;
     case "cost":
       return <CostStub />;
     case "meta":
       return <Meta artifact={artifact} />;
   }
+}
+
+function StructureStub() {
+  return (
+    <div className="space-y-2">
+      <h2 className="text-[13px] font-mono text-foreground">Structure</h2>
+      <p className="text-[12px] text-muted-foreground max-w-3xl">
+        Code-surface view independent of the flow cut: classes, interfaces,
+        modules, and their exported symbols. Stub for now — lands after the
+        analyzer grows a class / interface extraction pass.
+      </p>
+    </div>
+  );
 }
 
 function FlowsMap({

@@ -21,6 +21,14 @@ export function FlowWorkspace({ artifact, jobId, flow, sub }: Props) {
   switch (sub) {
     case "overview":
       return <FlowOverview artifact={artifact} flow={flow} />;
+    case "flow":
+      return <StubPane flow={flow} title="Runtime flow" body="Side-by-side base → head packet animation through this flow's entities. Lands with scope 5 flow view." />;
+    case "morph":
+      return <StubPane flow={flow} title="Morph" body="Intent vs result for this flow — claim matches plus a replacement table for changed components. Lands with scope 5." />;
+    case "delta":
+      return <StubPane flow={flow} title="Delta" body="Signed observations scoped to this flow — color-coded cards with per-node drill. Lands with scope 5." />;
+    case "evidence":
+      return <StubPane flow={flow} title="Evidence" body="Per-flow claim rows with strength pips and provenance. Lands with scope 5 evidence collectors." />;
     case "source":
       return <FlowSourceStub flow={flow} jobId={jobId} />;
     case "cost":
@@ -88,6 +96,26 @@ function FlowCostStub({ flow }: { flow: Flow }) {
         Per-flow cost (drivers + net) lands with the cost-model crate in
         scope 5. Stub for now.
       </p>
+    </div>
+  );
+}
+
+function StubPane({
+  flow,
+  title,
+  body,
+}: {
+  flow: Flow;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <h2 className="text-[13px] font-mono text-foreground">
+        {title}
+        <span className="font-normal text-muted-foreground"> · scoped to {flow.name}</span>
+      </h2>
+      <p className="text-[12px] text-muted-foreground max-w-3xl">{body}</p>
     </div>
   );
 }
