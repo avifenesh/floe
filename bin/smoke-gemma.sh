@@ -53,4 +53,5 @@ echo "▶ rendered prompt: $(wc -c < "$RENDERED") bytes"
 echo "▶ running gemma4:26b-a4b-it-q4_K_M (may take ~30s first token)"
 echo ""
 
-powershell.exe -Command "Get-Content '$(cygpath -w "$RENDERED")' | ollama run gemma4:26b-a4b-it-q4_K_M" 2>&1
+MODEL="${ADR_MODEL:-gemma4:26b-a4b-it-q4_K_M}"
+powershell.exe -Command "Get-Content '$(cygpath -w "$RENDERED")' | ollama run $MODEL" 2>&1
