@@ -78,14 +78,51 @@ export function deriveSlug(basePath: string, headPath: string): string {
   const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
   const b = norm(basePath).split("/");
   const h = norm(headPath).split("/");
-  // Find the first segment that differs from the end. The segment just before
-  // that divergence is the common parent, which is what we want (the fixture
-  // slug, e.g. "pr-0004-combined").
+
+  // Primary: the last segments usually carry the repo + pr id in a
+  // `<repo>-base-<id>` / `<repo>-head-<id>` shape (git worktree convention we
+  // use in dev). Extract the surrounding prefix + suffix and render `repo #id`.
+  const leaf = tryBaseHeadLeafPattern(b[b.length - 1], h[h.length - 1]);
+  if (leaf) return leaf;
+
+  // Secondary: common parent dir one level up (useful when the worktree names
+  // don't encode the pr id but the shared parent is meaningful, e.g. a fixture
+  // slug like "pr-0004-combined").
   let i = 1;
   while (i <= Math.min(b.length, h.length) && b[b.length - i] === h[h.length - i]) {
     i++;
   }
-  return b[b.length - i - 1] ?? "pr";
+  const parent = b[b.length - i - 1];
+  if (parent && parent !== "Temp" && parent !== "tmp" && parent !== "var") {
+    return parent;
+  }
+
+  // Fallback: show both leaf names — honest about having no slug.
+  return `${b[b.length - 1]} ↔ ${h[h.length - 1]}`;
+}
+
+/** If `<prefix>base<suffix>` / `<prefix>head<suffix>` pattern, return
+ *  `<clean-prefix> #<clean-suffix>` (or just `<prefix>` if no suffix). */
+function tryBaseHeadLeafPattern(base: string | undefined, head: string | undefined): string | null {
+  if (!base || !head || base === head) return null;
+  // Longest common prefix + suffix.
+  let pre = 0;
+  while (pre < base.length && pre < head.length && base[pre] === head[pre]) pre++;
+  let suf = 0;
+  while (
+    suf < base.length - pre &&
+    suf < head.length - pre &&
+    base[base.length - 1 - suf] === head[head.length - 1 - suf]
+  ) {
+    suf++;
+  }
+  const baseMid = base.slice(pre, base.length - suf);
+  const headMid = head.slice(pre, head.length - suf);
+  if (baseMid !== "base" || headMid !== "head") return null;
+  const prefix = base.slice(0, pre).replace(/[-_]+$/, "");
+  const suffix = base.slice(base.length - suf).replace(/^[-_]+/, "");
+  if (!prefix) return null;
+  return suffix ? `${prefix} #${suffix}` : prefix;
 }
 
 /** Path-like shas (our v0 fixture stand-in) aren't useful to show. Treat
