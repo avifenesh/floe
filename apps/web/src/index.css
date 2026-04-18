@@ -24,6 +24,10 @@
  * - [muted-foreground lightness] current 45% — may need to go quieter.
  * - [empty pr-identity] hide the left zone when no PR loaded vs show
  *   placeholder.
+ * - [arch chip per-kind colour] strip + chip are single-hue amber today.
+ *   Consider a distinct hue per hunk class (Call / State / API) so the
+ *   reviewer can scan a file and read kinds without hovering. Decide
+ *   alongside the [accent] call.
  */
 @layer base {
   :root {
