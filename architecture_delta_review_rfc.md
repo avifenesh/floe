@@ -16,7 +16,7 @@ cost_model_principle: Per-flow deterministic drivers grounded in LLM-navigation 
 baseline_policy: Pinned to (commit_sha, llm_tool, llm_model, llm_version); apples-to-apples enforced structurally
 llm_role: Opt-in hot-path classifier, constrained by host-validated tools; structural fallback when absent
 llm_harness: PI (Ollama's minimal coding agent) — we ship an `adr` extension with our tool surface; PI handles the agent loop, tool calling, Ollama wiring
-local_llm_primary: Gemma 4 26B MoE (A4B) via Ollama — quality floor target is Gemma 4 E4B
+local_llm_primary: Gemma 4 26B MoE (A4B) via Ollama — the product target. E4B dropped as a product tier after smoke tests showed quality below the structural floor on real PRs.
 decision_type: Scope and tech lock for spike
 ---
 
@@ -79,9 +79,9 @@ Consequence: the first OSS adoption bucket has to arrive on the language these u
 | Analyzer pipeline | `tree-sitter-typescript` for parsing · `scip-typescript` for cross-file index (when repo has one) · within-file cross-ref by qualified name + `this.*` resolution · method-level granularity | Class methods are first-class (`ClassName.methodName`). Real TS code is class-heavy; v0.1 caught zero hunks on PR #181 because it only parsed top-level functions. Fixed. |
 | LLM role | **Opt-in classifier via MCP.** Reads analyzed artifact through tools we expose; returns `[{ name, rationale, hunk_ids, extra_entities? }]`. Validated against graph by the host. | Architectural cognition needs LLM, and we refuse to pretend otherwise. But the LLM gets no free-form write access to source, output, or the artifact — only constrained mutations through `propose_flow` / `mutate_flow` / `remove_flow` tool calls that the host validates. |
 | LLM hosting | **Ollama native**, OpenAI-compatible `/v1` endpoint. | Simplest install; works on Windows, macOS, Linux. Docker / WSL / vLLM reserved for scope 5+. |
-| LLM model — primary | **Gemma 4 26B MoE (A4B, Q4_K_M) — 18 GB, 256 K context** | Native function-calling, reasoning-strong, best fit for laptop RTX 5090 / Mac Mini tier. |
-| LLM model — floor | **Gemma 4 E4B — 9.6 GB, 128 K context** | Quality floor. If flow synthesis works here, it works for everyone. |
-| LLM model — ceiling check only | claude-p · codex exec · gemini · opencode | Used *only* to sanity-check the local pipeline; never the build target. |
+| LLM model — primary | **Gemma 4 26B MoE (A4B, Q4_K_M) — 18 GB, 256 K context** | Native function-calling, reasoning-strong, best fit for laptop RTX 5090 / Mac Mini tier. This is the quality bar the product holds to. |
+| LLM model — secondary (stronger) | Qwen 3.5 27B dense · Qwen 3 Coder Next (ceiling targets), claude-p · codex exec · gemini · opencode | Used when the reviewer can afford them. Our audience runs these comfortably. |
+| LLM model — NOT a target | Gemma 4 E4B and similar <10 B class | Dropped after smoke tests showed quality below the structural floor on real PRs. Vibe-coders don't ship on E4B-class models; there's no reason to pretend our product does. The small-model tier is only useful for internal tooling, never for user-facing flow synthesis. |
 | Eval / harness | Rust CLI replaying historical PRs | Deterministic replay is essential for the spike's exit criterion. |
 
 ### 3 · Trust model
@@ -265,7 +265,7 @@ Proof debt is a first-class, **per-flow** field.
 - TypeScript analyzer pipeline with method-level granularity + `this.*()` resolution + full-signature capture for multi-line method declarations.
 - Hybrid deterministic flow clustering (call-graph components + type-propagation) as the floor.
 - `@adr/pi-extension` — PI extension exposing the tools listed in §5.
-- Rust-side PI runner: spawns PI with Ollama config, pipes artifact, tees tool-call progress to frontend SSE; Gemma 4 26B MoE (primary) and Gemma 4 E4B (floor) supported out-of-box.
+- Rust-side PI runner: spawns PI with Ollama config, pipes artifact, tees tool-call progress to frontend SSE; Gemma 4 26B MoE (primary) and stronger models supported out-of-box.
 - Evidence collection for PERF, DATA, API, LOCK — per-flow.
 - Cost model v2.3 per-flow with PR-aggregate rollup.
 - `adr baseline` with pinned `(sha, llm_tool, llm_model, llm_version)` including flow-synthesis model.
@@ -336,7 +336,7 @@ Not all three: stop or narrow.
 - Observed-graph pipeline requires build-env integration for > 30 % of eval PRs.
 - Cost-model drivers visibly wrong on > 25 % of PRs.
 - Reviewers report the flow-first surface is slower than raw-diff review *even with* LLM assist.
-- Gemma 4 E4B fails to produce valid flow assignments (host rejects the run) on > 50 % of eval PRs — the floor is unachievable at the cheap tier, which means either our prompt design is wrong or the task is beyond small-model capability; narrow or defer before shipping.
+- Gemma 4 26B fails to produce valid flow assignments (host rejects or output falls below structural quality) on > 25 % of eval PRs. Unlike the dropped E4B check, 26B failing is a product-level problem: our primary target is the bar we sell against.
 
 ---
 
@@ -351,7 +351,7 @@ Not all three: stop or narrow.
 
 - **Flow detection ownership**: hybrid deterministic (call-graph + type-propagation) is the floor, always computed. LLM is opt-in via Ollama or configured local CLI. No v0 code path assumes LLM is present.
 - **LLM scope**: classifier only, via MCP-exposed tools. No free-form generation. Host validates every mutation.
-- **Model floor**: Gemma 4 E4B. If the product doesn't work at that tier, we don't ship without a pricing model that subsidizes a stronger floor.
+- **Product model target**: Gemma 4 26B MoE (A4B) and stronger. Small models (<10B) are not product targets — our audience ships on capable hardware or hosted frontier models. "Works on everything" is not a promise we make or need.
 - **Hosted SaaS still deferred**: v0 self-hostable; hosted tier is v1+ with per-repo indexing, retained baselines, and model routing.
 
 ---

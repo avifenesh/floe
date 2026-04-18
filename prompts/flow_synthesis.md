@@ -147,59 +147,55 @@ Before calling `adr:finalize()`, verify all of these:
 
 # Worked Example
 
-Input context (summarised):
-- {{hunk_count}} = 12
-- {{initial_cluster_count}} = 4
-- Starting clusters: Queue-methods (7 hunks), Job-methods (3 hunks),
-  top-level-budget (1 hunk), readStream (1 hunk)
+Hypothetical PR (not real — used only to illustrate the pattern):
 
-Phase 1. `adr:list_hunks()` returns 12 hunks. Four kinds: 1 call, 11 api.
-`adr:list_flows_initial()` returns the four structural clusters.
+Input context:
+- hunk_count = 8
+- initial_cluster_count = 3
+- Starting clusters: PaymentClient-methods (5), retry-helpers (2), logging (1)
 
-Phase 2. Queue-methods contains both the budget-related signatures
-(setBudget, getFlowBudget, getFlowUsage, recordBudgetUsage) and a
-readStream formatting change. They don't belong together. `adr:get_entity`
-on `Queue.readStream` confirms the head signature is whitespace-only.
-Job-methods contains a new `streamChunk` and an unrelated
-`consumeSuspendRequest` return-type tweak. The streamChunk hunk references
-`Job.stream` which is also called from `TestJob.streamChunk` via a call
-edge; split it cleanly.
+Phase 1. `adr:list_hunks()` returns 8 hunks (3 api, 4 call, 1 state).
+`adr:list_flows_initial()` returns three clusters whose names are location-shaped.
 
-Phase 3. Propose four flows:
+Phase 2. Inspect. PaymentClient-methods contains a new idempotency
+key parameter on `charge()` and `refund()`, plus a log-format change on
+`reportError()`. The logging hunk has nothing to do with idempotency and
+belongs elsewhere. The retry-helpers cluster contains a new exponential
+backoff function and a state-machine addition. Those two are the same
+story (retry policy). The log-format change pairs naturally with the
+cluster containing structured-logging additions — even though it lives
+on `PaymentClient`.
+
+Phase 3. Propose three flows:
 
 1. adr:propose_flow(
-     name="Multi-metric budget support",
-     rationale="setBudget / getFlowBudget / getFlowUsage / recordBudgetUsage / recordUsageAndCheckBudget widen from (tokens: number, costUsd: number) to Record<string, number> shapes. The shape cascade ties them together.",
-     hunk_ids=[budget-hunks]
+     name="Idempotent payment operations",
+     rationale="PaymentClient.charge and .refund both gain an idempotencyKey parameter; the new IdempotencyStore type is their backing store. The shape propagates through the public API.",
+     hunk_ids=[charge-api, refund-api, store-type-api],
+     extra_entities=[IdempotencyStore.put, IdempotencyStore.get]
    )
 
 2. adr:propose_flow(
-     name="Streaming chunk API",
-     rationale="Job.streamChunk and TestJob.streamChunk are new public methods. Both internally call .stream. Purely additive.",
-     hunk_ids=[streamChunk-hunks, call-hunk],
-     extra_entities=[Job.stream, TestJob.stream]
+     name="Bounded retry policy",
+     rationale="The new backoff() helper is called from every retry site; the RetryState machine adds a 'giving-up' variant at the same time. One flow — exponential backoff with bounded retries.",
+     hunk_ids=[backoff-api, retry-state, retry-call-1, retry-call-2]
    )
 
 3. adr:propose_flow(
-     name="Suspend return type tweak",
-     rationale="Job.consumeSuspendRequest return type is adjusted. Isolated from other work.",
-     hunk_ids=[suspend-hunk]
+     name="Structured error logging",
+     rationale="reportError and two sibling log sites shift from string interpolation to structured fields. Signal is the shared logger call shape.",
+     hunk_ids=[reportError-api]
    )
 
-4. adr:propose_flow(
-     name="readStream signature reformat",
-     rationale="Queue.readStream signature is whitespace-normalised. No semantic change.",
-     hunk_ids=[readStream-hunk]
-   )
+`adr:remove_flow` on the three structural starter clusters once every
+original hunk is covered by the new flows.
 
-adr:remove_flow on the four structural clusters once every original hunk
-is covered by the new flows.
+Phase 4. Recount: 3 + 4 + 1 = 8. Matches hunk_count. Names are intent-shaped.
+Rationales name a data shape (idempotencyKey / IdempotencyStore),
+a call chain (retry → backoff), and a shared signature pattern (logger
+call shape). No reserved names.
 
-Phase 4. Recount: 7 budget + 2 streamChunk + 1 call + 1 suspend + 1 readStream
-= 12. Matches {{hunk_count}}. Names are intent-shaped. Rationales name
-data shapes or call edges. No reserved names.
-
-Phase 5. adr:finalize(). Host accepts.
+Phase 5. `adr:finalize()`. Host accepts.
 
 # Error Recovery
 

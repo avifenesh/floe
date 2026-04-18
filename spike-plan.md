@@ -16,7 +16,7 @@ Six scopes. Each ends with a demoable acceptance gate; failing a gate is a signa
 ## What changed in v0.2
 
 - **Product unit is a flow, not a PR.** Every scope past 2 operates per-flow primary.
-- **LLM is a hot-path classifier**, not a calibration-time probe. It runs inside PI (Ollama's minimal coding agent) via an `adr` PI extension we ship. Gemma 4 26B MoE is the primary target, Gemma 4 E4B is the quality floor.
+- **LLM is a hot-path classifier**, not a calibration-time probe. It runs inside PI (Ollama's minimal coding agent) via an `adr` PI extension we ship. **Gemma 4 26B MoE is the product target**, with stronger models as the ceiling. Small (<10B) models were considered and dropped after smoke tests — our audience ships on capable hardware, and "works on everything" is not a promise worth making.
 - **Scope 3 is rebuilt around flow synthesis** (was "seven views come alive"). Per-flow rendering is now scope 4.
 - **Scope 5 merges evidence + cost + baseline pinning** — the work that used to fill scope 4 compresses because the signing-delta surface is now per-flow and thinner per slice.
 - Eval (scope 6) tests the LLM-assisted surface against the deterministic-only surface in addition to raw diff.
