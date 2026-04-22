@@ -481,11 +481,11 @@ function PrProof({
     return (
       <div className="space-y-2">
         <h2 className="text-[13px] font-mono text-foreground">
-          Intent & Proof · analysing
+          Intent &amp; Proof · analysing
         </h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          GLM sessions running for every flow (intent-fit + proof-verification).
-          Per-flow verdicts land here as they complete.
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+          Matching every flow to the PR's stated intent and hunting for
+          evidence. Per-flow verdicts land here as they complete.
         </p>
       </div>
     );
@@ -497,9 +497,9 @@ function PrProof({
         <h2 className="text-[13px] font-mono text-foreground">
           Intent & Proof
         </h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
           {hasIntent
-            ? "Not run — configure ADR_GLM_API_KEY and re-analyse."
+            ? "Not run — this deployment isn't configured with a backend for intent-fit or proof verification."
             : "No intent supplied. Pass intent via the API or CLI to enable the intent + proof passes."}
         </p>
       </div>

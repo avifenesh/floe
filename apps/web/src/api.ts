@@ -86,6 +86,21 @@ export async function analyzeSample(sampleId: string): Promise<string> {
   return j.job_id;
 }
 
+/** POST /analyze/:id/rebaseline — spawn a fresh analysis for the
+ *  same logical PR under the current LLM regime. The server looks
+ *  up the cached artifact and replays it against whichever source
+ *  it can (sample table for sample runs, git_sync checkouts for
+ *  GitHub URL runs). Path-driven artifacts 400 with a hint. */
+export async function rebaselineJob(jobId: string): Promise<string> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/${encodeURIComponent(jobId)}/rebaseline`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`rebaseline failed: ${r.status} ${await r.text()}`);
+  const j = (await r.json()) as { job_id: string };
+  return j.job_id;
+}
+
 export async function getJob(jobId: string): Promise<JobView> {
   const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}`, {
     credentials: "include",

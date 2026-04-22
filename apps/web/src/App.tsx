@@ -8,7 +8,7 @@ import { PrWorkspace } from "@/views/pr-workspace";
 import type { FlowSubTab, PrSubTab, TopTab } from "@/views/types";
 import type { Artifact } from "@/types/artifact";
 import { deriveSlug, isPathSha, shortSha } from "@/lib/artifact";
-import { analyzeSample, fetchMe, getJob, logout, pollUntilDone, type Me } from "@/api";
+import { fetchMe, getJob, logout, pollUntilDone, rebaselineJob, type Me } from "@/api";
 
 export interface LoadedJob {
   jobId: string;
@@ -67,28 +67,19 @@ export default function App() {
     };
   }, [job]);
 
-  // Re-baseline: when the drift banner fires, give the reviewer a
-  // one-click path to re-run the analysis under the current LLM
-  // regime. Only sample artifacts are re-runnable today — they
-  // carry `pr.repo = "sample/<id>"` and the server will re-resolve
-  // paths from the samples table. URL-driven and path-driven runs
-  // don't persist enough to replay without the reviewer's input.
+  // Re-baseline: drive /analyze/:id/rebaseline server-side. The
+  // server knows whether the source is re-runnable (sample or
+  // URL-driven with a cached checkout); path-driven artifacts
+  // return a 400 the alert surfaces to the reviewer.
   const [rebaselining, setRebaselining] = useState(false);
-  const rebaselineableSampleId = useMemo(() => {
-    const repo = job?.artifact.pr.repo;
-    return repo && repo.startsWith("sample/") ? repo.slice("sample/".length) : null;
-  }, [job]);
-  const onRebaseline = rebaselineableSampleId
+  const onRebaseline = job
     ? async () => {
         setRebaselining(true);
         try {
-          const id = await analyzeSample(rebaselineableSampleId);
+          const id = await rebaselineJob(job.jobId);
           const done = await pollUntilDone(id);
           if (done.artifact) setJob({ jobId: id, artifact: done.artifact });
         } catch (e) {
-          // Surface as an alert — the banner is the only re-baseline
-          // entry point right now, so this is the least-surprising
-          // fallback. Swap for inline toast if we grow one.
           alert(`Re-baseline failed: ${String(e)}`);
         } finally {
           setRebaselining(false);

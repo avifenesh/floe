@@ -106,18 +106,25 @@ export function TopSpine({
             ))}
           </nav>
 
-          <div className="shrink-0 flex items-center gap-3">
+          <div className="shrink-0 flex items-center gap-2">
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-foreground rounded-md border border-border/60 bg-background/60 hover:bg-muted/40 px-2 py-1 transition-colors"
               aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
             >
-              {theme === "dark" ? "◐ Dark" : "○ Light"}
+              <span aria-hidden>{theme === "dark" ? "◐" : "○"}</span>
+              <span>{theme === "dark" ? "Dark" : "Light"}</span>
             </button>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-mono text-muted-foreground">Palette</span>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("adr:open-palette"))}
+              className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-foreground rounded-md border border-border/60 bg-background/60 hover:bg-muted/40 px-2 py-1 transition-colors"
+              aria-label="Open command palette"
+              title="Open command palette"
+            >
+              <span>Palette</span>
               <Kbd>/</Kbd>
-            </div>
+            </button>
           </div>
         </div>
       </div>

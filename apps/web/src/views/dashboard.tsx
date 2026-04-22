@@ -472,7 +472,8 @@ function AnalyseCard({
               Point at two absolute paths — usually{" "}
               <code className="text-[10px]">git worktree</code> snapshots of
               the PR&apos;s base and head. Runs locally; nothing leaves your
-              machine unless the GLM passes are configured.
+              machine unless a remote LLM backend is configured for the
+              intent/proof passes.
             </p>
             <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-2 items-center">
               <label

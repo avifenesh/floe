@@ -126,6 +126,10 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
+  @keyframes adrLoadingDot {
+    0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+    40% { opacity: 1; transform: translateY(-1px); }
+  }
   .adr-slide-from-right { animation: adr-slide-from-right 260ms ease-out; }
   .adr-slide-from-left { animation: adr-slide-from-left 260ms ease-out; }
   .adr-slide-fade { animation: adr-slide-fade 220ms ease-out; }

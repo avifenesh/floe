@@ -10,6 +10,7 @@ import { costConfidence, CONFIDENCE_THRESHOLD } from "@/lib/cost-confidence";
 import type { IntentFitVerdict, ProofVerdict } from "@/types/artifact";
 import { NodeDetailPanel } from "./node-detail-panel";
 import { SlideSwitch } from "@/components/SlideSwitch";
+import { LoadingDots } from "@/components/LoadingDots";
 import { FLOW_SUB_TABS } from "./types";
 import { SourceView } from "./source";
 
@@ -1733,14 +1734,17 @@ function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
   if (status === "analyzing") {
     return (
       <div className="space-y-2">
-        <h2 className="text-[13px] font-mono text-foreground">
-          Intent & Proof · analysing
+        <h2 className="text-[13px] font-mono text-foreground inline-flex items-baseline gap-2">
+          Intent &amp; Proof
+          <span className="text-[11px] text-muted-foreground normal-case font-sans inline-flex items-baseline gap-1">
+            <LoadingDots />
+            <span>analysing</span>
+          </span>
         </h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Running intent-fit + proof-verification on this flow. GLM sessions
-          are scanning the repo for example files, claim-asserting tests, and
-          reviewer-supplied benchmark notes. Keep working in other tabs — this
-          fills in when ready.
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+          Matching this flow to the PR's stated intent, then hunting for
+          evidence — example files, claim-asserting tests, reviewer notes.
+          Keep working in other tabs; results fill in when ready.
         </p>
       </div>
     );
@@ -1770,12 +1774,10 @@ function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
             against.
           </p>
         ) : (
-          <p className="text-[12px] text-muted-foreground max-w-3xl">
-            Proof unavailable — configure{" "}
-            <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">
-              ADR_GLM_API_KEY
-            </code>{" "}
-            (GLM is the recommended backend for intent + proof) and re-run.
+          <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+            Proof unavailable — this deployment isn't configured with an
+            LLM backend for intent-fit or proof verification. An
+            administrator can enable it, or re-run after configuring one.
           </p>
         )}
       </div>
@@ -1871,11 +1873,11 @@ function IntentCard({
   );
 }
 
-/** Minimal markdown renderer — covers the patterns that show up in
- *  PR descriptions: headings, bullet lists, blank-line-separated
- *  paragraphs, and three inline marks (bold, italic, code). Anything
- *  richer falls through as plain text. Ships without a markdown
- *  library; the bundle doesn't need a third-party parser to render
+/** Minimal markdown renderer — covers what PR descriptions actually
+ *  use: headings, fenced code blocks, bullet + task lists, blank-
+ *  line-separated paragraphs, and three inline marks (bold, italic,
+ *  code). Everything else falls through as plain text. Ships without
+ *  a markdown library; the bundle doesn't need a full parser for
  *  what a PR body throws at us. */
 function MiniMarkdown({ source }: { source: string }) {
   const blocks = splitBlocks(source);
@@ -1896,6 +1898,7 @@ function MiniMarkdown({ source }: { source: string }) {
           );
         }
         if (b.kind === "list") {
+          // Plain bullets — rendered with a list-disc marker.
           return (
             <ul key={i} className="list-disc pl-5 space-y-0.5">
               {b.items.map((it, j) => (
@@ -1904,6 +1907,46 @@ function MiniMarkdown({ source }: { source: string }) {
                 </li>
               ))}
             </ul>
+          );
+        }
+        if (b.kind === "tasks") {
+          // Task list — compact checkboxes so [x]/[ ] reads as status.
+          return (
+            <ul key={i} className="pl-1 space-y-0.5">
+              {b.items.map((it, j) => (
+                <li key={j} className="flex items-baseline gap-2">
+                  <span
+                    aria-hidden
+                    className={
+                      "inline-flex items-center justify-center w-3 h-3 rounded-[3px] border text-[9px] font-mono translate-y-[1px] " +
+                      (it.done
+                        ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                        : "border-border/60 bg-background/60 text-transparent")
+                    }
+                  >
+                    {it.done ? "✓" : ""}
+                  </span>
+                  <span className={it.done ? "text-muted-foreground" : ""}>
+                    <InlineMd text={it.text} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        if (b.kind === "code") {
+          return (
+            <pre
+              key={i}
+              className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 overflow-x-auto text-[11px] font-mono leading-relaxed"
+            >
+              {b.lang && (
+                <div className="text-[9px] font-mono uppercase tracking-wide text-muted-foreground mb-1">
+                  {b.lang}
+                </div>
+              )}
+              <code>{b.text}</code>
+            </pre>
           );
         }
         return (
@@ -1919,15 +1962,52 @@ function MiniMarkdown({ source }: { source: string }) {
 type MdBlock =
   | { kind: "paragraph"; text: string }
   | { kind: "heading"; level: number; text: string }
-  | { kind: "list"; items: string[] };
+  | { kind: "list"; items: string[] }
+  | { kind: "tasks"; items: { done: boolean; text: string }[] }
+  | { kind: "code"; lang: string | null; text: string };
 
 function splitBlocks(source: string): MdBlock[] {
   const out: MdBlock[] = [];
-  const chunks = source.replace(/\r\n/g, "\n").split(/\n{2,}/);
+  const normalized = source.replace(/\r\n/g, "\n");
+  // First extract fenced code blocks — they span multiple
+  // paragraphs and blank-line splitting would shred them.
+  const fenced: MdBlock[] = [];
+  const sourceWithoutFences = normalized.replace(
+    /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g,
+    (_, lang: string, body: string) => {
+      fenced.push({
+        kind: "code",
+        lang: lang.trim() || null,
+        text: body.replace(/\n+$/, ""),
+      });
+      return `\u0000FENCE_${fenced.length - 1}\u0000`;
+    },
+  );
+  const chunks = sourceWithoutFences.split(/\n{2,}/);
   for (const raw of chunks) {
     const chunk = raw.trim();
     if (!chunk) continue;
+    // Re-inject fenced blocks.
+    const fence = /^\u0000FENCE_(\d+)\u0000$/.exec(chunk);
+    if (fence) {
+      out.push(fenced[Number(fence[1])]);
+      continue;
+    }
     const lines = chunk.split("\n");
+    // Task list: every line begins with `- [ ]` or `- [x]`.
+    if (lines.every((l) => /^[-*+]\s+\[[ xX]\]\s*/.test(l))) {
+      out.push({
+        kind: "tasks",
+        items: lines.map((l) => {
+          const m = l.match(/^[-*+]\s+\[([ xX])\]\s*(.*)$/);
+          return {
+            done: m !== null && m[1] !== " ",
+            text: m ? m[2] : l,
+          };
+        }),
+      });
+      continue;
+    }
     if (lines.every((l) => /^[-*+]\s+/.test(l))) {
       out.push({
         kind: "list",

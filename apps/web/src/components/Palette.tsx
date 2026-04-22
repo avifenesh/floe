@@ -43,7 +43,9 @@ export function Palette({
 
   // Global keybinding: `/` opens, Escape closes. Ignore when the user
   // is already typing in a text input so the palette doesn't steal
-  // a slash character in, say, the PR URL field.
+  // a slash character in, say, the PR URL field. An `adr:open-palette`
+  // window event opens it too — the TopSpine button fires that event
+  // so mouse users don't have to memorise the slash shortcut.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -60,8 +62,19 @@ export function Palette({
         setOpen(false);
       }
     };
+    const onOpen = () => {
+      if (!open) {
+        setOpen(true);
+        setQ("");
+        setCursor(0);
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("adr:open-palette", onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("adr:open-palette", onOpen);
+    };
   }, [open]);
 
   useEffect(() => {

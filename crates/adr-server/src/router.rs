@@ -109,6 +109,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/llm-config", get(get_llm_config))
         .route("/samples", get(list_samples))
         .route("/analyze/sample/:id", post(analyze_sample))
+        .route("/analyze/:id/rebaseline", post(rebaseline))
         .route("/health", get(|| async { "ok" }));
 
     if state.auth.is_some() {
@@ -759,6 +760,137 @@ async fn analyze_sample(
             cache,
             db,
             intent,
+            notes: String::new(),
+            pr_ctx,
+        })
+        .await;
+        inflight.remove_if(&dedupe_key, |_, v| *v == job_id);
+    });
+    Ok(Json(AnalyzeResponse { job_id }))
+}
+
+/// `POST /analyze/:id/rebaseline` — spawn a fresh analysis for the
+/// same logical PR under the current LLM regime. Drives the drift
+/// banner's "Re-run now" button.
+///
+/// Dispatch is based on the cached artifact's `pr.repo`:
+///
+/// - **`sample/<id>`** → re-invoke the sample pipeline.
+/// - **`owner/name`** + valid base/head shas that already have a
+///   checkout under `<cache>/repos/` → re-run against those paths
+///   (GitHub URL-driven run).
+/// - Anything else → 400, the caller surfaces the error. Path-driven
+///   analyses don't persist their paths so they aren't re-runnable
+///   from the server alone.
+async fn rebaseline(
+    State(state): State<AppState>,
+    jar: SignedCookieJar,
+    AxumPath(id): AxumPath<uuid::Uuid>,
+) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
+    let artifact = load_cached_artifact(&state, &id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("load cached: {e:#}")))?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no cached artifact for {id}")))?;
+    let user_id = Session::from_jar(&jar).map(|s| s.user_id);
+    let repo = artifact.pr.repo.clone();
+
+    // Sample-run re-baseline: dispatch to analyze_sample by id.
+    if let Some(sample_id) = repo.strip_prefix("sample/") {
+        let sample = state
+            .samples
+            .get(sample_id)
+            .ok_or_else(|| {
+                (
+                    StatusCode::GONE,
+                    format!("sample `{sample_id}` is no longer available on this server"),
+                )
+            })?
+            .clone();
+        return spawn_rebaseline(&state, user_id, &sample.base, &sample.head, &sample, None, repo)
+            .await;
+    }
+
+    // URL-run re-baseline: reconstruct git_sync paths for the
+    // existing checkout. `owner/name` + the two shas are enough.
+    if let Some((owner, name)) = repo.split_once('/') {
+        let cache_root = state.cache.root();
+        let base = git_sync::checkout_path(cache_root, owner, name, &artifact.pr.base_sha);
+        let head = git_sync::checkout_path(cache_root, owner, name, &artifact.pr.head_sha);
+        if base.is_dir() && head.is_dir() {
+            // Dummy marker: we don't have a sample record here, so
+            // pass None via the sample slot and let spawn_rebaseline
+            // stamp a repo-prefixed label instead.
+            return spawn_rebaseline(&state, user_id, &base, &head, &repo, None, repo.clone())
+                .await;
+        }
+    }
+
+    Err((
+        StatusCode::BAD_REQUEST,
+        "source not re-runnable from the server — re-paste the PR URL or path inputs".into(),
+    ))
+}
+
+trait PrContextLabel {
+    fn pr_context(&self, user_id: Option<String>) -> PrContext;
+}
+
+impl PrContextLabel for crate::samples::Sample {
+    fn pr_context(&self, user_id: Option<String>) -> PrContext {
+        PrContext {
+            repo: Some(format!("sample/{}", self.id)),
+            pr_number: None,
+            user_id,
+        }
+    }
+}
+
+impl PrContextLabel for String {
+    fn pr_context(&self, user_id: Option<String>) -> PrContext {
+        PrContext {
+            repo: Some(self.clone()),
+            pr_number: None,
+            user_id,
+        }
+    }
+}
+
+/// Shared spawn path for rebaseline — canonicalises + dedupes +
+/// spawns run_pipeline. Accepts either a sample (for sample-based
+/// re-runs, which can thread intent.json through) or a plain repo
+/// label (URL-based, no intent).
+async fn spawn_rebaseline<L: PrContextLabel>(
+    state: &AppState,
+    user_id: Option<String>,
+    base: &Path,
+    head: &Path,
+    label: &L,
+    _placeholder: Option<()>,
+    _repo_for_dedupe: String,
+) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
+    let base_root = base
+        .canonicalize()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("canonicalize base: {e}")))?;
+    let head_root = head
+        .canonicalize()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("canonicalize head: {e}")))?;
+    let dedupe_key = request_dedupe_key(&base_root, &head_root, None, "");
+    let job = Job::new(base_root.clone(), head_root.clone());
+    let job_id = job.id;
+    state.jobs.insert(job_id, job.clone());
+    state.inflight.insert(dedupe_key.clone(), job_id);
+    let cache = state.cache.clone();
+    let inflight = state.inflight.clone();
+    let db = state.db.clone();
+    let pr_ctx = label.pr_context(user_id);
+    tokio::spawn(async move {
+        run_pipeline(PipelineRequest {
+            job,
+            base: base_root,
+            head: head_root,
+            cache,
+            db,
+            intent: None,
             notes: String::new(),
             pr_ctx,
         })
