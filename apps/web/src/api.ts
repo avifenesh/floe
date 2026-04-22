@@ -174,3 +174,21 @@ export async function fetchFile(
   if (!r.ok) throw new Error(`fetchFile(${side}, ${path}): ${r.status} ${await r.text()}`);
   return r.text();
 }
+
+/** What the server's env currently resolves to for the three LLM
+ *  passes. Drives the "re-baseline required" banner on an artifact
+ *  whose pin disagrees with the current config (RFC v0.3 §9). */
+export interface LlmConfigView {
+  synthesis_model?: string;
+  probe_model?: string;
+  proof_model?: string;
+}
+
+/** GET /llm-config — model names only, no keys/URLs. */
+export async function fetchLlmConfig(): Promise<LlmConfigView> {
+  const r = await fetch(`${BACKEND_BASE}/llm-config`, {
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`fetchLlmConfig: ${r.status}`);
+  return r.json();
+}

@@ -9,6 +9,7 @@ import { PrHeader } from "./pr/PrHeader";
 import { PrStats } from "./pr/PrStats";
 import { PrHunks } from "./pr/PrHunks";
 import { SourceView } from "./source";
+import { BaselineDriftBanner } from "@/components/BaselineDriftBanner";
 
 interface Props {
   artifact: Artifact;
@@ -47,9 +48,12 @@ export function PrWorkspace({ artifact, jobId, sub, onTop }: Props) {
     }
   })();
   return (
-    <SlideSwitch viewKey={`pr-${sub}`} order={order}>
-      {body}
-    </SlideSwitch>
+    <>
+      <BaselineDriftBanner baseline={artifact.baseline} />
+      <SlideSwitch viewKey={`pr-${sub}`} order={order}>
+        {body}
+      </SlideSwitch>
+    </>
   );
 }
 

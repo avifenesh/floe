@@ -21,6 +21,7 @@ use crate::cache::Cache;
 use crate::db::DbStore;
 use crate::git_sync;
 use crate::job::{Job, JobStatus, ProgressEvent};
+use crate::llm::LlmConfig;
 use crate::worker::{run_pipeline, PipelineRequest, PrContext};
 use axum_extra::extract::cookie::SignedCookieJar;
 
@@ -92,6 +93,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/analyze/:id/file", get(get_file))
         .route("/analyses", get(list_pr_analyses))
         .route("/analyses/:id", axum::routing::delete(delete_analysis))
+        .route("/llm-config", get(get_llm_config))
         .route("/health", get(|| async { "ok" }));
 
     if state.auth.is_some() {
@@ -558,6 +560,52 @@ async fn stream_job(
     Ok(Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new().interval(Duration::from_secs(15)),
     ))
+}
+
+/// Response of `GET /llm-config` — the server's current LLM regime
+/// as resolved from env (`ADR_LLM`, `ADR_PROBE_LLM`, `ADR_PROOF_LLM`
+/// plus provider defaults). The frontend compares this to the
+/// `artifact.baseline` pin and renders a "re-baseline required"
+/// banner per RFC v0.3 §9 when the user's current config would
+/// produce different numbers than the displayed artifact.
+///
+/// Fields are `None` when the corresponding pass wouldn't run:
+/// synthesis disabled (no `ADR_LLM` or `ADR_GLM_API_KEY`), probe
+/// defaults to the main config, proof defaults to GLM-4.7 when the
+/// key is set but is `None` otherwise.
+///
+/// Model names only — deliberately no provider / URL / API-key
+/// exposure. Everything else leaks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LlmConfigView {
+    /// The flow-synthesis model (`ADR_LLM`-resolved). `None` when
+    /// synthesis is disabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub synthesis_model: Option<String>,
+    /// The probe model (`ADR_PROBE_LLM`, falls back to synthesis).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probe_model: Option<String>,
+    /// The proof model (`ADR_PROOF_LLM`, defaults to `glm-4.7` when
+    /// `ADR_GLM_API_KEY` is set).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_model: Option<String>,
+}
+
+impl LlmConfigView {
+    /// Compose from ambient env. Swallows auth-gated errors in the
+    /// proof path — if `from_env_proof` can't engage we report
+    /// `proof_model = None`, which is the honest signal.
+    pub fn from_env() -> Self {
+        Self {
+            synthesis_model: LlmConfig::from_env().map(|c| c.model),
+            probe_model: LlmConfig::from_env_probe().map(|c| c.model),
+            proof_model: LlmConfig::from_env_proof().map(|c| c.model),
+        }
+    }
+}
+
+async fn get_llm_config() -> Json<LlmConfigView> {
+    Json(LlmConfigView::from_env())
 }
 
 #[cfg(test)]
