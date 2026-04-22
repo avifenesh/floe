@@ -93,6 +93,7 @@ struct Breaker {
     cooldown: Duration,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BreakerState {
     Closed,
     /// Calls refused until `until`.
@@ -107,6 +108,62 @@ impl Breaker {
             state: BreakerState::Closed,
             consecutive_429: 0,
             cooldown: INITIAL_COOLDOWN,
+        }
+    }
+
+    /// Inspect state and decide whether the caller may proceed. Mutates
+    /// the breaker on an `Open → HalfOpen` transition. Pure w.r.t.
+    /// clock via `now` for deterministic tests.
+    fn check_or_open(&mut self, now: Instant) -> BreakerGate {
+        match self.state {
+            BreakerState::Closed => BreakerGate::Proceed { is_probe: false },
+            BreakerState::Open { until } => {
+                if now >= until {
+                    self.state = BreakerState::HalfOpen { probe_in_flight: true };
+                    BreakerGate::Proceed { is_probe: true }
+                } else {
+                    BreakerGate::Refused { retry_after: until - now }
+                }
+            }
+            BreakerState::HalfOpen { probe_in_flight: true } => BreakerGate::Refused {
+                retry_after: Duration::from_secs(1),
+            },
+            BreakerState::HalfOpen { probe_in_flight: false } => {
+                self.state = BreakerState::Closed;
+                self.consecutive_429 = 0;
+                BreakerGate::Proceed { is_probe: false }
+            }
+        }
+    }
+
+    fn record_success(&mut self, was_probe: bool) {
+        self.consecutive_429 = 0;
+        if was_probe {
+            self.state = BreakerState::Closed;
+            self.cooldown = INITIAL_COOLDOWN;
+        }
+    }
+
+    fn record_429(&mut self, was_probe: bool, now: Instant) {
+        self.consecutive_429 = self.consecutive_429.saturating_add(1);
+        let should_open =
+            matches!(self.state, BreakerState::Closed) && self.consecutive_429 >= TRIP_THRESHOLD;
+        if should_open {
+            let cooldown = self.cooldown;
+            self.state = BreakerState::Open { until: now + cooldown };
+            self.cooldown = (cooldown * 2).min(MAX_COOLDOWN);
+            return;
+        }
+        if was_probe {
+            let cooldown = self.cooldown;
+            self.state = BreakerState::Open { until: now + cooldown };
+            self.cooldown = (cooldown * 2).min(MAX_COOLDOWN);
+        }
+    }
+
+    fn release_probe_on_error(&mut self) {
+        if let BreakerState::HalfOpen { .. } = self.state {
+            self.state = BreakerState::HalfOpen { probe_in_flight: false };
         }
     }
 }
@@ -125,72 +182,45 @@ enum BreakerGate {
     Refused { retry_after: Duration },
 }
 
+/// Global-facade wrappers. Thin: they lock the shared Mutex and
+/// dispatch to the pure methods on [`Breaker`] so the state machine
+/// is unit-testable without static singletons.
 fn breaker_check_or_open() -> BreakerGate {
     let mut b = glm_breaker().lock().expect("breaker mutex poisoned");
-    match b.state {
-        BreakerState::Closed => BreakerGate::Proceed { is_probe: false },
-        BreakerState::Open { until } => {
-            let now = Instant::now();
-            if now >= until {
-                // Transition Open → HalfOpen: let one call probe.
-                b.state = BreakerState::HalfOpen { probe_in_flight: true };
-                BreakerGate::Proceed { is_probe: true }
-            } else {
-                BreakerGate::Refused { retry_after: until - now }
-            }
-        }
-        BreakerState::HalfOpen { probe_in_flight: true } => BreakerGate::Refused {
-            retry_after: Duration::from_secs(1),
-        },
-        BreakerState::HalfOpen { probe_in_flight: false } => {
-            // Should not happen — a HalfOpen without an in-flight
-            // probe should have transitioned. Treat as Closed to
-            // recover.
-            b.state = BreakerState::Closed;
-            b.consecutive_429 = 0;
-            BreakerGate::Proceed { is_probe: false }
-        }
+    let gate = b.check_or_open(Instant::now());
+    if matches!(gate, BreakerGate::Proceed { is_probe: true }) {
+        tracing::info!("glm circuit breaker: Open → HalfOpen, probe issued");
     }
+    gate
 }
 
 fn breaker_record_success(was_probe: bool) {
     let mut b = glm_breaker().lock().expect("breaker mutex poisoned");
-    b.consecutive_429 = 0;
-    if was_probe {
+    if was_probe && matches!(b.state, BreakerState::HalfOpen { .. }) {
         tracing::info!("glm circuit breaker: probe succeeded, closing");
-        b.state = BreakerState::Closed;
-        b.cooldown = INITIAL_COOLDOWN;
     }
+    b.record_success(was_probe);
 }
 
 fn breaker_record_429(was_probe: bool) {
     let mut b = glm_breaker().lock().expect("breaker mutex poisoned");
-    b.consecutive_429 = b.consecutive_429.saturating_add(1);
-    let should_open = matches!(b.state, BreakerState::Closed) && b.consecutive_429 >= TRIP_THRESHOLD;
-    if should_open {
-        let cooldown = b.cooldown;
-        tracing::warn!(
-            cooldown_ms = cooldown.as_millis(),
-            "glm circuit breaker: tripping Closed → Open after {} consecutive 429s",
-            TRIP_THRESHOLD
-        );
-        b.state = BreakerState::Open {
-            until: Instant::now() + cooldown,
-        };
-        // Arm next cooldown (doubled, capped).
-        b.cooldown = (cooldown * 2).min(MAX_COOLDOWN);
-        return;
-    }
-    if was_probe {
-        let cooldown = b.cooldown;
-        tracing::warn!(
-            cooldown_ms = cooldown.as_millis(),
-            "glm circuit breaker: probe 429, reopening"
-        );
-        b.state = BreakerState::Open {
-            until: Instant::now() + cooldown,
-        };
-        b.cooldown = (cooldown * 2).min(MAX_COOLDOWN);
+    let pre_state = b.state;
+    b.record_429(was_probe, Instant::now());
+    match (pre_state, b.state) {
+        (BreakerState::Closed, BreakerState::Open { .. }) => {
+            tracing::warn!(
+                cooldown_ms = b.cooldown.as_millis() / 2,
+                "glm circuit breaker: tripping Closed → Open after {} consecutive 429s",
+                TRIP_THRESHOLD
+            );
+        }
+        (BreakerState::HalfOpen { .. }, BreakerState::Open { .. }) => {
+            tracing::warn!(
+                cooldown_ms = b.cooldown.as_millis() / 2,
+                "glm circuit breaker: probe 429, reopening"
+            );
+        }
+        _ => {}
     }
 }
 
@@ -199,12 +229,7 @@ fn breaker_record_429(was_probe: bool) {
 /// is rate-limiting" — it's an unrelated fault).
 fn breaker_release_probe_on_error() {
     let mut b = glm_breaker().lock().expect("breaker mutex poisoned");
-    if let BreakerState::HalfOpen { .. } = b.state {
-        // Leave the window open; allow the next call to try again.
-        b.state = BreakerState::HalfOpen {
-            probe_in_flight: false,
-        };
-    }
+    b.release_probe_on_error();
 }
 
 pub struct GlmClient {
@@ -598,3 +623,158 @@ pub fn default_base_url() -> &'static str {
 
 #[derive(Debug, Serialize)]
 struct _UnusedMarker;
+
+#[cfg(test)]
+mod breaker_tests {
+    //! Deterministic tests for the circuit-breaker state machine.
+    //! Exercise the pure methods on `Breaker` directly — the global
+    //! facade is just a thin lock+log wrapper on top.
+
+    use super::*;
+
+    fn proceed_not_probe(g: BreakerGate) -> bool {
+        matches!(g, BreakerGate::Proceed { is_probe: false })
+    }
+    fn proceed_probe(g: BreakerGate) -> bool {
+        matches!(g, BreakerGate::Proceed { is_probe: true })
+    }
+    fn refused(g: BreakerGate) -> bool {
+        matches!(g, BreakerGate::Refused { .. })
+    }
+
+    #[test]
+    fn closed_allows_proceed_without_probe() {
+        let mut b = Breaker::new();
+        assert!(proceed_not_probe(b.check_or_open(Instant::now())));
+    }
+
+    #[test]
+    fn three_consecutive_429s_open_the_breaker() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        for _ in 0..TRIP_THRESHOLD - 1 {
+            b.record_429(false, t0);
+            assert!(matches!(b.state, BreakerState::Closed));
+        }
+        b.record_429(false, t0);
+        assert!(matches!(b.state, BreakerState::Open { .. }));
+    }
+
+    #[test]
+    fn success_resets_consecutive_429_count() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        b.record_429(false, t0);
+        b.record_429(false, t0);
+        assert_eq!(b.consecutive_429, 2);
+        b.record_success(false);
+        assert_eq!(b.consecutive_429, 0);
+        // And another two 429s don't trip (count was reset).
+        b.record_429(false, t0);
+        b.record_429(false, t0);
+        assert!(matches!(b.state, BreakerState::Closed));
+    }
+
+    #[test]
+    fn open_refuses_calls_until_cooldown_elapses() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        for _ in 0..TRIP_THRESHOLD {
+            b.record_429(false, t0);
+        }
+        assert!(refused(b.check_or_open(t0)));
+        // Fast-forward past the cooldown window.
+        let after = t0 + INITIAL_COOLDOWN + Duration::from_millis(1);
+        assert!(proceed_probe(b.check_or_open(after)));
+        assert!(matches!(
+            b.state,
+            BreakerState::HalfOpen { probe_in_flight: true }
+        ));
+    }
+
+    #[test]
+    fn halfopen_probe_429_reopens_with_doubled_cooldown() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        for _ in 0..TRIP_THRESHOLD {
+            b.record_429(false, t0);
+        }
+        let original = b.cooldown;
+        let after = t0 + original + Duration::from_millis(1);
+        assert!(proceed_probe(b.check_or_open(after)));
+        // Probe fails.
+        b.record_429(true, after);
+        assert!(matches!(b.state, BreakerState::Open { .. }));
+        assert_eq!(
+            b.cooldown,
+            (original * 2).min(MAX_COOLDOWN),
+            "failed probe should double cooldown"
+        );
+    }
+
+    #[test]
+    fn halfopen_probe_success_closes_and_resets_cooldown() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        for _ in 0..TRIP_THRESHOLD {
+            b.record_429(false, t0);
+        }
+        let initial = b.cooldown;
+        let after = t0 + initial + Duration::from_millis(1);
+        assert!(proceed_probe(b.check_or_open(after)));
+        // Probe succeeds.
+        b.record_success(true);
+        assert!(matches!(b.state, BreakerState::Closed));
+        assert_eq!(b.cooldown, INITIAL_COOLDOWN, "close resets cooldown");
+        assert_eq!(b.consecutive_429, 0);
+    }
+
+    #[test]
+    fn cooldown_caps_at_max() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        // Drive the cooldown up past the cap with multiple trip cycles.
+        b.cooldown = MAX_COOLDOWN;
+        for _ in 0..TRIP_THRESHOLD {
+            b.record_429(false, t0);
+        }
+        assert_eq!(
+            b.cooldown, MAX_COOLDOWN,
+            "cooldown must not exceed MAX_COOLDOWN"
+        );
+    }
+
+    #[test]
+    fn halfopen_blocks_concurrent_probes() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        for _ in 0..TRIP_THRESHOLD {
+            b.record_429(false, t0);
+        }
+        let after = t0 + INITIAL_COOLDOWN + Duration::from_millis(1);
+        // First check fires a probe.
+        assert!(proceed_probe(b.check_or_open(after)));
+        // Second check while probe in flight is refused.
+        assert!(refused(b.check_or_open(after)));
+    }
+
+    #[test]
+    fn release_probe_clears_in_flight_flag() {
+        let mut b = Breaker::new();
+        let t0 = Instant::now();
+        for _ in 0..TRIP_THRESHOLD {
+            b.record_429(false, t0);
+        }
+        let after = t0 + INITIAL_COOLDOWN + Duration::from_millis(1);
+        b.check_or_open(after);
+        assert!(matches!(
+            b.state,
+            BreakerState::HalfOpen { probe_in_flight: true }
+        ));
+        b.release_probe_on_error();
+        // Next check transitions HalfOpen{false} → Closed (recovery).
+        let gate = b.check_or_open(after);
+        assert!(matches!(gate, BreakerGate::Proceed { is_probe: false }));
+        assert!(matches!(b.state, BreakerState::Closed));
+    }
+}
