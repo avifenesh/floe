@@ -150,38 +150,37 @@ export function Dashboard({ me, onSignOut, onJob }: Props) {
     <div className="max-w-6xl mx-auto space-y-5">
       <UserBar me={me} onSignOut={onSignOut} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[340px,1fr] gap-6">
-        <Sidebar
-          history={history}
-          hasPending={hasPending}
-          onRefresh={() => void refreshHistory()}
-          onOpen={(r) => void openHistory(r)}
-          onDismiss={(r) => void dismiss(r)}
-          onRetry={(r) => void retry(r)}
+      {/* Insert-new card is TOP-LEVEL now — it's the primary CTA for
+          a returning reviewer and shouldn't live inside a side column.
+          History sidebar moves below it so the reviewer can glance at
+          recent runs without the form competing for attention. */}
+      {pendingJobId ? (
+        <PipelineProgress
+          jobId={pendingJobId}
+          backendBase={PIPELINE_BACKEND}
         />
-
-        <div className="space-y-5 min-w-0">
-          {pendingJobId ? (
-            <PipelineProgress
-              jobId={pendingJobId}
-              backendBase={PIPELINE_BACKEND}
-            />
-          ) : (
-            <AnalyseCard
-              base={base}
-              head={head}
-              prUrl={prUrl}
-              busy={busy}
-              onBase={setBase}
-              onHead={setHead}
-              onPrUrl={setPrUrl}
-              onAnalyse={() => void runLocal()}
-              onAnalyseUrl={() => void runUrl()}
-            />
-          )}
-          {err && <ErrorCard raw={err} onDismiss={() => setErr(null)} />}
-        </div>
-      </div>
+      ) : (
+        <AnalyseCard
+          base={base}
+          head={head}
+          prUrl={prUrl}
+          busy={busy}
+          onBase={setBase}
+          onHead={setHead}
+          onPrUrl={setPrUrl}
+          onAnalyse={() => void runLocal()}
+          onAnalyseUrl={() => void runUrl()}
+        />
+      )}
+      {err && <ErrorCard raw={err} onDismiss={() => setErr(null)} />}
+      <Sidebar
+        history={history}
+        hasPending={hasPending}
+        onRefresh={() => void refreshHistory()}
+        onOpen={(r) => void openHistory(r)}
+        onDismiss={(r) => void dismiss(r)}
+        onRetry={(r) => void retry(r)}
+      />
     </div>
   );
 }
@@ -363,8 +362,9 @@ function HistoryRow({
         <button
           onClick={onDismiss}
           className="ml-auto text-[10px] font-mono text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-muted/50"
+          title="Archive this analysis — removes it from the list, doesn't delete the cached artifact."
         >
-          dismiss
+          archive
         </button>
       </div>
     </div>

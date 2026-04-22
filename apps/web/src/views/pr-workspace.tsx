@@ -81,6 +81,7 @@ function Meta({ artifact }: { artifact: Artifact }) {
     <div className="space-y-6">
       <PrHeader artifact={artifact} />
       <PrStats artifact={artifact} />
+      <ReviewerNotes notes={artifact.notes ?? ""} />
       <section className="space-y-4">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
           Architectural delta
@@ -88,6 +89,39 @@ function Meta({ artifact }: { artifact: Artifact }) {
         <PrHunks artifact={artifact} />
       </section>
     </div>
+  );
+}
+
+/** Reviewer-notes slot. Shows whatever was passed into `artifact.notes`
+ *  (side-channel text the proof-verification pass reads alongside the
+ *  code). Read-only for now; the editing + re-run path is in progress
+ *  so the machine-readable extraction schema can land first. */
+function ReviewerNotes({ notes }: { notes: string }) {
+  if (!notes.trim()) {
+    return (
+      <section className="space-y-2 rounded border border-border/60 bg-muted/10 px-4 py-3 shadow-sm">
+        <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
+          Reviewer notes
+        </h2>
+        <p className="text-[12px] text-muted-foreground leading-relaxed">
+          No notes attached to this analysis. Notes are free-form text
+          the proof-verification pass reads alongside the code — paste
+          a benchmark log, a staging observation, or a link to a trace.
+          Supply via the analyse API's <code className="mx-1 text-[11px] font-mono">notes</code> field
+          today; a structured in-UI editor lands next.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <section className="space-y-2 rounded border border-border/60 bg-muted/10 px-4 py-3 shadow-sm">
+      <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
+        Reviewer notes
+      </h2>
+      <pre className="text-[12px] text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+        {notes}
+      </pre>
+    </section>
   );
 }
 
