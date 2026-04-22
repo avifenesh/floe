@@ -100,6 +100,21 @@
 @layer utilities {
   /* Hide the native scrollbar in IDE-style tab strips — overflow is still
      interactive (drag / trackpad / shift-scroll), just visually quiet. */
+  /* Edge-faded horizontal scroll — used on the flow tab strip.
+     When tabs overflow, the content at the right edge fades to
+     transparent; a native scrollbar would clutter the chrome row
+     visually, so we use the fade as the overflow affordance and
+     keep the scrollbar hidden. The fade is always rendered but
+     invisible when there's no overflow (fades against whitespace). */
+  .tab-scroll-h {
+    overflow-x: auto;
+    scrollbar-width: none; /* Firefox */
+    -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 20px), transparent 100%);
+            mask-image: linear-gradient(to right, black 0, black calc(100% - 20px), transparent 100%);
+  }
+  .tab-scroll-h::-webkit-scrollbar {
+    display: none;
+  }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

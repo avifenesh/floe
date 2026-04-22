@@ -67,7 +67,12 @@ export function TopSpine({
               className="h-4 w-px bg-border shrink-0"
             />
           )}
-          <nav className="flex items-center gap-4 min-w-0 flex-1 overflow-x-auto no-scrollbar">
+          {/* Flow-tab strip. When the row overflows, the content
+              fades out on the right edge so the reviewer knows
+              there's more off to the side (tab-scroll-h mask in
+              index.css). Native scrollbar is hidden — the fade is
+              the affordance. */}
+          <nav className="flex items-center gap-4 min-w-0 flex-1 tab-scroll-h">
             {loaded && (
               <TopTabButton
                 active={top.kind === "pr"}

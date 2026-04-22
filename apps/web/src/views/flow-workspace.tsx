@@ -930,39 +930,19 @@ function ReplacementRow({ from, to, file }: { from: string; to: string; file: st
   );
 }
 
-/** Per-flow Flow view (RFC view 02) — runtime trajectory through
- *  the *code*, not just between functions. Each entity in the flow
- *  becomes a column showing its real CFG (entry → seq → branch →
- *  loop → return / async / throw); call edges from the head graph
- *  weave between columns from the calling block to the callee's
- *  entry. Node SHAPE encodes CFG kind, COLOR encodes morph status
- *  (added / removed / changed). This is "flow in code" — the
- *  reviewer follows the runtime trajectory the way the program
- *  actually executes, not an abstract DAG. */
+/** Per-flow Flow view (RFC view 02) — entity-level call tree.
+ *  Each entity the flow touches becomes a card showing what
+ *  changed at that entity (signature diff, new/removed variants,
+ *  hunks); arrows run from callers to callees so the reviewer
+ *  follows the runtime trajectory without having to decode a
+ *  per-function CFG. Dropped the function-internal CFG pass
+ *  because reviewers can't parse "entry / seq / branch / return"
+ *  at a glance — per-entity summaries read immediately. CFG data
+ *  still lives in the artifact; NodeDetailPanel surfaces it on
+ *  click for a reviewer who wants that depth. */
 function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; jobId: string }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const [side, setSide] = useState<"head" | "base">("head");
-  // Scope toggle (RFC: "All flows stacked (or N overlays, reviewer
-  // switches)"). `this` renders the current flow's columns; `all`
-  // renders every flow in the artifact concatenated with separators.
-  const [scope, setScope] = useState<"this" | "all">("this");
-  // Collect entities for the active scope. De-dup across flows so a
-  // shared entity only gets one column (with a tooltip listing which
-  // flows it participates in).
-  const entities: string[] = (() => {
-    if (scope === "this") return flow.entities ?? [];
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const f of artifact.flows ?? []) {
-      for (const e of f.entities ?? []) {
-        if (!seen.has(e)) {
-          seen.add(e);
-          out.push(e);
-        }
-      }
-    }
-    return out;
-  })();
+  const entities: string[] = flow.entities ?? [];
   const items = entities.map((name) => {
     const base = findNodeByName(artifact.base.nodes, name);
     const head = findNodeByName(artifact.head.nodes, name);
@@ -974,41 +954,75 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
           : base && head && nodeSignature(base) !== nodeSignature(head)
             ? "changed"
             : "unchanged";
-    const headCfg = head ? findCfg(artifact.head_cfg, head.id) : null;
-    const baseCfg = base ? findCfg(artifact.base_cfg, base.id) : null;
-    // Single-side view picks a canonical CFG for layout; both-mode
-    // uses head as the primary and overlays base.
-    const cfg =
-      side === "base"
-        ? baseCfg ?? headCfg
-        : headCfg ?? baseCfg;
-    return { name, base, head, status, cfg, headCfg, baseCfg };
+    const file = (head ?? base)?.file ?? "";
+    // Hunks that touch this entity — filtered out of the flow's
+    // hunk list by entity reference through base/head node ids.
+    const hunks = (artifact.hunks ?? []).filter((h) => {
+      if (!flow.hunk_ids.includes(h.id)) return false;
+      const k = h.kind as { kind: string; node?: number };
+      if (k.kind === "state" || k.kind === "api") {
+        return (
+          k.node !== undefined &&
+          ((head && head.id === k.node) || (base && base.id === k.node))
+        );
+      }
+      if (k.kind === "call") {
+        // Call hunks reference edges, not a single node. Include any
+        // call hunk that has an edge with endpoint == this entity.
+        const kc = k as unknown as {
+          kind: "call";
+          added_edges?: number[];
+          removed_edges?: number[];
+        };
+        const allEdgeIds = [
+          ...(kc.added_edges ?? []),
+          ...(kc.removed_edges ?? []),
+        ];
+        const allEdges = [...(artifact.head.edges ?? []), ...(artifact.base.edges ?? [])];
+        return allEdgeIds.some((eid) => {
+          const e = allEdges.find((x) => x.id === eid);
+          if (!e) return false;
+          return (head && (e.from === head.id || e.to === head.id)) ||
+                 (base && (e.from === base.id || e.to === base.id));
+        });
+      }
+      return false;
+    });
+    return { name, base, head, status, file, hunks };
   });
-  // Inter-entity call edges (head graph). Used to link columns.
+  // Inter-entity call edges from the flow's call hunks only — so
+  // we draw arrows that actually belong to this story.
+  const entitySet = new Set(entities);
   const idToName = new Map<number, string>();
   for (const it of items) {
     if (it.head) idToName.set(it.head.id, it.name);
-    else if (it.base) idToName.set(it.base.id, it.name);
+    if (it.base) idToName.set(it.base.id, it.name);
   }
-  const callEdges: { from: string; to: string; side: "head" | "base" }[] = [];
-  const seen = new Set<string>();
-  for (const e of artifact.head.edges ?? []) {
-    const f = idToName.get(e.from);
-    const t = idToName.get(e.to);
-    if (!f || !t || f === t) continue;
-    const k = `${f}->${t}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    callEdges.push({ from: f, to: t, side: "head" });
-  }
-  for (const e of artifact.base.edges ?? []) {
-    const f = idToName.get(e.from);
-    const t = idToName.get(e.to);
-    if (!f || !t || f === t) continue;
-    const k = `${f}->${t}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    callEdges.push({ from: f, to: t, side: "base" });
+  const callPairs: { from: string; to: string; verb: "added" | "removed" }[] = [];
+  const seenPair = new Set<string>();
+  for (const h of artifact.hunks ?? []) {
+    if (!flow.hunk_ids.includes(h.id)) continue;
+    const k = h.kind as {
+      kind: string;
+      added_edges?: number[];
+      removed_edges?: number[];
+    };
+    if (k.kind !== "call") continue;
+    const pushFor = (ids: number[], edges: typeof artifact.head.edges, verb: "added" | "removed") => {
+      for (const eid of ids) {
+        const e = edges.find((x) => x.id === eid);
+        if (!e) continue;
+        const f = idToName.get(e.from);
+        const t = idToName.get(e.to);
+        if (!f || !t || f === t || !entitySet.has(f) || !entitySet.has(t)) continue;
+        const key = `${verb}|${f}|${t}`;
+        if (seenPair.has(key)) continue;
+        seenPair.add(key);
+        callPairs.push({ from: f, to: t, verb });
+      }
+    };
+    pushFor(k.added_edges ?? [], artifact.head.edges ?? [], "added");
+    pushFor(k.removed_edges ?? [], artifact.base.edges ?? [], "removed");
   }
   const counts = items.reduce(
     (acc, r) => ({ ...acc, [r.status]: (acc[r.status] ?? 0) + 1 }),
@@ -1020,67 +1034,41 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
       <header className="space-y-1">
         <h1 className="text-[15px] font-mono text-foreground">
           Flow
-          <span className="font-normal text-muted-foreground"> · runtime trajectory of {flow.name}</span>
+          <span className="font-normal text-muted-foreground"> · {flow.name}</span>
         </h1>
         <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
-          Each column is an entity's control-flow graph — entry, branches,
-          loops, async boundaries, returns. Curved arrows are call edges
-          between entities. Column header color marks base → head movement.
+          One card per entity this flow touches. What changed at each
+          — signature, variants, call edges — lists below the name.
+          Click any card for source + cost contribution.
         </p>
-        <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
+        <div className="flex items-baseline gap-3 text-[10px] font-mono text-muted-foreground pt-0.5">
           <MorphLegend status="added" count={counts.added} />
           <MorphLegend status="changed" count={counts.changed} />
           <MorphLegend status="removed" count={counts.removed} />
           <MorphLegend status="unchanged" count={counts.unchanged} />
-          <div className="ml-auto inline-flex items-center gap-2">
-            <div className="inline-flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
-              {(["this", "all"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setScope(s)}
-                  className={
-                    "px-2 py-0.5 rounded-sm transition-colors " +
-                    (scope === s
-                      ? "bg-foreground/90 text-background"
-                      : "text-muted-foreground hover:text-foreground")
-                  }
-                >
-                  {s === "this" ? "this flow" : "all flows"}
-                </button>
-              ))}
-            </div>
-            <div className="inline-flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
-              {(["base", "head"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSide(s)}
-                  className={
-                    "px-2 py-0.5 rounded-sm transition-colors " +
-                    (side === s
-                      ? "bg-foreground/90 text-background"
-                      : "text-muted-foreground hover:text-foreground")
-                  }
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </header>
 
       {items.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground">
+        <p className="text-[12px] text-muted-foreground italic">
           No entities resolved on this flow.
         </p>
       ) : (
         <>
           <PropagationStrip flow={flow} />
-          <CfgFlowDiagram
-            items={items}
-            callEdges={callEdges}
-            onSelect={setSelected}
-          />
+          {callPairs.length > 0 && (
+            <FlowCallSummary pairs={callPairs} />
+          )}
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {items.map((it) => (
+              <li key={it.name}>
+                <EntityCard
+                  item={it}
+                  onClick={() => setSelected(it.name)}
+                />
+              </li>
+            ))}
+          </ul>
           {selected && (
             <NodeDetailPanel
               artifact={artifact}
@@ -1091,6 +1079,184 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/** One entity card for the entity-centric Flow view. Shows name +
+ *  file + morph-status pill at top, and a compact list of "what
+ *  changed here" below (signature deltas, new/removed variants,
+ *  inbound call edges). Clickable — opens NodeDetailPanel. */
+function EntityCard({
+  item,
+  onClick,
+}: {
+  item: {
+    name: string;
+    base: import("@/types/artifact").Node | undefined | null;
+    head: import("@/types/artifact").Node | undefined | null;
+    status: MorphStatus;
+    file: string;
+    hunks: import("@/types/artifact").Hunk[];
+  };
+  onClick: () => void;
+}) {
+  const file = item.file.split("/").pop() ?? item.file;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "w-full text-left rounded-md border-l-[3px] " +
+        MORPH_BORDER_LEFT[item.status] +
+        " border border-border/60 bg-muted/10 hover:bg-muted/20 px-3 py-2.5 space-y-1.5 transition-colors"
+      }
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="text-[12px] font-mono font-medium text-foreground truncate">
+          {item.name}
+        </span>
+        <span className={"text-[10px] font-mono uppercase tracking-wide " + MORPH_TEXT[item.status]}>
+          {item.status}
+        </span>
+        <span className="ml-auto text-[10px] font-mono text-muted-foreground truncate min-w-0">
+          {file}
+        </span>
+      </div>
+      {item.hunks.length > 0 ? (
+        <ul className="space-y-0.5">
+          {item.hunks.map((h) => (
+            <li key={h.id} className="text-[11px] font-mono text-foreground leading-snug">
+              <HunkLine hunk={h} entity={item.name} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[11px] text-muted-foreground italic">
+          Reached via propagation — no direct hunks.
+        </p>
+      )}
+    </button>
+  );
+}
+
+const MORPH_BORDER_LEFT: Record<MorphStatus, string> = {
+  added: "border-l-emerald-500/60",
+  removed: "border-l-rose-500/60",
+  changed: "border-l-amber-500/60",
+  unchanged: "border-l-border/60",
+};
+const MORPH_TEXT: Record<MorphStatus, string> = {
+  added: "text-emerald-700 dark:text-emerald-300",
+  removed: "text-rose-700 dark:text-rose-300",
+  changed: "text-amber-700 dark:text-amber-300",
+  unchanged: "text-muted-foreground",
+};
+
+function HunkLine({
+  hunk,
+  entity,
+}: {
+  hunk: import("@/types/artifact").Hunk;
+  entity: string;
+}) {
+  const k = hunk.kind as {
+    kind: string;
+    before_signature?: string | null;
+    after_signature?: string | null;
+    added_variants?: string[];
+    removed_variants?: string[];
+    added_edges?: number[];
+    removed_edges?: number[];
+  };
+  if (k.kind === "api") {
+    if (k.before_signature && k.after_signature) {
+      return (
+        <span className="text-muted-foreground">
+          <span className="text-rose-700 dark:text-rose-300">−</span>{" "}
+          <code className="text-[10px]">{k.before_signature}</code>
+          <br />
+          <span className="text-emerald-700 dark:text-emerald-300">+</span>{" "}
+          <code className="text-[10px]">{k.after_signature}</code>
+        </span>
+      );
+    }
+    return <span className="text-muted-foreground">api: signature change</span>;
+  }
+  if (k.kind === "state") {
+    const adds = k.added_variants ?? [];
+    const rems = k.removed_variants ?? [];
+    return (
+      <span className="text-muted-foreground">
+        state:{" "}
+        {adds.length > 0 && (
+          <span className="text-emerald-700 dark:text-emerald-300">+{adds.join(" +")}</span>
+        )}
+        {adds.length > 0 && rems.length > 0 && " "}
+        {rems.length > 0 && (
+          <span className="text-rose-700 dark:text-rose-300">−{rems.join(" −")}</span>
+        )}
+      </span>
+    );
+  }
+  if (k.kind === "call") {
+    const added = (k.added_edges ?? []).length;
+    const removed = (k.removed_edges ?? []).length;
+    return (
+      <span className="text-muted-foreground">
+        call:{" "}
+        {added > 0 && <span className="text-emerald-700 dark:text-emerald-300">+{added}</span>}
+        {added > 0 && removed > 0 && " "}
+        {removed > 0 && <span className="text-rose-700 dark:text-rose-300">−{removed}</span>}
+        {" "}edge{added + removed === 1 ? "" : "s"} touching {entity}
+      </span>
+    );
+  }
+  return <span className="text-muted-foreground">hunk</span>;
+}
+
+/** Compact call-pair summary for the flow: who calls who.
+ *  Arrow-separated rows — a flat list beats a SVG layout when there
+ *  are a handful of calls, and it scales gracefully. */
+function FlowCallSummary({
+  pairs,
+}: {
+  pairs: { from: string; to: string; verb: "added" | "removed" }[];
+}) {
+  if (pairs.length === 0) return null;
+  return (
+    <div className="rounded border border-border/60 bg-muted/5 px-3 py-2 text-[11px] font-mono space-y-1">
+      <div className="flex items-baseline gap-2">
+        <span className="uppercase tracking-wide text-[10px] text-muted-foreground">
+          call edges ({pairs.length})
+        </span>
+      </div>
+      <ul className="space-y-0.5">
+        {pairs.map((p, i) => (
+          <li key={i} className="flex items-baseline gap-2 flex-wrap">
+            <span
+              className={
+                "inline-block w-1.5 h-1.5 rounded-full " +
+                (p.verb === "added" ? "bg-emerald-500/80" : "bg-rose-500/80")
+              }
+              aria-hidden
+            />
+            <span className="text-foreground">{p.from}</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="text-foreground">{p.to}</span>
+            <span
+              className={
+                "ml-auto text-[10px] uppercase tracking-wide " +
+                (p.verb === "added"
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-rose-700 dark:text-rose-300")
+              }
+            >
+              {p.verb}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1154,23 +1320,7 @@ function PropagationStrip({ flow }: { flow: Flow }) {
   );
 }
 
-function findCfg(
-  entries: import("@/types/artifact").CfgEntry[] | undefined,
-  fnId: number | undefined,
-): import("@/types/artifact").Cfg | null {
-  if (!entries || fnId === undefined) return null;
-  const hit = entries.find((e) => e.function === fnId);
-  return hit?.cfg ?? null;
-}
-
 type MorphStatus = "added" | "removed" | "changed" | "unchanged";
-
-const MORPH_NODE_BG: Record<MorphStatus, string> = {
-  added: "fill-emerald-500/15 stroke-emerald-500/70",
-  removed: "fill-rose-500/15 stroke-rose-500/70",
-  changed: "fill-amber-500/15 stroke-amber-500/70",
-  unchanged: "fill-muted/30 stroke-border",
-};
 
 const MORPH_LEGEND_DOT: Record<MorphStatus, string> = {
   added: "bg-emerald-500/70",
@@ -1188,354 +1338,6 @@ function MorphLegend({ status, count }: { status: MorphStatus; count: number }) 
   );
 }
 
-const PAD = 16;
-
-interface CfgItem {
-  name: string;
-  base: import("@/types/artifact").Node | null;
-  head: import("@/types/artifact").Node | null;
-  status: MorphStatus;
-  /** Canonical CFG used for layout — head by default, base when the
-   *  side toggle is on "base". Overlay of the other side happens on top. */
-  cfg: import("@/types/artifact").Cfg | null;
-  headCfg: import("@/types/artifact").Cfg | null;
-  baseCfg: import("@/types/artifact").Cfg | null;
-}
-
-const COL_W = 200;
-const HEADER_H = 36;
-const CFG_NODE_W = 140;
-const CFG_NODE_H = 28;
-const CFG_GAP_Y = 14;
-const CFG_GAP_X = 40;
-const CFG_PAD_TOP = 12;
-const CFG_NODE_X_OFFSET = (COL_W - CFG_NODE_W) / 2;
-
-/** Short, glanceable labels — `stmt` everywhere was visual noise
- *  ("stmt / stmt / stmt / branch / stmt..."). Branches, loops, and
- *  terminators get a glyph so the control-flow shape reads without
- *  having to parse words; simple statements fall to a single dot. */
-const CFG_KIND_LABEL: Record<string, string> = {
-  entry: "▶ entry",
-  exit: "■ exit",
-  seq: "·",
-  branch: "◆ if",
-  loop: "↻ loop",
-  "async-boundary": "⏳ await",
-  throw: "✕ throw",
-  try: "◇ try",
-  return: "← return",
-};
-
-const CFG_KIND_FILL: Record<string, string> = {
-  entry: "fill-emerald-500/20 stroke-emerald-500/70",
-  exit: "fill-muted/50 stroke-border",
-  return: "fill-muted/40 stroke-muted-foreground/60",
-  seq: "fill-muted/30 stroke-border",
-  branch: "fill-amber-500/15 stroke-amber-500/60",
-  loop: "fill-amber-500/15 stroke-amber-500/60",
-  "async-boundary": "fill-sky-500/15 stroke-sky-500/60",
-  throw: "fill-rose-500/20 stroke-rose-500/70",
-  try: "fill-sky-500/10 stroke-sky-500/40",
-};
-
-interface CfgLayout {
-  positions: Map<number, { x: number; y: number }>;
-  width: number;
-  height: number;
-}
-
-/** Lay out a CFG vertically: BFS from entry assigns Y level, same-
- *  level nodes spread X. Cycles fall back to insertion order. Branch
- *  arms naturally land side by side because they share a level. */
-function layoutCfg(cfg: import("@/types/artifact").Cfg): CfgLayout {
-  const out = new Map<number, { x: number; y: number }>();
-  if (!cfg || cfg.nodes.length === 0) {
-    return { positions: out, width: COL_W, height: 0 };
-  }
-  const incoming = new Map<number, Set<number>>();
-  const outgoing = new Map<number, Set<number>>();
-  for (const n of cfg.nodes) {
-    incoming.set(n.id, new Set());
-    outgoing.set(n.id, new Set());
-  }
-  for (const e of cfg.edges) {
-    incoming.get(e.to)?.add(e.from);
-    outgoing.get(e.from)?.add(e.to);
-  }
-  const level = new Map<number, number>();
-  const queue: number[] = [];
-  // Find entry nodes (kind === "entry" preferred; else nodes with no incoming).
-  const entries = cfg.nodes.filter((n) => (n.kind as { type: string }).type === "entry");
-  const seeds = entries.length > 0 ? entries.map((n) => n.id) : cfg.nodes.filter((n) => (incoming.get(n.id)?.size ?? 0) === 0).map((n) => n.id);
-  for (const id of seeds) {
-    level.set(id, 0);
-    queue.push(id);
-  }
-  // Cap depth so cycles in the CFG (loop bodies, try/catch back-edges)
-  // don't drive the level counter to infinity. Stop relaxing past the
-  // node count — that's the longest acyclic path possible.
-  const maxAllowedLevel = cfg.nodes.length;
-  while (queue.length > 0) {
-    const cur = queue.shift()!;
-    const lv = level.get(cur)!;
-    if (lv >= maxAllowedLevel) continue;
-    for (const next of outgoing.get(cur) ?? []) {
-      const want = lv + 1;
-      if ((level.get(next) ?? -1) < want && want <= maxAllowedLevel) {
-        level.set(next, want);
-        queue.push(next);
-      }
-    }
-  }
-  for (const n of cfg.nodes) if (!level.has(n.id)) level.set(n.id, 0);
-  const byLevel = new Map<number, number[]>();
-  for (const n of cfg.nodes) {
-    const lv = level.get(n.id)!;
-    if (!byLevel.has(lv)) byLevel.set(lv, []);
-    byLevel.get(lv)!.push(n.id);
-  }
-  let maxRowWidth = 1;
-  let maxLevel = 0;
-  for (const [lv, ids] of byLevel) {
-    maxRowWidth = Math.max(maxRowWidth, ids.length);
-    maxLevel = Math.max(maxLevel, lv);
-    ids.forEach((id, i) => {
-      const x = CFG_NODE_X_OFFSET + (i - (ids.length - 1) / 2) * (CFG_NODE_W + 8);
-      const y = CFG_PAD_TOP + lv * (CFG_NODE_H + CFG_GAP_Y);
-      out.set(id, { x, y });
-    });
-  }
-  const colWidth = Math.max(COL_W, CFG_NODE_X_OFFSET + maxRowWidth * (CFG_NODE_W + 8));
-  const colHeight = CFG_PAD_TOP + (maxLevel + 1) * (CFG_NODE_H + CFG_GAP_Y);
-  return { positions: out, width: colWidth, height: colHeight };
-}
-
-function CfgFlowDiagram({
-  items,
-  callEdges,
-  onSelect,
-}: {
-  items: CfgItem[];
-  callEdges: { from: string; to: string; side: "head" | "base" }[];
-  onSelect?: (entity: string) => void;
-}) {
-  // Per-column layout. Compute each column's CFG positions + height.
-  const cols = items.map((it) => {
-    const layout = it.cfg ? layoutCfg(it.cfg) : { positions: new Map(), width: COL_W, height: 0 };
-    return { item: it, layout };
-  });
-  // Column X positions: cumulative sum of column widths + horizontal gap.
-  let runningX = PAD;
-  const colX = new Map<string, number>();
-  for (const c of cols) {
-    colX.set(c.item.name, runningX);
-    runningX += c.layout.width + CFG_GAP_X;
-  }
-  const totalW = runningX - CFG_GAP_X + PAD;
-  const maxColH = cols.reduce((m, c) => Math.max(m, c.layout.height), 0);
-  const totalH = HEADER_H + maxColH + PAD;
-
-  // Per-column entry/exit Y positions for inter-column arrows.
-  const colEntryY = new Map<string, number>();
-  const colExitY = new Map<string, number>();
-  for (const c of cols) {
-    if (!c.item.cfg) continue;
-    const entry = c.item.cfg.nodes.find((n) => (n.kind as { type: string }).type === "entry");
-    const exit = c.item.cfg.nodes.find((n) => (n.kind as { type: string }).type === "exit");
-    if (entry) colEntryY.set(c.item.name, HEADER_H + (c.layout.positions.get(entry.id)?.y ?? 0) + CFG_NODE_H / 2);
-    if (exit) colExitY.set(c.item.name, HEADER_H + (c.layout.positions.get(exit.id)?.y ?? 0) + CFG_NODE_H / 2);
-  }
-
-  return (
-    <div className="relative w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded border border-border/60 bg-muted/10">
-      <svg
-        width={totalW}
-        height={totalH}
-        viewBox={`0 0 ${totalW} ${totalH}`}
-        className="block"
-        style={{ minWidth: totalW }}
-      >
-        <defs>
-          <marker
-            id="cfg-arrow"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground/70" />
-          </marker>
-          <marker
-            id="cfg-call-arrow"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="7"
-            markerHeight="7"
-            orient="auto"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-sky-500/80" />
-          </marker>
-        </defs>
-
-        {/* Column headers — click to open NodeDetailPanel */}
-        {cols.map((c) => {
-          const x = colX.get(c.item.name)!;
-          const file = (c.item.head ?? c.item.base)?.file ?? "";
-          const fileShort = file.split("/").pop() ?? file;
-          const short = c.item.name.length > 28 ? c.item.name.slice(0, 27) + "\u2026" : c.item.name;
-          return (
-            <g
-              key={`hdr-${c.item.name}`}
-              onClick={() => onSelect?.(c.item.name)}
-              className={onSelect ? "cursor-pointer" : undefined}
-            >
-              <title>{`${c.item.name}\n${file}\nstatus: ${c.item.status}\nclick for details`}</title>
-              <rect
-                x={x}
-                y={0}
-                width={c.layout.width}
-                height={HEADER_H - 6}
-                rx={6}
-                className={MORPH_NODE_BG[c.item.status] + " stroke-[1.2]"}
-              />
-              <text
-                x={x + 10}
-                y={14}
-                className="fill-foreground"
-                style={{ fontFamily: "ui-monospace, monospace", fontSize: 11 }}
-              >
-                {short}
-              </text>
-              <text
-                x={x + 10}
-                y={26}
-                className="fill-muted-foreground"
-                style={{ fontFamily: "ui-monospace, monospace", fontSize: 9 }}
-              >
-                {c.item.status} · {fileShort}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* CFG edges per column */}
-        {cols.flatMap((c) => {
-          if (!c.item.cfg) return [];
-          const xOff = colX.get(c.item.name)!;
-          return c.item.cfg.edges.map((e, i) => {
-            const a = c.layout.positions.get(e.from);
-            const b = c.layout.positions.get(e.to);
-            if (!a || !b) return null;
-            const x1 = xOff + a.x + CFG_NODE_W / 2;
-            const y1 = HEADER_H + a.y + CFG_NODE_H;
-            const x2 = xOff + b.x + CFG_NODE_W / 2;
-            const y2 = HEADER_H + b.y;
-            return (
-              <line
-                key={`cfge-${c.item.name}-${i}`}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                className="stroke-muted-foreground/50 stroke-[1.2]"
-                markerEnd="url(#cfg-arrow)"
-              />
-            );
-          });
-        })}
-
-        {/* CFG nodes per column */}
-        {cols.flatMap((c) => {
-          if (!c.item.cfg) {
-            const x = colX.get(c.item.name)!;
-            return [
-              <text
-                key={`empty-${c.item.name}`}
-                x={x + 10}
-                y={HEADER_H + 30}
-                className="fill-muted-foreground italic"
-                style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
-              >
-                no CFG
-              </text>,
-            ];
-          }
-          const xOff = colX.get(c.item.name)!;
-          return c.item.cfg.nodes.map((n) => {
-            const p = c.layout.positions.get(n.id);
-            if (!p) return null;
-            const k = (n.kind as { type: string }).type;
-            const label = CFG_KIND_LABEL[k] ?? k;
-            const fill = CFG_KIND_FILL[k] ?? "fill-muted/30 stroke-border";
-            const x = xOff + p.x;
-            const y = HEADER_H + p.y;
-            return (
-              <g
-                key={`cfgn-${c.item.name}-${n.id}`}
-                onClick={() => onSelect?.(c.item.name)}
-                className={onSelect ? "cursor-pointer" : undefined}
-              >
-                <title>{`${c.item.name}\n${k}  span ${n.span.start}..${n.span.end}\nclick to open source`}</title>
-                <rect
-                  x={x}
-                  y={y}
-                  width={CFG_NODE_W}
-                  height={CFG_NODE_H}
-                  rx={k === "entry" || k === "exit" ? 14 : 4}
-                  className={fill + " stroke-[1.2]"}
-                />
-                <text
-                  x={x + CFG_NODE_W / 2}
-                  y={y + CFG_NODE_H / 2 + 3}
-                  textAnchor="middle"
-                  className="fill-foreground"
-                  style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
-                >
-                  {label}
-                </text>
-              </g>
-            );
-          });
-        })}
-
-        {/* Inter-column call edges — column right edge → next column entry */}
-        {callEdges.map((e, i) => {
-          const fromX = colX.get(e.from);
-          const toX = colX.get(e.to);
-          if (fromX === undefined || toX === undefined) return null;
-          const fromCol = cols.find((c) => c.item.name === e.from);
-          const toCol = cols.find((c) => c.item.name === e.to);
-          if (!fromCol || !toCol) return null;
-          const x1 = fromX + fromCol.layout.width;
-          const y1 = colEntryY.get(e.from) ?? HEADER_H + 12;
-          const x2 = toX;
-          const y2 = colEntryY.get(e.to) ?? HEADER_H + 12;
-          // Curved cubic Bezier so multiple call edges read clearly.
-          const dx = (x2 - x1) / 2;
-          const path = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
-          return (
-            <path
-              key={`call-${i}`}
-              d={path}
-              fill="none"
-              className={
-                e.side === "base"
-                  ? "stroke-rose-400/60 stroke-[1.4]"
-                  : "stroke-sky-500/70 stroke-[1.4]"
-              }
-              strokeDasharray={e.side === "base" ? "4 3" : undefined}
-              markerEnd={e.side === "base" ? "url(#cfg-arrow)" : "url(#cfg-call-arrow)"}
-            />
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
 
 function findNodeByName(
   nodes: import("@/types/artifact").Node[],

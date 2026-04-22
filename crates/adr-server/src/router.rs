@@ -558,6 +558,22 @@ async fn get_file(
     AxumPath(id): AxumPath<uuid::Uuid>,
     Query(q): Query<FileQuery>,
 ) -> Result<Response, (StatusCode, String)> {
+    // Lazy rehydrate: if the in-memory Job is gone (server restart,
+    // cold deep-link) but the cached artifact exists, build a
+    // minimal Job with base/head roots so file reads still work.
+    // Without this the Source view + NodeDetailPanel 404 on any
+    // post-restart visit — and the user has no recourse short of
+    // re-running the whole pipeline.
+    if !state.jobs.contains_key(&id) {
+        if let Ok(Some(artifact)) = load_cached_artifact(&state, &id).await {
+            if let Some((base_root, head_root)) =
+                resolve_job_roots(&state, &id, &artifact).await
+            {
+                let job = Job::rehydrated(id, base_root, head_root, artifact);
+                state.jobs.insert(id, job);
+            }
+        }
+    }
     let job = state
         .jobs
         .get(&id)
@@ -827,16 +843,34 @@ async fn rebaseline(
             .await;
     }
 
-    // URL-run re-baseline: reconstruct git_sync paths for the
-    // existing checkout. `owner/name` + the two shas are enough.
+    // URL-run re-baseline: reconstruct git_sync paths. If the
+    // checkout has been pruned since the last run, re-clone on the
+    // fly using the signed-in user's GitHub access token (or no
+    // token for public repos).
     if let Some((owner, name)) = repo.split_once('/') {
         let cache_root = state.cache.root();
         let base = git_sync::checkout_path(cache_root, owner, name, &artifact.pr.base_sha);
         let head = git_sync::checkout_path(cache_root, owner, name, &artifact.pr.head_sha);
+        // Clone whichever side is missing. `clone_sha` is
+        // idempotent — it no-ops when the .git exists already.
+        let token = match user_id.as_deref() {
+            Some(uid) => state.db.find_access_token(uid).await.ok().flatten(),
+            None => None,
+        };
+        let token_ref = token.as_deref();
+        if let Err(e) = git_sync::clone_sha(owner, name, &artifact.pr.base_sha, token_ref, &base).await {
+            return Err((
+                StatusCode::BAD_GATEWAY,
+                format!("re-clone base failed: {e:#}"),
+            ));
+        }
+        if let Err(e) = git_sync::clone_sha(owner, name, &artifact.pr.head_sha, token_ref, &head).await {
+            return Err((
+                StatusCode::BAD_GATEWAY,
+                format!("re-clone head failed: {e:#}"),
+            ));
+        }
         if base.is_dir() && head.is_dir() {
-            // Dummy marker: we don't have a sample record here, so
-            // pass None via the sample slot and let spawn_rebaseline
-            // stamp a repo-prefixed label instead.
             return spawn_rebaseline(&state, user_id, &base, &head, &repo, None, repo.clone())
                 .await;
         }
@@ -844,7 +878,7 @@ async fn rebaseline(
 
     Err((
         StatusCode::BAD_REQUEST,
-        "source not re-runnable from the server — re-paste the PR URL or path inputs".into(),
+        "source not re-runnable from the server — the original path-based inputs weren't persisted. Re-paste them via the analyse form.".into(),
     ))
 }
 
