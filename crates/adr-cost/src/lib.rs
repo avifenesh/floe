@@ -454,4 +454,72 @@ mod tests {
         let c = out.flows[0].cost.as_ref().unwrap();
         assert_eq!(c.net, 0);
     }
+
+    // ---- Baseline pin plucking (RFC v0.3 §9) ---------------------------
+
+    fn structural_artifact_with(flows: Vec<Flow>) -> Artifact {
+        let base = baseline(&[(ProbeId::ApiSurface, &[])]);
+        let head = baseline(&[(ProbeId::ApiSurface, &[])]);
+        let mut a = Artifact::new(PrRef {
+            repo: "r".into(),
+            base_sha: "b".into(),
+            head_sha: "h".into(),
+        });
+        a.flows = flows;
+        attribute_from_baselines(a, &base, &head)
+    }
+
+    fn llm_flow(model: &str) -> Flow {
+        let mut f = flow(&[]);
+        f.source = FlowSource::Llm {
+            model: model.into(),
+            version: "v0.3.1".into(),
+        };
+        f
+    }
+
+    fn flow_with_proof(model: &str) -> Flow {
+        use adr_core::evidence::Strength;
+        use adr_core::intent::{Proof, ProofVerdict};
+        let mut f = flow(&[]);
+        f.proof = Some(Proof {
+            verdict: ProofVerdict::NoIntent,
+            strength: Strength::Low,
+            reasoning: "t".into(),
+            claims: Vec::new(),
+            model: model.into(),
+            prompt_version: "v0.1.0".into(),
+        });
+        f
+    }
+
+    #[test]
+    fn baseline_pin_synthesis_model_plucked_from_llm_flow() {
+        let out = structural_artifact_with(vec![llm_flow("glm-4.7")]);
+        let pin = out.baseline.as_ref().unwrap();
+        assert_eq!(pin.synthesis_model.as_deref(), Some("glm-4.7"));
+    }
+
+    #[test]
+    fn baseline_pin_synthesis_model_none_when_all_structural() {
+        let out = structural_artifact_with(vec![flow(&[])]);
+        let pin = out.baseline.as_ref().unwrap();
+        assert_eq!(pin.synthesis_model, None);
+    }
+
+    #[test]
+    fn baseline_pin_proof_model_plucked_from_first_proof_flow() {
+        // Mix: one flow with no proof, one with proof — pluck should
+        // still find it regardless of order.
+        let out = structural_artifact_with(vec![flow(&[]), flow_with_proof("glm-4.7")]);
+        let pin = out.baseline.as_ref().unwrap();
+        assert_eq!(pin.proof_model.as_deref(), Some("glm-4.7"));
+    }
+
+    #[test]
+    fn baseline_pin_proof_model_none_when_proof_pass_skipped() {
+        let out = structural_artifact_with(vec![flow(&[])]);
+        let pin = out.baseline.as_ref().unwrap();
+        assert_eq!(pin.proof_model, None);
+    }
 }
