@@ -787,10 +787,27 @@ async fn rebaseline(
     jar: SignedCookieJar,
     AxumPath(id): AxumPath<uuid::Uuid>,
 ) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
-    let artifact = load_cached_artifact(&state, &id)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("load cached: {e:#}")))?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no cached artifact for {id}")))?;
+    // Try in-memory Job first — a freshly-spawned run isn't visible
+    // through list_recent's 200-row window until the DB write
+    // settles, and even after it might age out. The in-memory job
+    // is always current.
+    let artifact = if let Some(job_ref) = state.jobs.get(&id) {
+        job_ref.artifact.read().await.clone()
+    } else {
+        None
+    };
+    let artifact = match artifact {
+        Some(a) => a,
+        None => load_cached_artifact(&state, &id)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("load cached: {e:#}")))?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    format!("no cached artifact for {id} — open the PR again and retry"),
+                )
+            })?,
+    };
     let user_id = Session::from_jar(&jar).map(|s| s.user_id);
     let repo = artifact.pr.repo.clone();
 

@@ -450,6 +450,18 @@ async fn run_synth_pass(
                     current.flows.push(new_flow);
                 }
                 current.synth_status = SynthStatus::Ready;
+                // Baseline.synthesis_model is plucked by adr-cost at
+                // probe-finish time; synth runs in parallel and can
+                // land AFTER probe, leaving the pin stale at `None`.
+                // Refresh from the now-updated flows so the drift
+                // banner doesn't falsely claim synthesis was skipped.
+                if let Some(baseline) = current.baseline.as_mut() {
+                    let synth_model = current.flows.iter().find_map(|f| match &f.source {
+                        adr_core::FlowSource::Llm { model, .. } => Some(model.clone()),
+                        adr_core::FlowSource::Structural => None,
+                    });
+                    baseline.synthesis_model = synth_model;
+                }
             })
             .await;
             let _ = job.progress.send(ProgressEvent {

@@ -178,7 +178,9 @@ function PrCost({ artifact }: { artifact: Artifact }) {
     .map((f) => ({ name: f.name, net: f.cost!.net }))
     .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
 
-  const probeStamp = baseline?.probe_model ?? flows.find((f) => f.cost)?.cost?.probe_model ?? "";
+  // Probe model stamp only lives in BaselineStamp below (diagnostic
+  // metadata), not in the hero strip — no model names in the hot
+  // copy per feedback_no_model_names_in_ui.
   const confidence = aggregateCostConfidence(flows.map((f) => f.cost ?? null));
   const lowConfidence = confidence < CONFIDENCE_THRESHOLD;
   // When confidence is low, the net is unreliable — grey it out and
@@ -225,14 +227,9 @@ function PrCost({ artifact }: { artifact: Artifact }) {
           {lowConfidence && (
             <span
               title={`Aggregated driver confidence ${(confidence * 100).toFixed(0)}% (< ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%) — read the per-flow drivers below; the headline net is unreliable.`}
-              className="text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full border border-amber-400/40 bg-amber-50 dark:bg-amber-400/10 text-amber-800 dark:text-amber-200"
+              className="ml-auto text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full border border-amber-400/40 bg-amber-50 dark:bg-amber-400/10 text-amber-800 dark:text-amber-200"
             >
               low confidence
-            </span>
-          )}
-          {probeStamp && (
-            <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-              {probeStamp}
             </span>
           )}
         </div>

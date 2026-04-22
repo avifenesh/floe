@@ -118,7 +118,7 @@ function SampleCard({
       }
     >
       <div className="flex items-baseline gap-2">
-        <span className="text-[13px] font-medium text-foreground truncate">
+        <span className="text-[13px] font-medium text-foreground leading-snug line-clamp-2">
           {sample.title}
         </span>
         {loading && (

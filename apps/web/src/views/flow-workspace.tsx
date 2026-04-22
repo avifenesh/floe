@@ -132,30 +132,43 @@ function FlowSource({
 
 function FlowEvidence({ flow }: { flow: Flow }) {
   const claims = flow.evidence ?? [];
-  if (claims.length === 0) {
-    return (
-      <div className="space-y-2">
-        <h2 className="text-[13px] font-mono text-foreground">Evidence</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          No claims for this flow. Either the flow's hunks don't overlap with
-          any active collector, or the evidence pass hasn't run — rebuild the
-          artifact to populate.
-        </p>
-      </div>
-    );
-  }
+  const hasProof = flow.proof != null;
   return (
     <section className="space-y-4">
-      <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
-        Evidence ({claims.length})
-      </h2>
-      <ol className="space-y-2">
-        {claims.map((c) => (
-          <li key={c.id}>
-            <ClaimRow claim={c} />
-          </li>
-        ))}
-      </ol>
+      <header className="space-y-1">
+        <h1 className="text-[15px] font-mono text-foreground">
+          Evidence
+          <span className="font-normal text-muted-foreground"> · {flow.name}</span>
+        </h1>
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+          Cheap structural observations about this flow's shape —
+          file scope, connected call edges, signature consistency,
+          test coverage. Context for the reviewer before reading hunks.
+          Proof (semantic, LLM) lives on the{" "}
+          <em className="text-foreground/80">Intent &amp; Proof</em> tab.
+        </p>
+      </header>
+      {claims.length === 0 ? (
+        <p className="text-[12px] text-muted-foreground italic">
+          No structural claims for this flow yet — either the hunks
+          don't overlap with any active collector, or the evidence
+          pass hasn't landed.
+        </p>
+      ) : (
+        <ol className="space-y-2">
+          {claims.map((c) => (
+            <li key={c.id}>
+              <ClaimRow claim={c} />
+            </li>
+          ))}
+        </ol>
+      )}
+      <footer className="text-[11px] text-muted-foreground italic pt-1 border-t border-border/40">
+        Looking for &quot;did this PR deliver its stated intent?&quot; — check{" "}
+        <em className="text-foreground/80">Intent &amp; Proof</em>
+        {hasProof ? " (already populated for this flow)." : "."}
+        {" "}Want to read the actual code? <em className="text-foreground/80">Source</em> shows the diff.
+      </footer>
     </section>
   );
 }
@@ -168,12 +181,6 @@ function ClaimRow({ claim }: { claim: import("@/types/artifact").Claim }) {
         <StrengthPips strength={claim.strength} />
         <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
           {kindLabel}
-        </span>
-        <span
-          className="ml-auto text-[10px] font-mono text-muted-foreground"
-          title={`source: ${claim.provenance.source}@${claim.provenance.version}`}
-        >
-          {claim.provenance.source.replace(/^adr-evidence\//, "")}
         </span>
       </div>
       <p className="text-[12px] text-foreground leading-relaxed">{claim.text}</p>
@@ -255,12 +262,17 @@ function FlowCost({
   if (status === "analyzing") {
     return (
       <div className="space-y-2">
-        <h2 className="text-[13px] font-mono text-foreground">Cost · analysing</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Probing the repo with the pinned navigation model. Base + head
-          snapshots run in separate sessions; cost deltas land here when
-          both complete. Keep working in other tabs — this fills in when
-          ready.
+        <h2 className="text-[13px] font-mono text-foreground inline-flex items-baseline gap-2">
+          Cost
+          <span className="text-[11px] text-muted-foreground normal-case font-sans inline-flex items-baseline gap-1">
+            <LoadingDots />
+            <span>analysing</span>
+          </span>
+        </h2>
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+          Measuring navigation cost on base and head snapshots in
+          parallel. The delta lands here when both sides complete.
+          Keep working in other tabs; it fills in when ready.
         </p>
       </div>
     );
@@ -270,11 +282,10 @@ function FlowCost({
     return (
       <div className="space-y-2">
         <h2 className="text-[13px] font-mono text-foreground">Cost</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Cost unavailable — the probe pass isn't configured. Set
-          <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">ADR_PROBE_LLM</code>
-          (or rely on <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">ADR_LLM</code>)
-          and re-run the analysis.
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+          Cost unavailable — this deployment isn't configured with a
+          navigation probe. An administrator can enable it, or re-run
+          once one is configured.
         </p>
       </div>
     );
@@ -284,7 +295,7 @@ function FlowCost({
     return (
       <div className="space-y-2">
         <h2 className="text-[13px] font-mono text-foreground">Cost · errored</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
           Probe pass failed. Per-flow cost may be missing or partial.
           Server logs hold the specific failure.
         </p>
@@ -358,17 +369,14 @@ function FlowCost({
           {lowConfidence && (
             <span
               title={`Driver confidence ${(confidence * 100).toFixed(0)}% (< ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%) — read the drivers below; the headline net is unreliable.`}
-              className="text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full border border-amber-400/40 bg-amber-50 dark:bg-amber-400/10 text-amber-800 dark:text-amber-200"
+              className="ml-auto text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full border border-amber-400/40 bg-amber-50 dark:bg-amber-400/10 text-amber-800 dark:text-amber-200"
             >
               low confidence
             </span>
           )}
-          <span
-            className="ml-auto text-[10px] font-mono text-muted-foreground"
-            title={`probe model: ${cost.probe_model}@${cost.probe_set_version}`}
-          >
-            {cost.probe_model}
-          </span>
+          {/* Probe-model stamp deliberately lives in FlowBaselineStamp
+              below (diagnostic metadata) — the hero row stays copy-only
+              per the no-model-names-in-product-UI rule. */}
         </div>
         <AxisRow axes={cost.axes} baseline={baseline?.axes_base ?? null} />
         <TokensRow delta={tokensDelta} pct={tokensPct} />
@@ -2076,14 +2084,10 @@ function IntentFitCard({
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Intent fit
         </h2>
-        {fit && (
-          <span
-            className="text-[10px] font-mono text-muted-foreground"
-            title={`${fit.model}@${fit.prompt_version}`}
-          >
-            {fit.model}
-          </span>
-        )}
+        {/* Model stamp lives in the artifact-wide BaselineStamp /
+            drift banner, not on every card — keeps model names out
+            of the hot copy. Tooltip on the verdict pill has the
+            diagnostic details for a reviewer who wants them. */}
       </div>
       {!fit ? (
         <p className="text-[12px] text-muted-foreground">
@@ -2122,14 +2126,8 @@ function ProofCard({
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Proof
         </h2>
-        {proof && (
-          <span
-            className="text-[10px] font-mono text-muted-foreground"
-            title={`${proof.model}@${proof.prompt_version}`}
-          >
-            {proof.model}
-          </span>
-        )}
+        {/* Model stamp lives in the artifact-wide BaselineStamp /
+            drift banner, not on every card. */}
       </div>
       {!proof ? (
         <p className="text-[12px] text-muted-foreground">

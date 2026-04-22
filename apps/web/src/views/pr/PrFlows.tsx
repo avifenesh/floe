@@ -155,12 +155,22 @@ function FlowCard({
           {label}
         </span>
         {isStructural ? (
-          <span className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground">
+          <span
+            className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground"
+            title="Flow cluster came from structural analysis only (no LLM)"
+          >
             structural
           </span>
         ) : (
-          <span className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-400/15 dark:text-emerald-200 dark:border-emerald-400/30">
-            {source.model ? `llm: ${source.model}` : "llm"}
+          <span
+            className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-400/15 dark:text-emerald-200 dark:border-emerald-400/30"
+            title={
+              source.model
+                ? `Flow named by an LLM synthesis pass (${source.model}@${source.version})`
+                : "Flow named by an LLM synthesis pass"
+            }
+          >
+            llm-named
           </span>
         )}
         <span className="ml-auto text-[11px] font-mono text-muted-foreground tabular-nums">
