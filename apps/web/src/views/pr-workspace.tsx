@@ -277,15 +277,30 @@ function BaselineStamp({
   baseline: import("@/types/artifact").ArtifactBaseline | null;
 }) {
   if (!baseline) return null;
+  // RFC v0.3 §9: pin spans probe + synthesis + proof so two runs
+  // with different LLMs never get silently compared. Render all
+  // three so the reviewer can see what produced these numbers.
   return (
     <div
-      className="flex items-baseline gap-2 text-[10px] font-mono text-muted-foreground"
-      title="Baseline pin: identifies exactly which probe run produced the cost numbers above. Re-baselines on any field change."
+      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10px] font-mono text-muted-foreground"
+      title="Baseline pin: identifies exactly which (probe, synthesis, proof) models produced the cost + proof numbers above. Re-baselines on any field change."
     >
       <span className="uppercase tracking-wide opacity-70">pinned to</span>
-      <span className="text-foreground/80">{baseline.probe_model}</span>
+      <span className="text-foreground/80">probe {baseline.probe_model}</span>
       <span className="opacity-50">·</span>
       <span>probes {baseline.probe_set_version}</span>
+      {baseline.synthesis_model && (
+        <>
+          <span className="opacity-50">·</span>
+          <span className="text-foreground/80">synth {baseline.synthesis_model}</span>
+        </>
+      )}
+      {baseline.proof_model && (
+        <>
+          <span className="opacity-50">·</span>
+          <span className="text-foreground/80">proof {baseline.proof_model}</span>
+        </>
+      )}
     </div>
   );
 }

@@ -130,7 +130,7 @@ Cross-cutting:
 
 - **Slide transitions between views.** Direction-aware. Animation replays on every switch.
 - **Flow scope stays on view switches.** Changing from flow-2 to delta-view keeps scope = flow-2.
-- **Contextual right panel only on node click.** Shows code, per-node signed cost contribution (four axes), claims touching that node, *and which flows the node participates in*.
+- **Contextual right panel only on node click.** Shows code, per-node signed cost contribution (three navigation axes), claims touching that node, proof evidence where attached, *and which flows the node participates in*.
 - **No permanent sidebars.** Scope switching via inline ribbon in the spine + `/` palette.
 
 ### 4a · Flow model (new in v0.2)

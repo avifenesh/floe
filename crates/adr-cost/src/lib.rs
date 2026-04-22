@@ -6,7 +6,7 @@
 //!   pinned probe model.
 //! - For every entity in the flow, computes per-probe delta:
 //!   `delta[probe, entity] = head[probe, entity] - base[probe, entity]`.
-//! - Attributes each probe's delta onto one of the four signed
+//! - Attributes each probe's delta onto one of the three signed
 //!   [`Axes`] per the RFC mapping (api-surface → continuation,
 //!   external-boundaries → operational, type-callsites → runtime).
 //! - Emits drivers with sample entities + human labels so the reviewer

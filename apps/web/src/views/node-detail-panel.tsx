@@ -1,6 +1,6 @@
 /** Contextual right panel shown on node click — per RFC cross-cutting rule:
- *  "Shows code, per-node signed cost contribution (four axes), claims
- *  touching that node, and which flows the node participates in."
+ *  "Shows code, per-node signed cost contribution (three navigation axes),
+ *  claims touching that node, and which flows the node participates in."
  *
  *  Opens for a single entity (qualified name). Reads the head/base
  *  source by span, aggregates cost drivers from every flow the entity
@@ -107,7 +107,7 @@ export function NodeDetailPanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
         <section className="space-y-1.5">
           <h3 className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
-            Cost contribution · four axes
+            Cost contribution · net + three axes
           </h3>
           <div className="grid grid-cols-2 gap-2">
             <CostCell label="net" value={costAxes.net} />

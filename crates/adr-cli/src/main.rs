@@ -56,6 +56,17 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Reveal the baseline pin on an artifact, or compare two pins to
+    /// check whether `adr calibrate` is apples-to-apples (RFC v0.3 §9).
+    /// Exits non-zero on mismatch.
+    Baseline {
+        /// First artifact JSON. With `--against`, this is the reference
+        /// pin; without, just prints its pin.
+        artifact: PathBuf,
+        /// Optional second artifact — compares pins against the first.
+        #[arg(long)]
+        against: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -119,6 +130,52 @@ fn main() -> Result<()> {
                 print!("{}", calibrate::format_text(&report));
             }
         }
+        Cmd::Baseline { artifact, against } => {
+            let a_art: Artifact = serde_json::from_slice(
+                &std::fs::read(&artifact)
+                    .with_context(|| format!("reading {}", artifact.display()))?,
+            )
+            .context("parsing artifact")?;
+            let a_pin = a_art
+                .baseline
+                .as_ref()
+                .context("artifact has no baseline — probe pass has not run")?;
+            println!("artifact: {}", artifact.display());
+            print_pin(a_pin);
+            if let Some(b_path) = against {
+                let b_art: Artifact = serde_json::from_slice(
+                    &std::fs::read(&b_path)
+                        .with_context(|| format!("reading {}", b_path.display()))?,
+                )
+                .context("parsing --against artifact")?;
+                let b_pin = b_art
+                    .baseline
+                    .as_ref()
+                    .context("--against artifact has no baseline")?;
+                println!("\n--against: {}", b_path.display());
+                print_pin(b_pin);
+                println!();
+                if a_pin.pin_matches(b_pin) {
+                    println!("pin: MATCHES — comparison is apples-to-apples.");
+                } else {
+                    println!("pin: MISMATCH — re-baseline required (RFC v0.3 §9).");
+                    std::process::exit(2);
+                }
+            }
+        }
     }
     Ok(())
+}
+
+fn print_pin(b: &adr_core::ArtifactBaseline) {
+    println!("  probe_model:         {}", b.probe_model);
+    println!("  probe_set_version:   {}", b.probe_set_version);
+    println!(
+        "  synthesis_model:     {}",
+        b.synthesis_model.as_deref().unwrap_or("<none — structural only>")
+    );
+    println!(
+        "  proof_model:         {}",
+        b.proof_model.as_deref().unwrap_or("<none — proof skipped>")
+    );
 }
