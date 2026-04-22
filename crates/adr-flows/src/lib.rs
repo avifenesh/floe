@@ -4,7 +4,7 @@
 //! together". We group by shared qualified-name prefix (class or top-level
 //! bucket). This is intentionally sloppy — it catches the common case
 //! (all `Queue.*` method changes end up together) and lets the LLM refine
-//! via the `adr` PI extension. When LLM synthesis is off or rejected, the
+//! via the LLM-synthesis pass (adr-mcp tool contract). When LLM synthesis is off or rejected, the
 //! UI renders these clusters with a visible "structural only" banner.
 
 use std::collections::BTreeMap;

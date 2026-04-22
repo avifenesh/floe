@@ -104,7 +104,7 @@ pub struct Artifact {
     pub hunks: Vec<Hunk>,
     /// Flows — groups of hunks that belong to one architectural story. The
     /// primary unit of review in v0.2. Deterministic structural clustering
-    /// always produces this list; the `adr` PI extension may replace it
+    /// always produces this list; the LLM-synthesis pass (via `adr-mcp`) may replace it
     /// with LLM-validated flows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flows: Vec<Flow>,

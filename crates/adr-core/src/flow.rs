@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 use crate::evidence::{Claim, Cost};
 use crate::intent::{IntentFit, Proof};
 
-/// A flow — the primary unit of review in v0.2. Lives at
-/// `artifact.flows[]` (schema update lands with this crate).
+/// A flow — the primary unit of review in v0.3.
 ///
 /// The structural floor produces flows with `FlowSource::Structural`. The
-/// `adr` PI extension replaces the list with LLM-validated flows tagged
+/// LLM-synthesis pass (driven by `adr-server` over the `adr-mcp` stdio
+/// tool contract, GLM-4.7 cloud by default or Qwen 3.5 27B local as the
+/// offline fallback) replaces the list with LLM-validated flows tagged
 /// `FlowSource::Llm`. If the LLM run is rejected, we ship the structural
 /// list unchanged and the UI surfaces a "structural only" banner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

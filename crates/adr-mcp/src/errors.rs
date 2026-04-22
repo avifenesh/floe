@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Frozen error-code set per `docs/adr-pi-extension.md` §Error model.
+/// Frozen error-code set (scope 3, week 6 freeze). The code set is
+/// ABI — the GLM / Qwen prompts parse these strings directly, so any
+/// rename breaks deployed artifacts. Treat like a wire format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {

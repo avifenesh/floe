@@ -1,8 +1,8 @@
 //! Request and response shapes as the LLM sees them over the wire.
 //!
-//! One departure from `docs/adr-pi-extension.md`: the doc's example uses
-//! opaque `"node-<hex>"` strings for entity ids. We use **qualified names**
-//! (e.g. `"Queue.setBudget"`) directly, because:
+//! Entity ids are **qualified names** (e.g. `"Queue.setBudget"`) rather
+//! than opaque `"node-<hex>"` strings (which the pre-pivot PI contract
+//! sketch in `docs/adr-pi-extension.md` used), because:
 //!
 //! 1. `Flow.entities` in the artifact is already a qualified-name list.
 //! 2. The LLM reads source code with qualified names; round-tripping them

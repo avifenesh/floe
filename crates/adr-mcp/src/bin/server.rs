@@ -12,8 +12,10 @@
 //! adr-mcp --artifact /path/to/artifact.json
 //! ```
 //!
-//! Clients: Claude Code (via `claude mcp add`), Cursor, or any MCP client.
-//! PI would consume this via `mcporter` per the author's recommendation.
+//! Clients: `adr-server` spawns this binary as a child process per
+//! analysis; any standard MCP-over-stdio client (Claude Code via
+//! `claude mcp add`, Cursor, OpenCode, or hand-rolled JSON-RPC loops)
+//! can drive it the same way.
 
 use std::path::PathBuf;
 use std::sync::Arc;

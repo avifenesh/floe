@@ -1,4 +1,20 @@
-# `adr` PI extension — tool contract
+# `adr` PI extension — tool contract  *(HISTORICAL / SUPERSEDED)*
+
+> **Status: superseded 2026-04-22.**
+> PI (Ollama's minimal coding agent) was dropped after its per-run
+> extension API turned out to be undocumented in pi-mono. Replaced by
+> `adr-mcp` — a Rust binary speaking MCP-over-stdio JSON-RPC 2.0.
+> `adr-server` spawns it as a child per analysis; the tool surface,
+> error codes, and host invariants below survived the pivot intact.
+>
+> **Current source of truth** for the tool contract is the code —
+> `crates/adr-mcp/src/handlers.rs`, `wire.rs`, `errors.rs`, plus the
+> `session_scripts.rs` integration tests. See also RFC v0.3 §5.
+>
+> This file is preserved as design history; do not rely on its socket /
+> launch / pi-extension details.
+
+---
 
 Status: **draft v0.1** · 2026-04-18 · locks at end of scope 3 week 6
 

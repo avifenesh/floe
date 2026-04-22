@@ -42,7 +42,7 @@
       ]
     },
     "flows": {
-      "description": "Flows — groups of hunks that belong to one architectural story. The primary unit of review in v0.2. Deterministic structural clustering always produces this list; the `adr` PI extension may replace it with LLM-validated flows.",
+      "description": "Flows — groups of hunks that belong to one architectural story. The primary unit of review in v0.2. Deterministic structural clustering always produces this list; the LLM-synthesis pass (via `adr-mcp`) may replace it with LLM-validated flows.",
       "type": "array",
       "items": {
         "$ref": "#/definitions/Flow"
@@ -739,7 +739,7 @@
       ]
     },
     "Flow": {
-      "description": "A flow — the primary unit of review in v0.2. Lives at `artifact.flows[]` (schema update lands with this crate).\n\nThe structural floor produces flows with `FlowSource::Structural`. The `adr` PI extension replaces the list with LLM-validated flows tagged `FlowSource::Llm`. If the LLM run is rejected, we ship the structural list unchanged and the UI surfaces a \"structural only\" banner.",
+      "description": "A flow — the primary unit of review in v0.3.\n\nThe structural floor produces flows with `FlowSource::Structural`. The LLM-synthesis pass (driven by `adr-server` over the `adr-mcp` stdio tool contract, GLM-4.7 cloud by default or Qwen 3.5 27B local as the offline fallback) replaces the list with LLM-validated flows tagged `FlowSource::Llm`. If the LLM run is rejected, we ship the structural list unchanged and the UI surfaces a \"structural only\" banner.",
       "type": "object",
       "required": [
         "entities",

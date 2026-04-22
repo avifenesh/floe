@@ -1,12 +1,20 @@
-//! Host for the `@adr/pi-extension` tool contract.
+//! MCP host for the flow-synthesis tool contract.
 //!
 //! Implements the state + validation logic the LLM's tool calls hit.
-//! This crate intentionally ships **no transport** — it exposes a [`Session`]
-//! type plus the eight handlers from the contract as plain Rust functions.
-//! A downstream binary (planned: `adr-mcp` MCP-over-stdio server in scope 3
-//! phase B) wraps these in a JSON-RPC loop.
+//! The library exposes a [`Session`] type plus the contract handlers as
+//! plain Rust functions; the `src/bin/server.rs` binary wraps them in a
+//! JSON-RPC-over-stdio loop (MCP standard). `adr-server` spawns that
+//! binary as a child process per analysis and shuttles tool calls
+//! between the LLM and the session.
 //!
-//! Contract source of truth: `docs/adr-pi-extension.md` at repo root.
+//! (The original design targeted PI, Ollama's minimal coding agent, via
+//! a bespoke socket-loaded extension — `docs/adr-pi-extension.md` captures
+//! that pre-pivot contract. PI was dropped when its per-run extension API
+//! turned out to be undocumented; MCP-over-stdio replaces it. Tool names,
+//! error codes, and host invariants survived the pivot intact.)
+//!
+//! Tool surface + error codes are the canonical source of truth — see
+//! [`handlers`], [`errors`], and the `session_scripts` integration tests.
 //!
 //! ## Shape at a glance
 //!
