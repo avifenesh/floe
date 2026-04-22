@@ -57,10 +57,12 @@ fn ollama_defaults(model: &str) -> ModelDefaults {
     // actually emit the tool call. Previously Qwen/Gemma defaulted to
     // 0.4 empirically; bumped to 0.8 on 2026-04-18 for consistency.
     let lower = model.to_ascii_lowercase();
+    // Qwen 3.5 / 3 gets a wider predict budget — it emits richer
+    // per-flow rationales than the smaller local models. Everything
+    // else (including the dropped Gemma 4 tier, kept for anyone
+    // running it off-label) shares the conservative 1024 default.
     if lower.starts_with("qwen3.5") || lower.starts_with("qwen3") {
         ModelDefaults { max_tokens: 2_048, temperature: 0.8 }
-    } else if lower.starts_with("gemma4") {
-        ModelDefaults { max_tokens: 1_024, temperature: 0.8 }
     } else {
         ModelDefaults { max_tokens: 1_024, temperature: 0.8 }
     }

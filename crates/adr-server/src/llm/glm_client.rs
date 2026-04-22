@@ -28,7 +28,7 @@ const DEFAULT_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
 /// firing all the intent + proof + probe sessions in parallel hits
 /// 1302 `Rate limit reached for requests`. 3 is the empirical sweet
 /// spot — 1× probe side (3 probes sequentially inside the pipeline)
-/// + 2 proof sessions overlapping keeps the running queue busy
+/// plus 2 proof sessions overlapping keeps the running queue busy
 /// without tripping the limiter. Override via `ADR_GLM_CONCURRENCY`.
 const DEFAULT_CONCURRENCY: usize = 3;
 
@@ -358,13 +358,12 @@ impl GlmClient {
             // Budget exhausted on a 429, or non-429 failure.
             let is_429 = status.as_u16() == 429;
             break Err(anyhow!("glm HTTP {status}: {text}"))
-                .map_err(|e| {
+                .inspect_err(|_e| {
                     if is_429 {
                         breaker_record_429(is_probe);
                     } else if is_probe {
                         breaker_release_probe_on_error();
                     }
-                    e
                 });
         };
 

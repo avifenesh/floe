@@ -207,8 +207,7 @@ pub fn grep(root: &ToolsRoot, input: GrepInput) -> Result<GrepOutput> {
     let limit = input
         .limit
         .unwrap_or(GREP_DEFAULT_LIMIT)
-        .min(GREP_MAX_LIMIT)
-        .max(1);
+        .clamp(1, GREP_MAX_LIMIT);
     let scope = match input.path.as_deref() {
         Some(p) => root.resolve(p)?,
         None => root.path().to_path_buf(),

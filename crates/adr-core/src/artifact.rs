@@ -15,11 +15,12 @@ use crate::intent::IntentInput;
 /// 2 × probe latency just to see flows and evidence. `cost_status` lets
 /// the frontend differentiate "no cost yet, try again shortly" from
 /// "cost attribution is genuinely missing".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum CostStatus {
     /// Cost pass never ran. Either probe is disabled or the pipeline
     /// completed without reaching the cost stage.
+    #[default]
     NotRun,
     /// Probe pass is mid-flight. UI should show "analysing…".
     Analyzing,
@@ -30,21 +31,17 @@ pub enum CostStatus {
     Errored,
 }
 
-impl Default for CostStatus {
-    fn default() -> Self {
-        Self::NotRun
-    }
-}
 
 /// Where the parallel flow-naming (synth) pass stands for this
 /// artifact. Mirrors [`CostStatus`] — synth runs as a background
 /// task after READY so the workspace can open with structural flow
 /// names immediately, refreshing to LLM names when the pass
 /// completes (~30–90s on GLM-4.7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum SynthStatus {
     /// No LLM configured; structural names are final.
+    #[default]
     NotRun,
     /// Background synth in flight — flow names may update shortly.
     Analyzing,
@@ -54,19 +51,15 @@ pub enum SynthStatus {
     Errored,
 }
 
-impl Default for SynthStatus {
-    fn default() -> Self {
-        Self::NotRun
-    }
-}
 
 /// Where the intent-fit + proof-verification LLM passes stand for this
 /// artifact. Mirrors [`CostStatus`] — proof lands asynchronously because
 /// the passes run against GLM and each flow burns a cloud session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProofStatus {
     /// No intent supplied, or the passes are disabled. Proof axis stays 0.
+    #[default]
     NotRun,
     /// Intent + proof passes in flight. UI should show "analysing…".
     Analyzing,
@@ -77,11 +70,6 @@ pub enum ProofStatus {
     Errored,
 }
 
-impl Default for ProofStatus {
-    fn default() -> Self {
-        Self::NotRun
-    }
-}
 
 /// Schema version in the artifact frontmatter. Bump the minor on breaking changes
 /// until v1, then follow semver.
