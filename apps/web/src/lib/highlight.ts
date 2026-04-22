@@ -1,18 +1,33 @@
-import { createHighlighter, type Highlighter } from "shiki";
+import { createHighlighterCore, type HighlighterCore } from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
 export type Lang = "typescript" | "tsx";
 export type Token = { content: string; color?: string };
 export type HighlightedLines = Token[][];
 
-let instance: Promise<Highlighter> | null = null;
+let instance: Promise<HighlighterCore> | null = null;
 
-/** Lazy singleton. Loads typescript + tsx grammars and github themes
- *  on first use; subsequent calls reuse the same highlighter. */
-function highlighter(): Promise<Highlighter> {
+/** Lazy singleton. Loads only the TypeScript + TSX grammars and the
+ *  two GitHub themes the product actually renders — via Shiki's
+ *  fine-grained core entry, not the default bundle.
+ *
+ *  The default `shiki` entry pulls every language grammar (~200 of
+ *  them) and the full Oniguruma WASM engine, landing ~10 MB of chunks
+ *  we don't use. `shiki/core` + dynamic-imported langs + the JS regex
+ *  engine (good enough for TS/TSX) cuts that to roughly one index
+ *  chunk under 500 KB. */
+function highlighter(): Promise<HighlighterCore> {
   if (!instance) {
-    instance = createHighlighter({
-      themes: ["github-light", "github-dark"],
-      langs: ["typescript", "tsx"],
+    instance = createHighlighterCore({
+      themes: [
+        import("@shikijs/themes/github-light"),
+        import("@shikijs/themes/github-dark"),
+      ],
+      langs: [
+        import("@shikijs/langs/typescript"),
+        import("@shikijs/langs/tsx"),
+      ],
+      engine: createJavaScriptRegexEngine(),
     });
   }
   return instance;
