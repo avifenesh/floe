@@ -150,21 +150,53 @@ pub struct Artifact {
     pub intent_summary: Option<String>,
 }
 
-/// Base-side totals used as denominators for the UI's %-of-baseline bars.
+/// Base-side totals used as denominators for the UI's %-of-baseline bars,
+/// plus the model pin RFC v0.3 §9 requires on every comparison.
 ///
 /// Per-axis cost is summed across every entity in the base probe run on
 /// the axis's probe (e.g. `continuation = Σ base.per_probe_entity_cost["api-surface"]`).
 /// `tokens_base` is the base probe run's total token usage; `tokens_head`
 /// is the head run's, used for the PR-level "token cost moved by X%"
 /// headline.
+///
+/// The pin fields (`probe_model`, `synthesis_model`, `proof_model`) let
+/// [`ArtifactBaseline::pin_matches`] refuse an apples-to-oranges compare
+/// when any of the three LLM passes shifted between two artifacts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ArtifactBaseline {
-    /// Per-axis base-run cost. All four fields non-negative.
+    /// Per-axis base-run cost. All three fields non-negative.
     pub axes_base: Axes,
     pub tokens_base: u32,
     pub tokens_head: u32,
     pub probe_model: String,
     pub probe_set_version: String,
+    /// Flow-synthesis model, e.g. `"glm-4.7"` or `"qwen3.5:27b-q4_K_M"`.
+    /// `None` when the artifact shipped with structural clustering only
+    /// (no LLM synthesis ran).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis_model: Option<String>,
+    /// Proof-verification model — always GLM when set (proof pass refuses
+    /// non-GLM backends without loud warning, see
+    /// `llm::config::from_env_proof`). `None` when proof pass was skipped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_model: Option<String>,
+}
+
+impl ArtifactBaseline {
+    /// Does `self` have the same pin as `other`? Checks all three model
+    /// fields + the probe-set version. Returns `false` if ANY differ —
+    /// callers treat that as "re-baseline required" per RFC v0.3 §9.
+    ///
+    /// `None == None` counts as matching (neither side ran that pass).
+    /// `Some(a) != Some(b)` obviously differs. `None != Some(_)` also
+    /// differs — an artifact with a proof pass and one without are not
+    /// comparable even if they happen to agree on probe output.
+    pub fn pin_matches(&self, other: &Self) -> bool {
+        self.probe_model == other.probe_model
+            && self.probe_set_version == other.probe_set_version
+            && self.synthesis_model == other.synthesis_model
+            && self.proof_model == other.proof_model
+    }
 }
 
 impl Artifact {
@@ -334,5 +366,65 @@ mod tests {
             head_sha: "h".into(),
         });
         assert_eq!(a.cost_status, CostStatus::NotRun);
+    }
+
+    fn baseline_with(
+        synthesis: Option<&str>,
+        proof: Option<&str>,
+        probe: &str,
+    ) -> ArtifactBaseline {
+        ArtifactBaseline {
+            axes_base: Axes::default(),
+            tokens_base: 0,
+            tokens_head: 0,
+            probe_model: probe.into(),
+            probe_set_version: "0.1".into(),
+            synthesis_model: synthesis.map(|s| s.into()),
+            proof_model: proof.map(|s| s.into()),
+        }
+    }
+
+    #[test]
+    fn pin_matches_on_same_three_models() {
+        let a = baseline_with(Some("glm-4.7"), Some("glm-4.7"), "qwen3.5:27b-q4_K_M");
+        let b = baseline_with(Some("glm-4.7"), Some("glm-4.7"), "qwen3.5:27b-q4_K_M");
+        assert!(a.pin_matches(&b));
+    }
+
+    #[test]
+    fn pin_mismatch_on_synthesis_drift() {
+        // User switched from the cloud default to the local fallback
+        // between runs — cost numbers aren't comparable even if the
+        // probe model was identical.
+        let a = baseline_with(Some("glm-4.7"), Some("glm-4.7"), "qwen3.5:27b-q4_K_M");
+        let b = baseline_with(
+            Some("qwen3.5:27b-q4_K_M"),
+            Some("glm-4.7"),
+            "qwen3.5:27b-q4_K_M",
+        );
+        assert!(!a.pin_matches(&b));
+    }
+
+    #[test]
+    fn pin_mismatch_when_proof_ran_on_one_side_only() {
+        // Intent supplied on run A but not run B — proof ran once,
+        // skipped once. Not apples-to-apples.
+        let a = baseline_with(Some("glm-4.7"), Some("glm-4.7"), "qwen3.5:27b-q4_K_M");
+        let b = baseline_with(Some("glm-4.7"), None, "qwen3.5:27b-q4_K_M");
+        assert!(!a.pin_matches(&b));
+    }
+
+    #[test]
+    fn pin_matches_when_both_skipped_proof() {
+        let a = baseline_with(Some("glm-4.7"), None, "qwen3.5:27b-q4_K_M");
+        let b = baseline_with(Some("glm-4.7"), None, "qwen3.5:27b-q4_K_M");
+        assert!(a.pin_matches(&b));
+    }
+
+    #[test]
+    fn pin_mismatch_on_probe_model_drift() {
+        let a = baseline_with(Some("glm-4.7"), Some("glm-4.7"), "qwen3.5:27b-q4_K_M");
+        let b = baseline_with(Some("glm-4.7"), Some("glm-4.7"), "glm-4.5-air");
+        assert!(!a.pin_matches(&b));
     }
 }

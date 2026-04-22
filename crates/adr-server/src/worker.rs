@@ -636,6 +636,19 @@ async fn run_intent_pass(
                 dst.proof = src.proof.clone();
             }
         }
+        // Refresh the baseline's proof_model pin. The probe pass
+        // populated `current.baseline` but couldn't stamp proof_model
+        // because proof hadn't run yet (both run as independent
+        // background tasks). Without this refresh, re-baseline drift
+        // detection can't tell two runs with different proof models
+        // apart (RFC v0.3 §9). `None` when no flow received a Proof.
+        if let Some(baseline) = current.baseline.as_mut() {
+            let proof_model = current
+                .flows
+                .iter()
+                .find_map(|f| f.proof.as_ref().map(|p| p.model.clone()));
+            baseline.proof_model = proof_model;
+        }
     })
     .await;
 }

@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use adr_core::{
     artifact::ArtifactBaseline,
     evidence::{Axes, Cost, CostDriver},
-    Artifact, Flow,
+    Artifact, Flow, FlowSource,
 };
 use adr_probe::{AggregateBaseline, ProbeId};
 
@@ -36,19 +36,33 @@ pub fn attribute_from_baselines(
     for flow in flows.iter_mut() {
         flow.cost = Some(score_flow(flow, base, head));
     }
+    artifact.baseline = Some(baseline_summary(base, head, &flows));
     artifact.flows = flows;
-    artifact.baseline = Some(baseline_summary(base, head));
     artifact
 }
 
 /// Build the repo-wide `ArtifactBaseline` — the denominators the frontend
-/// uses for %-of-baseline bars. Per-axis totals are summed from the base
-/// run's `per_probe_entity_cost`; token totals come straight from
-/// `totals.tokens`.
-fn baseline_summary(base: &AggregateBaseline, head: &AggregateBaseline) -> ArtifactBaseline {
+/// uses for %-of-baseline bars, plus the model pin RFC v0.3 §9 requires.
+/// Per-axis totals are summed from the base run's `per_probe_entity_cost`;
+/// token totals come straight from `totals.tokens`. Synthesis + proof
+/// models are plucked from the flows themselves — any `FlowSource::Llm`
+/// flow gives us the synthesis model, any `flow.proof` gives us the
+/// proof model. They're `None` when the corresponding pass was skipped.
+fn baseline_summary(
+    base: &AggregateBaseline,
+    head: &AggregateBaseline,
+    flows: &[Flow],
+) -> ArtifactBaseline {
     let continuation = probe_axis_total(base, ProbeId::ApiSurface);
     let operational = probe_axis_total(base, ProbeId::ExternalBoundaries);
     let runtime = probe_axis_total(base, ProbeId::TypeCallsites);
+    let synthesis_model = flows.iter().find_map(|f| match &f.source {
+        FlowSource::Llm { model, .. } => Some(model.clone()),
+        FlowSource::Structural => None,
+    });
+    let proof_model = flows
+        .iter()
+        .find_map(|f| f.proof.as_ref().map(|p| p.model.clone()));
     ArtifactBaseline {
         axes_base: Axes {
             continuation,
@@ -59,6 +73,8 @@ fn baseline_summary(base: &AggregateBaseline, head: &AggregateBaseline) -> Artif
         tokens_head: head.totals.tokens,
         probe_model: base.probe_model.clone(),
         probe_set_version: base.probe_set_version.clone(),
+        synthesis_model,
+        proof_model,
     }
 }
 

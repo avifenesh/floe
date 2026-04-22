@@ -75,6 +75,13 @@
         }
       ]
     },
+    "intent_summary": {
+      "description": "LLM-generated 1–2 sentence summary of the stated intent. Populated once at the start of the proof pipeline so the reviewer doesn't have to read the raw PR description; only present when intent arrived as `RawText` and the GLM call succeeded.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "notes": {
       "description": "Side-channel notes from the reviewer — pasted benchmark output, staging logs, corroborating screenshots turned into text. The proof-verification pass reads this alongside the code when deciding whether a claim has evidence.",
       "type": "string"
@@ -106,7 +113,7 @@
   },
   "definitions": {
     "ArtifactBaseline": {
-      "description": "Base-side totals used as denominators for the UI's %-of-baseline bars.\n\nPer-axis cost is summed across every entity in the base probe run on the axis's probe (e.g. `continuation = Σ base.per_probe_entity_cost[\"api-surface\"]`). `tokens_base` is the base probe run's total token usage; `tokens_head` is the head run's, used for the PR-level \"token cost moved by X%\" headline.",
+      "description": "Base-side totals used as denominators for the UI's %-of-baseline bars, plus the model pin RFC v0.3 §9 requires on every comparison.\n\nPer-axis cost is summed across every entity in the base probe run on the axis's probe (e.g. `continuation = Σ base.per_probe_entity_cost[\"api-surface\"]`). `tokens_base` is the base probe run's total token usage; `tokens_head` is the head run's, used for the PR-level \"token cost moved by X%\" headline.\n\nThe pin fields (`probe_model`, `synthesis_model`, `proof_model`) let [`ArtifactBaseline::pin_matches`] refuse an apples-to-oranges compare when any of the three LLM passes shifted between two artifacts.",
       "type": "object",
       "required": [
         "axes_base",
@@ -117,7 +124,7 @@
       ],
       "properties": {
         "axes_base": {
-          "description": "Per-axis base-run cost. All four fields non-negative.",
+          "description": "Per-axis base-run cost. All three fields non-negative.",
           "allOf": [
             {
               "$ref": "#/definitions/Axes"
@@ -129,6 +136,20 @@
         },
         "probe_set_version": {
           "type": "string"
+        },
+        "proof_model": {
+          "description": "Proof-verification model — always GLM when set (proof pass refuses non-GLM backends without loud warning, see `llm::config::from_env_proof`). `None` when proof pass was skipped.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "synthesis_model": {
+          "description": "Flow-synthesis model, e.g. `\"glm-4.7\"` or `\"qwen3.5:27b-q4_K_M\"`. `None` when the artifact shipped with structural clustering only (no LLM synthesis ran).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "tokens_base": {
           "type": "integer",
@@ -805,6 +826,23 @@
               "type": "null"
             }
           ]
+        },
+        "propagation_edges": {
+          "description": "Unchanged call-sites / refs that reach this flow's entities (1-hop in v0). Each tuple is `(from_qualified_name, to_qualified_name)` where at least one endpoint is in `entities`. The frontend renders these as dashed context arrows so the reviewer sees \"who else calls into this flow\" without the noise of the full graph.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
         },
         "rationale": {
           "description": "One-or-two-sentence explanation of why these hunks are together.",
