@@ -5,7 +5,13 @@ use anyhow::{Context, Result};
 
 /// Tool versions baked into the cache key. Bump any of these and all entries
 /// silently invalidate.
-const PIPELINE_VERSION: &str = "0.5.1";
+///
+/// 0.5.2 (2026-04-22): `llm_signature` now carries the proof model
+/// suffix so `ADR_PROOF_LLM` drift invalidates the entry (it used to
+/// collide with synthesis-only signatures and serve stale proof
+/// claims). Old entries become dead weight; they disappear on the
+/// next run that builds a new key.
+const PIPELINE_VERSION: &str = "0.5.2";
 
 pub struct Cache {
     dir: PathBuf,
@@ -32,9 +38,14 @@ impl Cache {
     /// (blake3 over qualified-name + provenance-hash rows).
     ///
     /// `llm_signature` = `None` when LLM synthesis is disabled and
-    /// `Some("<provider>:<model>@<prompt-version>")` when it's on —
-    /// changing any of those invalidates the entry rather than
-    /// silently serving stale LLM-flavoured results.
+    /// `Some("<synth-provider>:<synth-model>@<prompt-version>+proof=<proof-provider>:<proof-model>|none")`
+    /// when it's on. The proof suffix is load-bearing: without it, two
+    /// runs with identical synthesis config but different
+    /// `ADR_PROOF_LLM` would collide on the same cache entry and a
+    /// cached artifact could serve stale proof claims. Changing any
+    /// pin field invalidates the entry rather than silently serving a
+    /// stale mix. Mirrors the RFC v0.3 §9 baseline pin at the cache
+    /// layer — see `worker.rs` where the signature is composed.
     ///
     /// `intent_fingerprint` = blake3 over caller intent + notes;
     /// supplying different intent or notes changes the output so

@@ -90,9 +90,22 @@ async fn run_inner(
     let pr_number = pr_ctx.pr_number;
     let user_id = pr_ctx.user_id.clone();
     let llm_cfg = LlmConfig::from_env();
-    let llm_sig = llm_cfg.as_ref().map(|c| {
-        format!("{}:{}@{}", c.provider, c.model, c.prompt_version)
-    });
+    // Cache signature spans synthesis + proof so two runs with the
+    // same synthesis model but different ADR_PROOF_LLM (or one with
+    // proof, one without) don't collide on the same cache entry and
+    // serve a stale artifact. Baseline pin (ArtifactBaseline) carries
+    // the same (probe/synthesis/proof) tuple at the RFC v0.3 §9 level;
+    // this line is the cache's side of the same invariant.
+    let llm_sig = match &llm_cfg {
+        Some(c) => {
+            let synth = format!("{}:{}@{}", c.provider, c.model, c.prompt_version);
+            let proof = LlmConfig::from_env_proof()
+                .map(|p| format!("{}:{}", p.provider, p.model))
+                .unwrap_or_else(|| "none".into());
+            Some(format!("{synth}+proof={proof}"))
+        }
+        None => None,
+    };
     let intent_fp = intent_fingerprint(intent.as_ref(), &notes);
 
     // Parse head first — it's cheap (10–30s) and gives us the
