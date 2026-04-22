@@ -100,3 +100,43 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repos_root_sits_next_to_cache_artifacts() {
+        let p = repos_root(Path::new("/tmp/adr/cache"));
+        assert_eq!(p, PathBuf::from("/tmp/adr/cache/repos"));
+    }
+
+    #[test]
+    fn checkout_path_nests_owner_repo_sha() {
+        // Load-bearing: the cache layer assumes this exact layout
+        // when garbage-collecting stale checkouts. Two different
+        // SHAs of the same repo must share the <owner>-<repo> dir
+        // so a git gc script can prune one without touching the
+        // other.
+        let p = checkout_path(Path::new("/cache"), "avifenesh", "glide-mq", "abc123");
+        assert_eq!(
+            p,
+            PathBuf::from("/cache/repos/avifenesh-glide-mq/abc123")
+        );
+    }
+
+    #[test]
+    fn checkout_path_differs_by_sha_not_repo() {
+        let a = checkout_path(Path::new("/c"), "o", "r", "sha-a");
+        let b = checkout_path(Path::new("/c"), "o", "r", "sha-b");
+        assert_ne!(a, b);
+        assert_eq!(a.parent(), b.parent(), "same repo → same parent dir");
+    }
+
+    #[test]
+    fn checkout_path_differs_by_owner() {
+        let a = checkout_path(Path::new("/c"), "alice", "r", "sha");
+        let b = checkout_path(Path::new("/c"), "bob", "r", "sha");
+        assert_ne!(a.parent(), b.parent());
+    }
+}
