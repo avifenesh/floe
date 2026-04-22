@@ -16,6 +16,8 @@ interface Props {
   jobId: string;
   sub: PrSubTab;
   onTop: (t: TopTab) => void;
+  onRebaseline?: () => void;
+  rebaselining?: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ interface Props {
  *   proof — intent + per-flow proof verdicts with claim breakdown.
  *   meta — identity header + stats + raw hunk list.
  */
-export function PrWorkspace({ artifact, jobId, sub, onTop }: Props) {
+export function PrWorkspace({ artifact, jobId, sub, onTop, onRebaseline, rebaselining }: Props) {
   const order = PR_SUB_TABS.findIndex((t) => t.key === sub);
   const body = (() => {
     switch (sub) {
@@ -45,7 +47,11 @@ export function PrWorkspace({ artifact, jobId, sub, onTop }: Props) {
   })();
   return (
     <>
-      <BaselineDriftBanner baseline={artifact.baseline} />
+      <BaselineDriftBanner
+        artifact={artifact}
+        onRebaseline={onRebaseline}
+        rebaselining={rebaselining}
+      />
       <SlideSwitch viewKey={`pr-${sub}`} order={order}>
         {body}
       </SlideSwitch>

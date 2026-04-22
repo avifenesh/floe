@@ -1202,16 +1202,20 @@ const CFG_GAP_X = 40;
 const CFG_PAD_TOP = 12;
 const CFG_NODE_X_OFFSET = (COL_W - CFG_NODE_W) / 2;
 
+/** Short, glanceable labels — `stmt` everywhere was visual noise
+ *  ("stmt / stmt / stmt / branch / stmt..."). Branches, loops, and
+ *  terminators get a glyph so the control-flow shape reads without
+ *  having to parse words; simple statements fall to a single dot. */
 const CFG_KIND_LABEL: Record<string, string> = {
-  entry: "entry",
-  exit: "exit",
-  seq: "stmt",
-  branch: "branch",
-  loop: "loop",
-  "async-boundary": "await",
-  throw: "throw",
-  try: "try",
-  return: "return",
+  entry: "▶ entry",
+  exit: "■ exit",
+  seq: "·",
+  branch: "◆ if",
+  loop: "↻ loop",
+  "async-boundary": "⏳ await",
+  throw: "✕ throw",
+  try: "◇ try",
+  return: "← return",
 };
 
 const CFG_KIND_FILL: Record<string, string> = {
@@ -1335,7 +1339,7 @@ function CfgFlowDiagram({
   }
 
   return (
-    <div className="w-full max-w-full overflow-x-auto rounded border border-border/60 bg-muted/10 p-2">
+    <div className="relative w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded border border-border/60 bg-muted/10">
       <svg
         width={totalW}
         height={totalH}
@@ -1461,8 +1465,12 @@ function CfgFlowDiagram({
             const x = xOff + p.x;
             const y = HEADER_H + p.y;
             return (
-              <g key={`cfgn-${c.item.name}-${n.id}`}>
-                <title>{`${k}  span ${n.span.start}..${n.span.end}`}</title>
+              <g
+                key={`cfgn-${c.item.name}-${n.id}`}
+                onClick={() => onSelect?.(c.item.name)}
+                className={onSelect ? "cursor-pointer" : undefined}
+              >
+                <title>{`${c.item.name}\n${k}  span ${n.span.start}..${n.span.end}\nclick to open source`}</title>
                 <rect
                   x={x}
                   y={y}
@@ -1855,12 +1863,126 @@ function IntentCard({
           )}
         </div>
       ) : (
-        <pre className="text-[12px] text-foreground whitespace-pre-wrap font-sans max-h-48 overflow-y-auto">
-          {intent}
-        </pre>
+        <div className="text-[12px] text-foreground max-h-72 overflow-y-auto">
+          <MiniMarkdown source={intent} />
+        </div>
       )}
     </section>
   );
+}
+
+/** Minimal markdown renderer — covers the patterns that show up in
+ *  PR descriptions: headings, bullet lists, blank-line-separated
+ *  paragraphs, and three inline marks (bold, italic, code). Anything
+ *  richer falls through as plain text. Ships without a markdown
+ *  library; the bundle doesn't need a third-party parser to render
+ *  what a PR body throws at us. */
+function MiniMarkdown({ source }: { source: string }) {
+  const blocks = splitBlocks(source);
+  return (
+    <div className="space-y-2 leading-relaxed">
+      {blocks.map((b, i) => {
+        if (b.kind === "heading") {
+          const cls =
+            b.level === 1
+              ? "text-[14px] font-semibold text-foreground"
+              : b.level === 2
+                ? "text-[13px] font-semibold text-foreground"
+                : "text-[12px] font-semibold text-foreground";
+          return (
+            <p key={i} className={cls}>
+              <InlineMd text={b.text} />
+            </p>
+          );
+        }
+        if (b.kind === "list") {
+          return (
+            <ul key={i} className="list-disc pl-5 space-y-0.5">
+              {b.items.map((it, j) => (
+                <li key={j}>
+                  <InlineMd text={it} />
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={i}>
+            <InlineMd text={b.text} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+type MdBlock =
+  | { kind: "paragraph"; text: string }
+  | { kind: "heading"; level: number; text: string }
+  | { kind: "list"; items: string[] };
+
+function splitBlocks(source: string): MdBlock[] {
+  const out: MdBlock[] = [];
+  const chunks = source.replace(/\r\n/g, "\n").split(/\n{2,}/);
+  for (const raw of chunks) {
+    const chunk = raw.trim();
+    if (!chunk) continue;
+    const lines = chunk.split("\n");
+    if (lines.every((l) => /^[-*+]\s+/.test(l))) {
+      out.push({
+        kind: "list",
+        items: lines.map((l) => l.replace(/^[-*+]\s+/, "")),
+      });
+      continue;
+    }
+    const h = lines[0].match(/^(#{1,6})\s+(.*)$/);
+    if (h && lines.length === 1) {
+      out.push({ kind: "heading", level: h[1].length, text: h[2] });
+      continue;
+    }
+    out.push({ kind: "paragraph", text: chunk });
+  }
+  return out;
+}
+
+/** Render inline bold, italic, and code spans. Unmatched marks fall
+ *  back to literal text. */
+function InlineMd({ text }: { text: string }) {
+  const parts: import("react").ReactNode[] = [];
+  // Greedy single pass: backticks first so code spans don't get
+  // italicised, then bold (**x**), then italic (*x*).
+  const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let lastIndex = 0;
+  for (const m of text.matchAll(re)) {
+    const idx = m.index ?? 0;
+    if (idx > lastIndex) parts.push(text.slice(lastIndex, idx));
+    const token = m[0];
+    if (token.startsWith("`")) {
+      parts.push(
+        <code
+          key={`c-${idx}`}
+          className="font-mono text-[11px] px-1 py-[1px] rounded bg-muted/60 text-foreground"
+        >
+          {token.slice(1, -1)}
+        </code>,
+      );
+    } else if (token.startsWith("**")) {
+      parts.push(
+        <strong key={`b-${idx}`} className="font-semibold text-foreground">
+          {token.slice(2, -2)}
+        </strong>,
+      );
+    } else {
+      parts.push(
+        <em key={`i-${idx}`} className="italic">
+          {token.slice(1, -1)}
+        </em>,
+      );
+    }
+    lastIndex = idx + token.length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return <>{parts}</>;
 }
 
 function IntentFitCard({

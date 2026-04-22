@@ -468,11 +468,18 @@ async fn get_job(
 ) -> Result<Json<JobView>, (StatusCode, String)> {
     // In-memory `Job` map is cleared on server restart. The DB row +
     // cached artifact survive though, so when we miss in-memory we
-    // try to rehydrate from cache (read-only — no Job is recreated;
-    // the response carries `Ready` + the artifact, which is all the
-    // FE workspace needs).
+    // rehydrate a minimal Job with base/head roots so subsequent
+    // `/file` requests can still serve source bytes. Without this,
+    // the Source view + NodeDetailPanel 404 on every post-restart
+    // visit.
     if !state.jobs.contains_key(&id) {
         if let Ok(Some(artifact)) = load_cached_artifact(&state, &id).await {
+            if let Some((base_root, head_root)) =
+                resolve_job_roots(&state, &id, &artifact).await
+            {
+                let job = Job::rehydrated(id, base_root, head_root, artifact.clone());
+                state.jobs.insert(id, job);
+            }
             return Ok(Json(JobView {
                 status: JobStatus::Ready,
                 artifact: Some(artifact),
@@ -488,6 +495,43 @@ async fn get_job(
     let status = job.status.read().await.clone();
     let artifact = job.artifact.read().await.clone();
     Ok(Json(JobView { status, artifact }))
+}
+
+/// Look up where this job's base/head snapshots live on disk,
+/// given a cache-hydrated artifact. Three sources:
+///
+/// 1. **Sample-run** (`pr.repo == "sample/<id>"`) — resolve via
+///    the in-memory samples table.
+/// 2. **GitHub URL-run** — reconstruct the git_sync checkout path
+///    from `(owner, name, sha)` in the artifact's pr_ref.
+/// 3. **Path-driven** — no persisted paths; returns `None` and the
+///    file endpoint will 404 cleanly.
+async fn resolve_job_roots(
+    state: &AppState,
+    _id: &uuid::Uuid,
+    artifact: &adr_core::Artifact,
+) -> Option<(PathBuf, PathBuf)> {
+    // Sample-run path.
+    if let Some(sample_id) = artifact.pr.repo.strip_prefix("sample/") {
+        if let Some(sample) = state.samples.get(sample_id) {
+            let base = sample.base.canonicalize().ok()?;
+            let head = sample.head.canonicalize().ok()?;
+            return Some((base, head));
+        }
+    }
+    // GitHub URL-run path. `pr.repo` is `owner/name`; base_sha +
+    // head_sha are the two commits git_sync checked out.
+    if let Some((owner, name)) = artifact.pr.repo.split_once('/') {
+        let cache_root = state.cache.root();
+        let base = git_sync::checkout_path(cache_root, owner, name, &artifact.pr.base_sha);
+        let head = git_sync::checkout_path(cache_root, owner, name, &artifact.pr.head_sha);
+        if base.is_dir() && head.is_dir() {
+            let base = base.canonicalize().ok()?;
+            let head = head.canonicalize().ok()?;
+            return Some((base, head));
+        }
+    }
+    None
 }
 
 #[derive(Debug, serde::Deserialize)]

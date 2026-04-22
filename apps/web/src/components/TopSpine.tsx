@@ -50,7 +50,23 @@ export function TopSpine({
   return (
     <header className="flex flex-col">
       <div className="h-10 flex items-center">
-        <div className="w-full max-w-6xl mx-auto px-6 flex items-center gap-6">
+        <div className="w-full max-w-6xl mx-auto px-6 flex items-center gap-4">
+          {/* Identity sits on the LEFT now, truncates aggressively. The
+              old right-side anchor competed with the flow tab row for
+              horizontal space and clipped the 3rd+ tabs behind itself
+              on typical viewports. */}
+          <div
+            className="text-[12px] font-mono text-muted-foreground shrink-0 truncate max-w-[160px]"
+            title={prLabel ?? "No PR loaded"}
+          >
+            {prLabel ?? "No PR loaded"}
+          </div>
+          {loaded && (
+            <span
+              aria-hidden
+              className="h-4 w-px bg-border shrink-0"
+            />
+          )}
           <nav className="flex items-center gap-4 min-w-0 flex-1 overflow-x-auto no-scrollbar">
             {loaded && (
               <TopTabButton
@@ -89,10 +105,6 @@ export function TopSpine({
               />
             ))}
           </nav>
-
-          <div className="text-[12px] font-mono text-muted-foreground shrink-0 truncate max-w-[220px]">
-            {prLabel ?? "No PR loaded"}
-          </div>
 
           <div className="shrink-0 flex items-center gap-3">
             <button

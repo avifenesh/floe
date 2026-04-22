@@ -51,4 +51,25 @@ impl Job {
             progress: tx,
         })
     }
+
+    /// Build a ready-state job pinned to an existing id + artifact.
+    /// Used by the router when a cached artifact is loaded after a
+    /// server restart so the file endpoint can still serve source
+    /// bytes. Progress channel is empty — the work is long done.
+    pub fn rehydrated(
+        id: uuid::Uuid,
+        base_root: PathBuf,
+        head_root: PathBuf,
+        artifact: Artifact,
+    ) -> Arc<Self> {
+        let (tx, _rx) = broadcast::channel(64);
+        Arc::new(Self {
+            id,
+            status: RwLock::new(JobStatus::Ready),
+            artifact: RwLock::new(Some(artifact)),
+            base_root,
+            head_root,
+            progress: tx,
+        })
+    }
 }
