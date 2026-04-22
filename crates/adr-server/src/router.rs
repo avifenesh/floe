@@ -414,7 +414,7 @@ async fn load_cached_artifact(
         Some(k) => k,
         None => return Ok(None),
     };
-    Ok(state.cache.get(&key)?)
+    state.cache.get(&key)
 }
 
 #[derive(Debug, Serialize)]

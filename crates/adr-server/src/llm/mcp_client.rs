@@ -262,10 +262,10 @@ impl McpClient {
             if let Some(err) = frame.get("error") {
                 return Err(anyhow!("mcp error on {method}: {err}"));
             }
-            return Ok(frame
+            return frame
                 .get("result")
                 .cloned()
-                .ok_or_else(|| anyhow!("mcp response missing `result`"))?);
+                .ok_or_else(|| anyhow!("mcp response missing `result`"));
         }
     }
 
@@ -297,8 +297,8 @@ impl McpClient {
             if trimmed.is_empty() {
                 continue;
             }
-            return Ok(serde_json::from_str(trimmed)
-                .with_context(|| format!("parsing mcp frame: {trimmed}"))?);
+            return serde_json::from_str(trimmed)
+                .with_context(|| format!("parsing mcp frame: {trimmed}"));
         }
     }
 }

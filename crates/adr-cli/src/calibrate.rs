@@ -168,7 +168,7 @@ fn compute_hunk_agreement(a: &[Flow], b: &[Flow]) -> f32 {
                     break;
                 }
             }
-            if agree > 0 && *a_flows.last().unwrap() as *const _ == *fa as *const _ {
+            if agree > 0 && std::ptr::eq(*a_flows.last().unwrap(), *fa) {
                 break;
             }
         }
