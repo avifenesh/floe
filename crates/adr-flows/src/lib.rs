@@ -26,11 +26,68 @@ pub fn cluster(artifact: &Artifact) -> Vec<Flow> {
             entities,
         });
     }
-    by_prefix
+    let mut flows: Vec<Flow> = by_prefix
         .into_iter()
         .enumerate()
         .map(|(i, (bucket, refs))| make_flow(i, &bucket, &refs))
-        .collect()
+        .collect();
+    // Fill propagation_edges: 1-hop callers/callees that touch a flow's
+    // entities but aren't themselves in the flow. Gives the reviewer
+    // "who else reaches into this" context without the full graph.
+    populate_propagation(&mut flows, artifact);
+    flows
+}
+
+/// For each flow, scan head graph edges and keep the ones where one
+/// endpoint is a flow entity and the other isn't — those are 1-hop
+/// propagation boundaries.
+fn populate_propagation(flows: &mut [Flow], artifact: &Artifact) {
+    let id_to_qname = node_qname_map(&artifact.head);
+    for flow in flows.iter_mut() {
+        let entity_set: std::collections::HashSet<&str> =
+            flow.entities.iter().map(String::as_str).collect();
+        let mut seen: std::collections::HashSet<(String, String)> =
+            std::collections::HashSet::new();
+        for e in &artifact.head.edges {
+            let (Some(from_name), Some(to_name)) = (
+                id_to_qname.get(&e.from).cloned(),
+                id_to_qname.get(&e.to).cloned(),
+            ) else {
+                continue;
+            };
+            let from_in = entity_set.contains(from_name.as_str());
+            let to_in = entity_set.contains(to_name.as_str());
+            // Internal edges (both in the flow) are the flow's own
+            // shape — Flow view already renders them. Skip.
+            if from_in == to_in {
+                continue;
+            }
+            let key = (from_name.clone(), to_name.clone());
+            if seen.insert(key.clone()) {
+                flow.propagation_edges.push(key);
+            }
+        }
+    }
+}
+
+fn node_qname_map(g: &Graph) -> BTreeMap<adr_core::graph::NodeId, String> {
+    let mut out = BTreeMap::new();
+    for n in &g.nodes {
+        if let Some(name) = qualified_name_of(n) {
+            out.insert(n.id, name);
+        }
+    }
+    out
+}
+
+fn qualified_name_of(n: &Node) -> Option<String> {
+    match &n.kind {
+        NodeKind::Function { name, .. } => Some(name.clone()),
+        NodeKind::Type { name, .. } => Some(name.clone()),
+        NodeKind::State { name, .. } => Some(name.clone()),
+        NodeKind::ApiEndpoint { path, .. } => Some(path.clone()),
+        NodeKind::File { path } => Some(path.clone()),
+    }
 }
 
 struct HunkRef {
@@ -83,7 +140,12 @@ fn make_flow(index: usize, bucket: &str, refs: &[HunkRef]) -> Flow {
         hunk_ids,
         entities,
         extra_entities: Vec::new(),
+        propagation_edges: Vec::new(),
         order: index as u32,
+        evidence: Vec::new(),
+        cost: None,
+        intent_fit: None,
+        proof: None,
     }
 }
 
