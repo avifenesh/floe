@@ -1,13 +1,14 @@
-/** Landing-page hero. Sits above the load form to teach a
+/** Landing-page hero. Sits above the samples gallery to teach a
  *  first-time visitor what the product is in ~5 seconds.
  *
- *  Three panels, stacked on mobile / side-by-side on desktop:
+ *  Two panels side by side (stacked on mobile):
  *  - Tagline + three-bullet pitch.
  *  - A sample flow card — shows what a real analysis looks like
  *    (intent-fit verdict, proof chip, cost bar) without needing to
  *    run one. This is the product explaining itself visually.
- *  - Primary CTA: Sign in with GitHub OR "Try on glide-mq #181"
- *    (pre-fills the form with the bundled fixture paths).
+ *
+ *  CTA row: Sign in with GitHub (primary) + "Try a sample" which
+ *  scrolls the samples gallery into view.
  */
 
 interface Props {
@@ -69,8 +70,8 @@ export function LandingHero({ signedIn, githubLoginUrl, onTrySample }: Props) {
               onClick={onTrySample}
               className="inline-flex items-center gap-2 text-[13px] font-medium rounded-md border border-border/60 bg-background px-4 py-2 hover:bg-muted transition-colors"
             >
-              <span aria-hidden>▶</span>
-              <span>Try on glide-mq #181</span>
+              <span aria-hidden>▼</span>
+              <span>Try a sample</span>
             </button>
           </div>
         </div>

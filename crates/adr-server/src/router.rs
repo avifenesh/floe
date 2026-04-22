@@ -22,6 +22,7 @@ use crate::db::DbStore;
 use crate::git_sync;
 use crate::job::{Job, JobStatus, ProgressEvent};
 use crate::llm::LlmConfig;
+use crate::samples::{SampleView, Samples};
 use crate::worker::{run_pipeline, PipelineRequest, PrContext};
 use axum_extra::extract::cookie::SignedCookieJar;
 
@@ -41,16 +42,28 @@ pub struct AppState {
     /// OAuth + signed-cookie config. `None` when `ADR_SESSION_SECRET`
     /// is unset — auth routes 404 and the FE never sees Sign-in.
     pub auth: Option<Arc<AuthConfig>>,
+    /// Demo PRs the landing page offers. Populated once at startup
+    /// from the fixtures root; empty when that root is absent.
+    pub samples: Arc<Samples>,
 }
 
 impl AppState {
-    pub fn new(cache_dir: PathBuf, db: DbStore, auth: Option<AuthConfig>) -> anyhow::Result<Self> {
+    pub fn new(
+        cache_dir: PathBuf,
+        db: DbStore,
+        auth: Option<AuthConfig>,
+        samples_root: Option<&Path>,
+    ) -> anyhow::Result<Self> {
+        let samples = samples_root
+            .map(Samples::load)
+            .unwrap_or_default();
         Ok(Self {
             jobs: Arc::new(DashMap::new()),
             cache: Arc::new(Cache::new(cache_dir)?),
             db,
             inflight: Arc::new(DashMap::new()),
             auth: auth.map(Arc::new),
+            samples: Arc::new(samples),
         })
     }
 }
@@ -94,6 +107,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/analyses", get(list_pr_analyses))
         .route("/analyses/:id", axum::routing::delete(delete_analysis))
         .route("/llm-config", get(get_llm_config))
+        .route("/samples", get(list_samples))
+        .route("/analyze/sample/:id", post(analyze_sample))
         .route("/health", get(|| async { "ok" }));
 
     if state.auth.is_some() {
@@ -606,6 +621,85 @@ impl LlmConfigView {
 
 async fn get_llm_config() -> Json<LlmConfigView> {
     Json(LlmConfigView::from_env())
+}
+
+/// `GET /samples` — the landing-page demo gallery. Model names only,
+/// no on-disk paths (see [`SampleView`]). Empty when the server was
+/// started without a fixtures root.
+async fn list_samples(State(state): State<AppState>) -> Json<Vec<SampleView>> {
+    Json(state.samples.view())
+}
+
+/// `POST /analyze/sample/:id` — kick off the same pipeline `/analyze`
+/// runs, but against a built-in sample the server resolves
+/// internally. Frontend never sees the on-disk paths.
+///
+/// Mirrors `/analyze` semantics for dedupe + spawn + cache behaviour
+/// so a click on the gallery card behaves identically to a `POST
+/// /analyze` with the sample's paths. Intent + notes aren't
+/// supported on sample runs in v0 — samples are intended for
+/// "show me what the product does", not "match your PR's claims
+/// against my code".
+async fn analyze_sample(
+    State(state): State<AppState>,
+    jar: SignedCookieJar,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
+    let sample = state
+        .samples
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("unknown sample id: {id}")))?
+        .clone();
+    let user_id = Session::from_jar(&jar).map(|s| s.user_id);
+    let base_root = sample
+        .base
+        .canonicalize()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("canonicalize sample base: {e}")))?;
+    let head_root = sample
+        .head
+        .canonicalize()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("canonicalize sample head: {e}")))?;
+
+    let dedupe_key = request_dedupe_key(&base_root, &head_root, None, "");
+    if let Some(entry) = state.inflight.get(&dedupe_key) {
+        let existing = *entry.value();
+        if let Some(job_ref) = state.jobs.get(&existing) {
+            let status = job_ref.status.read().await.clone();
+            if matches!(status, crate::job::JobStatus::Pending) {
+                return Ok(Json(AnalyzeResponse { job_id: existing }));
+            }
+        }
+    }
+
+    let job = Job::new(base_root.clone(), head_root.clone());
+    let job_id = job.id;
+    state.jobs.insert(job_id, job.clone());
+    state.inflight.insert(dedupe_key.clone(), job_id);
+    let cache = state.cache.clone();
+    let inflight = state.inflight.clone();
+    let db = state.db.clone();
+    // The sample id is the "repo" label so the sidebar can show it
+    // cleanly; pr_number stays None (these aren't real PRs).
+    let pr_ctx = PrContext {
+        repo: Some(format!("sample/{}", sample.id)),
+        pr_number: None,
+        user_id,
+    };
+    tokio::spawn(async move {
+        run_pipeline(PipelineRequest {
+            job,
+            base: base_root,
+            head: head_root,
+            cache,
+            db,
+            intent: None,
+            notes: String::new(),
+            pr_ctx,
+        })
+        .await;
+        inflight.remove_if(&dedupe_key, |_, v| *v == job_id);
+    });
+    Ok(Json(AnalyzeResponse { job_id }))
 }
 
 #[cfg(test)]

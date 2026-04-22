@@ -1,0 +1,4 @@
+{
+  "title": "Widen HTTP route signature",
+  "description": "A route handler's signature changes shape — an API-surface hunk. Demonstrates the API-delta evidence collectors and how signature-consistency claims surface when changes are compatible vs. breaking."
+}

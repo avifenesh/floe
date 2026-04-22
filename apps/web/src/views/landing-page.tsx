@@ -1,13 +1,14 @@
 /** Public landing page — shown only to unauthenticated visitors.
  *  The whole page is the sell: tagline, three-bullet explainer,
- *  sample flow preview, Sign-in primary CTA, Try secondary CTA.
+ *  sample gallery, Sign-in primary CTA.
+ *
  *  No form, no sidebar — signed-in users never see this view
  *  (App.tsx routes them to <Dashboard /> instead).
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  analyze,
+  analyzeSample,
   devLogin,
   githubLoginUrl,
   pollUntilDone,
@@ -16,9 +17,7 @@ import {
 import type { LoadedJob } from "@/App";
 import { LandingHero } from "@/views/landing-hero";
 import { PipelineProgress } from "@/views/pipeline-progress";
-
-const SAMPLE_BASE = "C:/Users/avife/AppData/Local/Temp/glide-mq-base-181";
-const SAMPLE_HEAD = "C:/Users/avife/AppData/Local/Temp/glide-mq-head-181";
+import { SamplesGallery } from "@/views/samples-gallery";
 
 const PIPELINE_BACKEND =
   typeof window !== "undefined" && window.location.port === "5173"
@@ -83,39 +82,59 @@ function DevLoginPanel() {
 
 export function LandingPage({ onJob }: Props) {
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // Track the live job view so we can surface progress even before the
-  // pipeline finishes — the Try button kicks off a real analysis.
+  // Track the live job view for progress surface even before the
+  // pipeline finishes.
   const [_job, _setJob] = useState<JobView | null>(null);
+  const galleryRef = useRef<HTMLDivElement | null>(null);
 
-  async function trySample() {
-    setBusy(true);
+  async function trySample(sampleId: string) {
     setErr(null);
+    setActiveSampleId(sampleId);
     _setJob({ status: "pending" });
     try {
-      const id = await analyze(SAMPLE_BASE, SAMPLE_HEAD);
+      const id = await analyzeSample(sampleId);
       setPendingJobId(id);
       const done = await pollUntilDone(id);
       _setJob(done);
       setPendingJobId(null);
+      setActiveSampleId(null);
       if (done.artifact) onJob({ jobId: id, artifact: done.artifact });
     } catch (e) {
       setErr(String(e));
       setPendingJobId(null);
+      setActiveSampleId(null);
       _setJob(null);
-    } finally {
-      setBusy(false);
     }
   }
+
+  function focusGallery() {
+    galleryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Keep the progress strip visible while a sample is spinning up;
+  // scroll it into view so the reviewer sees what the click did
+  // without having to hunt.
+  useEffect(() => {
+    if (pendingJobId) galleryRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [pendingJobId]);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <LandingHero
         signedIn={false}
         githubLoginUrl={githubLoginUrl}
-        onTrySample={() => void trySample()}
+        onTrySample={focusGallery}
       />
+
+      <div ref={galleryRef}>
+        <SamplesGallery
+          onPick={(id) => void trySample(id)}
+          disabled={pendingJobId !== null}
+          activeId={activeSampleId}
+        />
+      </div>
 
       {pendingJobId && (
         <PipelineProgress
@@ -130,19 +149,11 @@ export function LandingPage({ onJob }: Props) {
       )}
       {!pendingJobId && !err && (
         <p className="text-[12px] text-muted-foreground text-center">
-          Sign in above to analyse your own PRs — or click{" "}
-          <em>Try on glide-mq #181</em> to see a finished analysis.
+          Sign in above to analyse your own PRs — or pick a sample to see a
+          finished analysis without signing in.
         </p>
       )}
       <DevLoginPanel />
-
-      {busy && (
-        <p className="text-[10px] font-mono text-muted-foreground text-center">
-          {busy && pendingJobId
-            ? "Analysing — workspace opens when ready."
-            : ""}
-        </p>
-      )}
     </div>
   );
 }

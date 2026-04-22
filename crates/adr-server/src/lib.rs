@@ -16,6 +16,7 @@ pub mod git_sync;
 pub mod job;
 pub mod llm;
 pub mod router;
+pub mod samples;
 pub mod worker;
 
 pub use auth::{AuthConfig, Session};

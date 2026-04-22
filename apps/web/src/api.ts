@@ -57,6 +57,36 @@ export async function analyze(basePath: string, headPath: string): Promise<strin
   return j.job_id;
 }
 
+/** One demo PR the landing gallery offers. See `crates/adr-server/src/samples.rs`. */
+export interface SampleView {
+  id: string;
+  title: string;
+  description: string;
+}
+
+/** GET /samples — list of built-in demo PRs. Returns `[]` when the
+ *  server started without a fixtures root (bare-bones deploy). */
+export async function fetchSamples(): Promise<SampleView[]> {
+  const r = await fetch(`${BACKEND_BASE}/samples`, {
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`fetchSamples: ${r.status}`);
+  return (await r.json()) as SampleView[];
+}
+
+/** POST /analyze/sample/:id — kick off analysis on one of the
+ *  built-in samples. Server resolves the paths; the client never
+ *  sees or sends them. */
+export async function analyzeSample(sampleId: string): Promise<string> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/sample/${encodeURIComponent(sampleId)}`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`analyzeSample failed: ${r.status} ${await r.text()}`);
+  const j = (await r.json()) as { job_id: string };
+  return j.job_id;
+}
+
 export async function getJob(jobId: string): Promise<JobView> {
   const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}`, {
     credentials: "include",

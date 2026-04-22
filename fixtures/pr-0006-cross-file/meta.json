@@ -1,0 +1,4 @@
+{
+  "title": "Cross-file call widening",
+  "description": "Worker.ts now reaches into Queue.ts along a new call edge. Demonstrates propagation: the flow includes an unchanged file (Queue) because the new call pulls it into the runtime trajectory."
+}

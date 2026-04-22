@@ -1,0 +1,4 @@
+{
+  "title": "Widen Machine state union",
+  "description": "A new variant joins the state union; shows how a state hunk surfaces in isolation with the state-machine-typed nodes the analyzer tracks separately from calls."
+}

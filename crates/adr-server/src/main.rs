@@ -65,7 +65,24 @@ async fn main() -> Result<()> {
             "auth config loaded"
         );
     }
-    let state = adr_server::AppState::new(cache_dir.clone(), db, auth)?;
+    // Fixtures root: `ADR_SAMPLES_ROOT` overrides. Default is
+    // `<workspace>/fixtures` resolved relative to the current dir
+    // (which is how `cargo run` launches us, so a dev checkout
+    // "just works"). Self-hosters without a fixtures dir get an
+    // empty gallery — the landing hides itself gracefully.
+    let samples_root = std::env::var("ADR_SAMPLES_ROOT")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            let default = std::path::PathBuf::from("fixtures");
+            default.exists().then_some(default)
+        });
+    let state = adr_server::AppState::new(
+        cache_dir.clone(),
+        db,
+        auth,
+        samples_root.as_deref(),
+    )?;
     let app = adr_server::build_router(state);
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     tracing::info!(%addr, cache=%cache_dir.display(), "adr-server listening");

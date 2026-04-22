@@ -1,0 +1,4 @@
+{
+  "title": "Combined call + state + API changes",
+  "description": "One PR touches call edges, a state union, and an API signature in the same worker module. Shows how the flow pass decides whether they're one story or several — and lets the reviewer see all three hunk kinds rendered side by side."
+}

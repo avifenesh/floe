@@ -1,0 +1,4 @@
+{
+  "title": "Add retry to queue.enqueue",
+  "description": "Call-graph widens: enqueue now chains through retryWithBackoff. The flow pass should group the new hunk with the existing Queue.* entities; the reviewer sees one flow rather than two disconnected edges."
+}

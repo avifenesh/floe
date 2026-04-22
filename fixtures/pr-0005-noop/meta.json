@@ -1,0 +1,4 @@
+{
+  "title": "Noop (control)",
+  "description": "Comment-only edit — no architectural delta. The analyzer should produce zero hunks and the workspace should surface that honestly instead of manufacturing flows from whitespace."
+}
