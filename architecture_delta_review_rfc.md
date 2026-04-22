@@ -205,7 +205,7 @@ ADR_PROMPT_VERSION=v0.3.1                  # pre-inject + small-flow rule
 |:---|:---|:---|:---|
 | Flow synthesis | GLM-4.7 | Qwen 3.5 27B local | `artifact.flows[]` |
 | Intent-fit (per flow) | GLM-4.7 | — (skipped if no GLM) | `artifact.claims[].intent_fit` |
-| Proof-verification (per flow) | GLM-4.7 | — (skipped if no GLM) | `artifact.claims[].proof` + `Cost.axes.proof` |
+| Proof-verification (per flow) | GLM-4.7 | — (skipped if no GLM) | `flow.proof` (peer of `flow.cost`, not an axis — see §9) |
 
 **`adr-mcp` tool surface:**
 
@@ -276,13 +276,13 @@ Evidence attaches to claims within a flow, not to the PR globally.
 | **API** | Contract-test pass on the consumer map | Pact-style or in-repo |
 | **LOCK** | Unit test + asserted comment | vitest / jest |
 
-Proof debt is a first-class, **per-flow** field.
+Proof debt is a first-class, **per-flow** field — carried on `flow.proof`, not inside `flow.cost.axes`. See §9.
 
 ### 9 · Cost model — v0 (per-flow primary, aggregate secondary)
 
 **Core principle stands.** We are measuring LLM cognition: how expensive is it for the next session to safely continue work on the affected flow? Now flow is literal.
 
-- **Per-flow cost** is primary. Each flow has its own four signed axes (continuation · runtime · operational · proof), driver breakdown, and net.
+- **Per-flow cost** is primary. Each flow has its own three signed navigation axes (`continuation · runtime · operational`), driver breakdown, and net. **Proof lives outside cost** on the flow (`flow.proof`, peer of `flow.cost`) — cost is navigation movement, proof is evidence of stated intent, and mixing them confused reviewers about what each bar meant (correction from v0.2, which listed proof as a fourth axis).
 - **Aggregate PR cost** is the sum, shown on the all-flows overview.
 - **Drivers and baselines are unchanged from v0.1.** `grep_friendliness`, `file_read_cost`, `scopes_added`, `logical_steps`, `retrieval_ambiguity`, `docs_alignment` — each a continuous score per flow.
 - **Baseline pinning** remains `(commit_sha, llm_tool, llm_model, llm_version)` and includes the **flow-synthesis model** now. A baseline mismatch includes flow-synthesis model drift.
