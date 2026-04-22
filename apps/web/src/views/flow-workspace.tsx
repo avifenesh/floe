@@ -1011,9 +1011,10 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
           <span className="font-normal text-muted-foreground"> · {flow.name}</span>
         </h1>
         <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
-          One card per entity this flow touches. What changed at each
-          — signature, variants, call edges — lists below the name.
-          Click any card for source + cost contribution.
+          Entities as nodes, call edges as arrows — caller on the left,
+          callee on the right. Node border color marks morph status;
+          edge color marks added (green) vs removed (rose). Click any
+          node to open its source + cost contribution.
         </p>
         <div className="flex items-baseline gap-3 text-[10px] font-mono text-muted-foreground pt-0.5">
           <MorphLegend status="added" count={counts.added} />
@@ -1030,9 +1031,17 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
       ) : (
         <>
           <PropagationStrip flow={flow} />
-          {callPairs.length > 0 && (
-            <FlowCallSummary pairs={callPairs} />
-          )}
+          <EntityGraph
+            items={items}
+            callPairs={callPairs}
+            onSelect={(n) => setSelected(n)}
+          />
+          {/* Cards below the graph keep the per-entity hunk detail
+              (signature diffs / variant lists / edge counts) the
+              graph nodes can't fit. Drag-to-reorder stays here. */}
+          <h2 className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground pt-1">
+            Per-entity detail
+          </h2>
           <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {items.map((it) => (
               <li
@@ -1087,6 +1096,225 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
     </div>
   );
 }
+
+/** Entity-level call graph — SVG. Nodes are flow entities laid out
+ *  in columns by topological level (caller → callee, left to right).
+ *  Edges are colored by morph verb (added = emerald, removed = rose,
+ *  unchanged = muted). Node border color marks the entity's own
+ *  status (added / removed / changed / unchanged). Click a node to
+ *  open the source panel for that entity.
+ *
+ *  Not draggable — auto-layout. The per-entity detail cards below
+ *  are still drag-to-reorder for the reviewer's own reading order. */
+function EntityGraph({
+  items,
+  callPairs,
+  onSelect,
+}: {
+  items: {
+    name: string;
+    status: MorphStatus;
+    file: string;
+    hunks: import("@/types/artifact").Hunk[];
+  }[];
+  callPairs: { from: string; to: string; verb: "added" | "removed" }[];
+  onSelect: (entity: string) => void;
+}) {
+  // Level = longest caller-chain from a root (no incoming caller
+  // in this flow). Used as the x-column index. Cycles are clamped
+  // by tracking visited entities in the recursive walk.
+  const byName = new Map(items.map((it) => [it.name, it]));
+  const incomingByName = new Map<string, string[]>();
+  for (const it of items) incomingByName.set(it.name, []);
+  for (const p of callPairs) {
+    if (p.verb === "removed") continue; // removed edges don't shape layout
+    const inc = incomingByName.get(p.to);
+    if (inc && !inc.includes(p.from) && p.from !== p.to) inc.push(p.from);
+  }
+  const levelCache = new Map<string, number>();
+  const levelOf = (name: string, seen: Set<string> = new Set()): number => {
+    if (levelCache.has(name)) return levelCache.get(name)!;
+    if (seen.has(name)) return 0;
+    seen.add(name);
+    const inc = incomingByName.get(name) ?? [];
+    const lv = inc.length === 0 ? 0 : 1 + Math.max(...inc.map((p) => levelOf(p, seen)));
+    levelCache.set(name, lv);
+    return lv;
+  };
+  const levels = items.map((it) => ({ name: it.name, level: levelOf(it.name) }));
+  const byLevel = new Map<number, string[]>();
+  for (const { name, level } of levels) {
+    const col = byLevel.get(level) ?? [];
+    col.push(name);
+    byLevel.set(level, col);
+  }
+  const columnKeys = [...byLevel.keys()].sort((a, b) => a - b);
+
+  // Layout constants.
+  const NODE_W = 180;
+  const NODE_H = 56;
+  const COL_GAP = 72;
+  const ROW_GAP = 20;
+  const PAD = 16;
+
+  // Compute positions.
+  const pos = new Map<string, { x: number; y: number }>();
+  let maxRows = 0;
+  columnKeys.forEach((lv, ci) => {
+    const col = byLevel.get(lv) ?? [];
+    maxRows = Math.max(maxRows, col.length);
+    col.forEach((name, ri) => {
+      pos.set(name, {
+        x: PAD + ci * (NODE_W + COL_GAP),
+        y: PAD + ri * (NODE_H + ROW_GAP),
+      });
+    });
+  });
+  const totalW = PAD * 2 + columnKeys.length * NODE_W + Math.max(0, columnKeys.length - 1) * COL_GAP;
+  const totalH = PAD * 2 + maxRows * NODE_H + Math.max(0, maxRows - 1) * ROW_GAP;
+
+  // Edge list — straight line from right-center of caller to
+  // left-center of callee, plus a tiny bezier bend so crossings
+  // read cleanly.
+  const edges = callPairs
+    .filter((p) => pos.has(p.from) && pos.has(p.to))
+    .map((p) => {
+      const a = pos.get(p.from)!;
+      const b = pos.get(p.to)!;
+      const x1 = a.x + NODE_W;
+      const y1 = a.y + NODE_H / 2;
+      const x2 = b.x;
+      const y2 = b.y + NODE_H / 2;
+      const midX = (x1 + x2) / 2;
+      return { p, d: `M ${x1},${y1} C ${midX},${y1} ${midX},${y2} ${x2},${y2}` };
+    });
+
+  return (
+    <div className="relative w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded border border-border/60 bg-muted/10 shadow-sm">
+      <svg
+        width={totalW}
+        height={totalH}
+        viewBox={`0 0 ${totalW} ${totalH}`}
+        className="block"
+        style={{ minWidth: totalW }}
+      >
+        <defs>
+          <marker
+            id="eg-arrow-added"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-emerald-500/80" />
+          </marker>
+          <marker
+            id="eg-arrow-removed"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-rose-500/80" />
+          </marker>
+        </defs>
+
+        {/* Edges first — behind nodes */}
+        {edges.map((e, i) => (
+          <path
+            key={`e-${i}`}
+            d={e.d}
+            fill="none"
+            strokeWidth={1.3}
+            className={
+              e.p.verb === "added"
+                ? "stroke-emerald-500/70"
+                : "stroke-rose-500/70"
+            }
+            strokeDasharray={e.p.verb === "removed" ? "5 3" : undefined}
+            markerEnd={`url(#eg-arrow-${e.p.verb})`}
+          />
+        ))}
+
+        {/* Nodes on top */}
+        {items.map((it) => {
+          const p = pos.get(it.name);
+          if (!p) return null;
+          const file = it.file.split("/").pop() ?? it.file;
+          const short = it.name.length > 22 ? it.name.slice(0, 21) + "\u2026" : it.name;
+          return (
+            <g
+              key={it.name}
+              onClick={() => onSelect(it.name)}
+              className="cursor-pointer"
+            >
+              <title>{`${it.name}\n${it.file}\nstatus: ${it.status}\nclick to open source`}</title>
+              <rect
+                x={p.x}
+                y={p.y}
+                width={NODE_W}
+                height={NODE_H}
+                rx={6}
+                className={
+                  "fill-background stroke-[1.3] " +
+                  ENTITY_GRAPH_BORDER[it.status]
+                }
+              />
+              <circle
+                cx={p.x + 10}
+                cy={p.y + 12}
+                r={3}
+                className={ENTITY_GRAPH_DOT[it.status]}
+              />
+              <text
+                x={p.x + 20}
+                y={p.y + 16}
+                className="fill-foreground"
+                style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 500 }}
+              >
+                {short}
+              </text>
+              <text
+                x={p.x + 12}
+                y={p.y + 32}
+                className="fill-muted-foreground"
+                style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+              >
+                {it.status} · {file}
+              </text>
+              <text
+                x={p.x + 12}
+                y={p.y + 47}
+                className="fill-muted-foreground"
+                style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+              >
+                {it.hunks.length} hunk{it.hunks.length === 1 ? "" : "s"}
+                {byName.get(it.name) && ""}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+const ENTITY_GRAPH_BORDER: Record<MorphStatus, string> = {
+  added: "stroke-emerald-500/70",
+  removed: "stroke-rose-500/70",
+  changed: "stroke-amber-500/70",
+  unchanged: "stroke-border",
+};
+const ENTITY_GRAPH_DOT: Record<MorphStatus, string> = {
+  added: "fill-emerald-500",
+  removed: "fill-rose-500",
+  changed: "fill-amber-500",
+  unchanged: "fill-muted-foreground/50",
+};
 
 /** One entity card for the entity-centric Flow view. Shows name +
  *  file + morph-status pill at top, and a compact list of "what
@@ -1220,51 +1448,9 @@ function HunkLine({
   return <span className="text-muted-foreground">hunk</span>;
 }
 
-/** Compact call-pair summary for the flow: who calls who.
- *  Arrow-separated rows — a flat list beats a SVG layout when there
- *  are a handful of calls, and it scales gracefully. */
-function FlowCallSummary({
-  pairs,
-}: {
-  pairs: { from: string; to: string; verb: "added" | "removed" }[];
-}) {
-  if (pairs.length === 0) return null;
-  return (
-    <div className="rounded border border-border/60 bg-muted/5 px-3 py-2 text-[11px] font-mono space-y-1">
-      <div className="flex items-baseline gap-2">
-        <span className="uppercase tracking-wide text-[10px] text-muted-foreground">
-          call edges ({pairs.length})
-        </span>
-      </div>
-      <ul className="space-y-0.5">
-        {pairs.map((p, i) => (
-          <li key={i} className="flex items-baseline gap-2 flex-wrap">
-            <span
-              className={
-                "inline-block w-1.5 h-1.5 rounded-full " +
-                (p.verb === "added" ? "bg-emerald-500/80" : "bg-rose-500/80")
-              }
-              aria-hidden
-            />
-            <span className="text-foreground">{p.from}</span>
-            <span className="text-muted-foreground">→</span>
-            <span className="text-foreground">{p.to}</span>
-            <span
-              className={
-                "ml-auto text-[10px] uppercase tracking-wide " +
-                (p.verb === "added"
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-rose-700 dark:text-rose-300")
-              }
-            >
-              {p.verb}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+// FlowCallSummary removed — EntityGraph renders the call pairs as
+// SVG arrows now, which is the same information in a more honest
+// shape.
 
 /** Strip of external callers/callees that reach this flow's entities.
  *  Populated from `Flow.propagation_edges` (1-hop in v0). Split into
