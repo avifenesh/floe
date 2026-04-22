@@ -73,6 +73,92 @@ export function countFunctions(graph: Artifact["base"]): number {
   return graph.nodes.filter((n) => "type" in n.kind && n.kind.type === "function").length;
 }
 
+/** Per-type hunk counts across an artifact or a scoped hunk list. */
+export function hunkTypeCounts(
+  hunks: Artifact["hunks"],
+): { call: number; state: number; api: number; total: number } {
+  let call = 0;
+  let state = 0;
+  let api = 0;
+  for (const h of hunks) {
+    if (h.kind.kind === "call") call++;
+    else if (h.kind.kind === "state") state++;
+    else if (h.kind.kind === "api") api++;
+  }
+  return { call, state, api, total: call + state + api };
+}
+
+/** Hunk objects belonging to a flow (by id). */
+export function flowHunks(a: Artifact, hunkIds: string[]): Artifact["hunks"] {
+  const wanted = new Set(hunkIds);
+  return a.hunks.filter((h) => wanted.has(h.id));
+}
+
+/** File paths a single hunk touches (caller file for call hunks, defining
+ *  file for state/api). Unions both sides when node provenance differs. */
+export function filesOfHunk(a: Artifact, hunkId: string): string[] {
+  const h = a.hunks.find((x) => x.id === hunkId);
+  if (!h) return [];
+  const files = new Set<string>();
+  const k = h.kind;
+  if (k.kind === "call") {
+    for (const id of k.added_edges) {
+      const e = edgeById(a.head, id);
+      const n = e && nodeById(a.head, e.from);
+      if (n) files.add(n.file);
+    }
+    for (const id of k.removed_edges) {
+      const e = edgeById(a.base, id);
+      const n = e && nodeById(a.base, e.from);
+      if (n) files.add(n.file);
+    }
+  } else {
+    const hn = nodeById(a.head, k.node);
+    if (hn) files.add(hn.file);
+    const bn = nodeById(a.base, k.node);
+    if (bn) files.add(bn.file);
+  }
+  return Array.from(files);
+}
+
+/** Per-file hunk count across the whole artifact. A hunk that touches two
+ *  files counts once per file. */
+export function hunkCountByFile(a: Artifact): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const h of a.hunks) {
+    for (const file of filesOfHunk(a, h.id)) {
+      out.set(file, (out.get(file) ?? 0) + 1);
+    }
+  }
+  return out;
+}
+
+/** Per-file flow list — which flows participate in this file. */
+export function flowsByFile(a: Artifact): Map<string, import("@/types/artifact").Flow[]> {
+  const flows = a.flows ?? [];
+  const acc = new Map<string, Set<string>>();
+  const byId = new Map(flows.map((f) => [f.id, f] as const));
+  for (const f of flows) {
+    for (const hid of f.hunk_ids) {
+      for (const file of filesOfHunk(a, hid)) {
+        const s = acc.get(file) ?? new Set<string>();
+        s.add(f.id);
+        acc.set(file, s);
+      }
+    }
+  }
+  const out = new Map<string, import("@/types/artifact").Flow[]>();
+  for (const [file, ids] of acc) {
+    out.set(
+      file,
+      Array.from(ids)
+        .map((id) => byId.get(id))
+        .filter((x): x is import("@/types/artifact").Flow => !!x),
+    );
+  }
+  return out;
+}
+
 /** Short, reviewer-friendly PR label from the fixture base/head paths. */
 export function deriveSlug(basePath: string, headPath: string): string {
   const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");

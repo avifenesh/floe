@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn";
 import { useTheme } from "@/lib/theme";
+import { flowLabel } from "@/lib/flow-color";
 import type { Flow } from "@/types/artifact";
 import {
   FLOW_SUB_TABS,
@@ -40,23 +41,17 @@ export function TopSpine({
 }: Props) {
   const [theme, setTheme] = useTheme();
   const loaded = prLabel !== null;
+
+  // Left-anchored nav: PR first, then top-level (if present), then class flows.
+  const topLevelIdx = flows.findIndex((f) => flowLabel(f).toLowerCase() === "top-level");
+  const topLevel = topLevelIdx >= 0 ? flows[topLevelIdx] : null;
+  const otherFlows = topLevelIdx >= 0 ? flows.filter((_, i) => i !== topLevelIdx) : flows;
+
   return (
     <header className="flex flex-col">
       <div className="h-10 flex items-center">
         <div className="w-full max-w-6xl mx-auto px-6 flex items-center gap-6">
-          <div className="text-[12px] font-mono text-muted-foreground shrink-0 truncate max-w-[180px]">
-            {prLabel ?? "No PR loaded"}
-          </div>
-
           <nav className="flex items-center gap-4 min-w-0 flex-1 overflow-x-auto no-scrollbar">
-            {flows.map((f) => (
-              <TopTabButton
-                key={f.id}
-                active={top.kind === "flow" && top.flowId === f.id}
-                onClick={() => onTop({ kind: "flow", flowId: f.id })}
-                label={flowLabel(f)}
-              />
-            ))}
             {loaded && (
               <TopTabButton
                 active={top.kind === "pr"}
@@ -64,7 +59,40 @@ export function TopSpine({
                 label="PR"
               />
             )}
+            {loaded && flows.length > 0 && (
+              <>
+                <span
+                  aria-hidden
+                  className="h-4 w-px bg-border shrink-0"
+                />
+                <span className="text-[10px] font-mono tracking-[0.12em] uppercase text-muted-foreground shrink-0">
+                  Flows:
+                </span>
+              </>
+            )}
+            {topLevel && (
+              <TopTabButton
+                key={topLevel.id}
+                active={top.kind === "flow" && top.flowId === topLevel.id}
+                onClick={() => onTop({ kind: "flow", flowId: topLevel.id })}
+                label={flowLabel(topLevel)}
+                framed
+              />
+            )}
+            {otherFlows.map((f) => (
+              <TopTabButton
+                key={f.id}
+                active={top.kind === "flow" && top.flowId === f.id}
+                onClick={() => onTop({ kind: "flow", flowId: f.id })}
+                label={flowLabel(f)}
+                framed
+              />
+            ))}
           </nav>
+
+          <div className="text-[12px] font-mono text-muted-foreground shrink-0 truncate max-w-[220px]">
+            {prLabel ?? "No PR loaded"}
+          </div>
 
           <div className="shrink-0 flex items-center gap-3">
             <button
@@ -112,11 +140,28 @@ function TopTabButton({
   active,
   onClick,
   label,
+  framed,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  framed?: boolean;
 }) {
+  if (framed) {
+    return (
+      <button
+        onClick={onClick}
+        className={cn(
+          "text-[12px] tracking-tight transition-colors shrink-0 whitespace-nowrap px-2.5 py-1 rounded border",
+          active
+            ? "text-foreground font-semibold border-foreground/60 bg-muted/60"
+            : "text-muted-foreground font-medium border-border/50 hover:text-foreground hover:border-border",
+        )}
+      >
+        {label}
+      </button>
+    );
+  }
   return (
     <button
       onClick={onClick}
@@ -131,7 +176,7 @@ function TopTabButton({
       {active && (
         <span
           aria-hidden
-          className="absolute left-0 right-0 -bottom-[1px] h-[2px] bg-foreground rounded-full"
+          className="absolute left-0 right-0 -bottom-[1px] h-[2px] rounded-full bg-foreground"
         />
       )}
     </button>
@@ -168,9 +213,3 @@ function SubTabButton({
   );
 }
 
-/** Shorten a flow's name for tab display — drop the `<structural: >` wrapper
- *  when present so the bucket stands on its own. */
-function flowLabel(f: Flow): string {
-  const m = f.name.match(/^<structural:\s*(.+?)>$/);
-  return m ? m[1] : f.name;
-}

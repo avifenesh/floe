@@ -23,7 +23,8 @@ export type FlowSubTab =
   | "delta"
   | "evidence"
   | "source"
-  | "cost";
+  | "cost"
+  | "proof";
 
 /** Whole-PR sub-tabs. */
 export type PrSubTab =
@@ -31,6 +32,7 @@ export type PrSubTab =
   | "diff"
   | "structure"
   | "cost"
+  | "proof"
   | "meta";
 
 export const FLOW_SUB_TABS: { key: FlowSubTab; label: string }[] = [
@@ -41,6 +43,7 @@ export const FLOW_SUB_TABS: { key: FlowSubTab; label: string }[] = [
   { key: "evidence", label: "Evidence" },
   { key: "source", label: "Source" },
   { key: "cost", label: "Cost" },
+  { key: "proof", label: "Intent & Proof" },
 ];
 
 export const PR_SUB_TABS: { key: PrSubTab; label: string }[] = [
@@ -48,5 +51,6 @@ export const PR_SUB_TABS: { key: PrSubTab; label: string }[] = [
   { key: "diff", label: "Diff" },
   { key: "structure", label: "Structure" },
   { key: "cost", label: "Cost" },
+  { key: "proof", label: "Intent & Proof" },
   { key: "meta", label: "Meta" },
 ];

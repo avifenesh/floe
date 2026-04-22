@@ -24,9 +24,9 @@ export function PrHunks({ artifact }: { artifact: Artifact }) {
 
 function HunkRow({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {
   return (
-    <div className="grid grid-cols-[60px,1fr] gap-3 items-baseline">
-      <div className="text-[11px] font-medium text-muted-foreground tracking-wide">
-        {hunkLabel(hunk.kind.kind)}
+    <div className="grid grid-cols-[68px,1fr] gap-3 items-start">
+      <div className="pt-0.5">
+        <TypeBadge kind={hunk.kind.kind} />
       </div>
       <div>
         <HunkBody artifact={artifact} hunk={hunk} />
@@ -35,15 +35,15 @@ function HunkRow({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {
   );
 }
 
-function hunkLabel(k: "call" | "state" | "api"): string {
-  switch (k) {
-    case "call":
-      return "Call";
-    case "state":
-      return "State";
-    case "api":
-      return "API";
-  }
+function TypeBadge({ kind }: { kind: "call" | "state" | "api" }) {
+  const dot =
+    kind === "call" ? "bg-sky-500/50" : kind === "state" ? "bg-violet-500/50" : "bg-emerald-500/50";
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono tracking-wide uppercase text-muted-foreground">
+      <span aria-hidden className={cn("inline-block w-1.5 h-1.5 rounded-full", dot)} />
+      {kind}
+    </span>
+  );
 }
 
 function HunkBody({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {

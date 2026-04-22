@@ -108,3 +108,32 @@
     -ms-overflow-style: none;
   }
 }
+
+/* Workspace sub-view slide transitions (RFC: 220–340 ms ease-out,
+   direction-aware, replays on every switch). Key change on the
+   wrapping <SlideSwitch> remounts the child — the animation plays
+   from scratch each time. */
+@layer utilities {
+  @keyframes adr-slide-from-right {
+    from { transform: translateX(24px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes adr-slide-from-left {
+    from { transform: translateX(-24px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes adr-slide-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .adr-slide-from-right { animation: adr-slide-from-right 260ms ease-out; }
+  .adr-slide-from-left { animation: adr-slide-from-left 260ms ease-out; }
+  .adr-slide-fade { animation: adr-slide-fade 220ms ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    .adr-slide-from-right,
+    .adr-slide-from-left,
+    .adr-slide-fade {
+      animation: none !important;
+    }
+  }
+}

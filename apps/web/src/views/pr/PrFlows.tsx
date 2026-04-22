@@ -1,5 +1,7 @@
 import type { Artifact, Flow } from "@/types/artifact";
 import { cn } from "@/lib/cn";
+import { filesTouched, flowHunks, hunkTypeCounts } from "@/lib/artifact";
+import { flowLabel } from "@/lib/flow-color";
 
 interface Props {
   artifact: Artifact;
@@ -8,31 +10,34 @@ interface Props {
 
 /**
  * Flow overview on the PR page — the v0.2 primary landing. Each flow is a
- * card (name, source badge, rationale, counts). The banner above the list
- * fires when any flow is still `structural`: the host wanted LLM synthesis
- * but didn't get it (LLM off, unavailable, or rejected).
- *
- * No scope switching yet — this is the simplest cut. Click-to-scope lands
- * when the flow ribbon in the spine comes online.
+ * card (name, source badge, rationale, counts). Flows are sorted by weight
+ * (hunks + entities) so the heaviest lands first.
  */
 export function PrFlows({ artifact, onPick }: Props) {
   const flows = artifact.flows ?? [];
   if (flows.length === 0) {
     return null;
   }
-  const anyStructural = flows.some((f) => (f.source as { kind: string }).kind === "structural");
+  const ranked = [...flows].sort((a, b) => weight(b) - weight(a));
+  const maxWeight = Math.max(...ranked.map(weight), 1);
+
   return (
-    <section className="space-y-3">
+    <section className="space-y-4">
+      <ScaleStrip artifact={artifact} />
       <div className="flex items-baseline justify-between">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
-          Flows ({flows.length})
+          Flows ({flows.length}) · ranked by weight
         </h2>
-        {anyStructural && <StructuralBanner />}
       </div>
       <ol className="space-y-2">
-        {flows.map((f) => (
+        {ranked.map((f) => (
           <li key={f.id}>
-            <FlowCard flow={f} onPick={onPick} />
+            <FlowCard
+              artifact={artifact}
+              flow={f}
+              onPick={onPick}
+              maxWeight={maxWeight}
+            />
           </li>
         ))}
       </ol>
@@ -40,10 +45,91 @@ export function PrFlows({ artifact, onPick }: Props) {
   );
 }
 
-function FlowCard({ flow, onPick }: { flow: Flow; onPick?: (id: string) => void }) {
+function weight(f: Flow): number {
+  return f.hunk_ids.length * 2 + f.entities.length;
+}
+
+/* -------------------------------------------------------------------------- */
+/* PR scale strip                                                             */
+/* -------------------------------------------------------------------------- */
+
+function ScaleStrip({ artifact }: { artifact: Artifact }) {
+  const files = filesTouched(artifact).length;
+  const flows = artifact.flows?.length ?? 0;
+  const counts = hunkTypeCounts(artifact.hunks);
+  const entities = new Set<string>();
+  for (const f of artifact.flows ?? []) for (const e of f.entities) entities.add(e);
+  return (
+    <div className="rounded border border-border/60 bg-muted/20 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <Stat value={files} label={files === 1 ? "file" : "files"} />
+      <Stat value={counts.total} label={counts.total === 1 ? "hunk" : "hunks"} />
+      <Stat value={flows} label={flows === 1 ? "flow" : "flows"} />
+      <Stat value={entities.size} label={entities.size === 1 ? "entity" : "entities"} />
+      <div className="ml-auto shrink-0">
+        <TypeRatioBar counts={counts} />
+      </div>
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="flex items-baseline gap-1.5 text-[12px] font-mono">
+      <span className="text-foreground font-semibold tabular-nums">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+function TypeRatioBar({
+  counts,
+}: {
+  counts: { call: number; state: number; api: number; total: number };
+}) {
+  return (
+    <div className="flex items-baseline gap-3 text-[11px] font-mono text-muted-foreground">
+      <HunkTypeCount label="call" n={counts.call} />
+      <HunkTypeCount label="state" n={counts.state} />
+      <HunkTypeCount label="api" n={counts.api} />
+    </div>
+  );
+}
+
+function HunkTypeCount({ label, n }: { label: string; n: number }) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="text-foreground font-semibold tabular-nums">{n}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Flow card                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function FlowCard({
+  artifact,
+  flow,
+  onPick,
+  maxWeight,
+}: {
+  artifact: Artifact;
+  flow: Flow;
+  onPick?: (id: string) => void;
+  maxWeight: number;
+}) {
   const source = flow.source as { kind: string; model?: string; version?: string };
   const isStructural = source.kind === "structural";
   const clickable = !!onPick;
+  const scopedHunks = flowHunks(artifact, flow.hunk_ids);
+  const counts = hunkTypeCounts(scopedHunks);
+  const label = flowLabel(flow);
+  const w = flow.hunk_ids.length * 2 + flow.entities.length;
+  const widthPct = Math.max(4, Math.round((w / maxWeight) * 100));
+  const topEntities = flow.entities.slice(0, 3);
+  const extraEntities = Math.max(0, flow.entities.length - topEntities.length);
+
   return (
     <div
       onClick={clickable ? () => onPick!(flow.id) : undefined}
@@ -60,53 +146,66 @@ function FlowCard({ flow, onPick }: { flow: Flow; onPick?: (id: string) => void 
           : undefined
       }
       className={cn(
-        "rounded border px-3 py-2 space-y-1 transition-colors",
-        isStructural
-          ? "bg-muted/30 border-border/60"
-          : "bg-amber-50 dark:bg-amber-400/5 border-amber-200 dark:border-amber-400/20",
-        clickable && "cursor-pointer hover:bg-muted/60",
+        "rounded-r border border-l-[3px] border-border/60 border-l-muted-foreground/30 bg-muted/20 px-3 py-2.5 space-y-2 transition-colors",
+        clickable && "cursor-pointer hover:bg-muted/40",
       )}
     >
       <div className="flex items-baseline gap-2">
-        <span
-          className={cn(
-            "text-[13px] font-mono",
-            isStructural ? "text-muted-foreground" : "text-foreground font-semibold",
-          )}
-        >
-          {flow.name}
+        <span className="text-[13px] font-mono font-semibold text-foreground">
+          {label}
         </span>
-        <SourceBadge source={source} />
+        {isStructural ? (
+          <span className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground">
+            structural
+          </span>
+        ) : (
+          <span className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-400/15 dark:text-emerald-200 dark:border-emerald-400/30">
+            {source.model ? `llm: ${source.model}` : "llm"}
+          </span>
+        )}
         <span className="ml-auto text-[11px] font-mono text-muted-foreground tabular-nums">
-          {flow.hunk_ids.length} hunk{flow.hunk_ids.length === 1 ? "" : "s"}
-          {" · "}
-          {flow.entities.length} entit{flow.entities.length === 1 ? "y" : "ies"}
+          {flow.hunk_ids.length}h · {flow.entities.length}e
         </span>
       </div>
-      <p className="text-[12px] text-muted-foreground leading-relaxed">{flow.rationale}</p>
+
+      {/* Weight bar — visual anchor for "how heavy is this flow?" */}
+      <div className="h-[3px] rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full bg-muted-foreground/40"
+          style={{ width: `${widthPct}%` }}
+        />
+      </div>
+
+      {/* Top entities + type ratio pills — what's actually in the flow */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {topEntities.map((e) => (
+          <span
+            key={e}
+            className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-background/60 border border-border/50 text-foreground/80"
+          >
+            {e}
+          </span>
+        ))}
+        {extraEntities > 0 && (
+          <span className="text-[11px] font-mono text-muted-foreground">
+            +{extraEntities} more
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
+          {counts.call > 0 && <TypePill kind="call" n={counts.call} />}
+          {counts.state > 0 && <TypePill kind="state" n={counts.state} />}
+          {counts.api > 0 && <TypePill kind="api" n={counts.api} />}
+        </span>
+      </div>
     </div>
   );
 }
 
-function SourceBadge({ source }: { source: { kind: string; model?: string } }) {
-  if (source.kind === "structural") {
-    return (
-      <span className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground">
-        structural
-      </span>
-    );
-  }
+function TypePill({ kind, n }: { kind: "call" | "state" | "api"; n: number }) {
   return (
-    <span className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-400/15 dark:text-emerald-200 dark:border-emerald-400/30">
-      {source.model ? `llm: ${source.model}` : "llm"}
+    <span className="text-muted-foreground">
+      {kind} {n}
     </span>
   );
 }
 
-function StructuralBanner() {
-  return (
-    <span className="text-[10px] font-mono tracking-wide px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-400/15 dark:text-amber-200 dark:border-amber-400/30">
-      Structural clustering — LLM synthesis not available
-    </span>
-  );
-}

@@ -1,34 +1,65 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchFile } from "@/api";
-import { byteToLine, changedFiles, hunkTouches, type HunkClass } from "@/lib/artifact";
+import {
+  byteToLine,
+  changedFiles,
+  flowsByFile as flowsByFileFn,
+  hunkCountByFile,
+  hunkTouches,
+  type HunkClass,
+} from "@/lib/artifact";
 import { clipContext, enrichWordLevel, lineDiff } from "@/lib/diff";
 import { highlight, langForPath, type HighlightedLines } from "@/lib/highlight";
 import { useTheme } from "@/lib/theme";
 
 import type { Artifact } from "@/types/artifact";
 import { DiffView, type LineTouches } from "./source/DiffView";
-import { FileTabs } from "./source/FileTabs";
+import { FileSidebar } from "./source/FileSidebar";
 
 interface Props {
   artifact: Artifact;
   jobId: string;
+  /** When set, restrict the sidebar to this file set. Used by the
+   *  Flow workspace to scope Source to files the flow touches. */
+  scope?: { files: Set<string> };
 }
 
 /**
- * Source view. IDE-style tab bar up top, one tab per changed file; the
- * active tab's unified diff renders below. No sidebar — the file list
- * lives in the tab row, keeping the full page width for the code.
+ * Source view. File sidebar on the left; the active file's unified diff
+ * renders on the right. Optionally scoped to a subset of files (flow
+ * workspace) — when scoped, the sidebar heading shifts from "N files" to
+ * "N of M files".
  */
-export function SourceView({ artifact, jobId }: Props) {
+export function SourceView({ artifact, jobId, scope }: Props) {
   const files = useMemo(() => changedFiles(artifact), [artifact]);
   const visible = files.filter((f) => f.status !== "unchanged");
-  const list = visible.length > 0 ? visible : files;
+  const base = visible.length > 0 ? visible : files;
+  const list = scope
+    ? base.filter((f) => scope.files.has(f.path))
+    : base;
   const [selected, setSelected] = useState<string | null>(list[0]?.path ?? null);
 
+  // If the flow selection changes and the previously-selected file isn't in
+  // the new scope, drop the selection so the user lands on a valid file.
+  useEffect(() => {
+    if (selected && !list.some((f) => f.path === selected)) {
+      setSelected(list[0]?.path ?? null);
+    }
+  }, [list, selected]);
+
+  const counts = useMemo(() => hunkCountByFile(artifact), [artifact]);
+  const byFile = useMemo(() => flowsByFileFn(artifact), [artifact]);
+
   return (
-    <div className="flex flex-col gap-3">
-      <FileTabs files={list} selected={selected} onSelect={setSelected} />
-      <div>
+    <div className="grid grid-cols-[clamp(180px,22%,280px)_1fr] gap-4 items-start">
+      <FileSidebar
+        files={list}
+        selected={selected}
+        onSelect={setSelected}
+        hunkCounts={counts}
+        flowsByFile={byFile}
+      />
+      <div className="min-w-0">
         {selected ? (
           <FileDiff
             artifact={artifact}
