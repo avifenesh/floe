@@ -784,3 +784,69 @@ fn write_artifact_tmp(artifact: &Artifact) -> Result<PathBuf> {
         .with_context(|| format!("writing artifact to {}", path.display()))?;
     Ok(path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use adr_core::intent::{Intent, IntentClaim, IntentInput};
+
+    fn structured(title: &str) -> IntentInput {
+        IntentInput::Structured(Intent {
+            title: title.into(),
+            summary: "".into(),
+            claims: vec![IntentClaim {
+                statement: "c".into(),
+                evidence_type: adr_core::intent::EvidenceType::Observation,
+                detail: "".into(),
+            }],
+        })
+    }
+
+    #[test]
+    fn intent_fingerprint_is_deterministic() {
+        let a = intent_fingerprint(Some(&structured("t")), "notes");
+        let b = intent_fingerprint(Some(&structured("t")), "notes");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn intent_fingerprint_moves_on_intent_change() {
+        let a = intent_fingerprint(Some(&structured("one")), "notes");
+        let b = intent_fingerprint(Some(&structured("two")), "notes");
+        assert_ne!(a, b, "different intent titles must change fingerprint");
+    }
+
+    #[test]
+    fn intent_fingerprint_moves_on_notes_change() {
+        let a = intent_fingerprint(Some(&structured("t")), "notes-a");
+        let b = intent_fingerprint(Some(&structured("t")), "notes-b");
+        assert_ne!(a, b, "reviewer notes are part of the cache key");
+    }
+
+    #[test]
+    fn intent_fingerprint_none_and_empty_notes_is_stable() {
+        // RFC v0.3: a no-intent / no-notes run should cache-hit on
+        // repeated calls. The 'none' marker guarantees that.
+        let a = intent_fingerprint(None, "");
+        let b = intent_fingerprint(None, "");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn intent_fingerprint_none_differs_from_present_intent() {
+        let a = intent_fingerprint(None, "");
+        let b = intent_fingerprint(Some(&structured("t")), "");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn intent_fingerprint_raw_text_and_structured_differ() {
+        let structured_fp = intent_fingerprint(Some(&structured("same-text")), "");
+        let raw_fp =
+            intent_fingerprint(Some(&IntentInput::RawText("same-text".into())), "");
+        assert_ne!(
+            structured_fp, raw_fp,
+            "structured and raw intents aren't interchangeable from the cache's view"
+        );
+    }
+}
