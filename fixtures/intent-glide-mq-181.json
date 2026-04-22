@@ -1,0 +1,51 @@
+{
+  "title": "Redesign usage/budget for thinking models + streamChunk",
+  "summary": "Replace flat JobUsage fields (inputTokens/outputTokens/costUsd) with extensible Record<string, number> maps so reasoning/cached/audio/future token categories work without new named fields. Add per-category budget caps, weighted totals, currency-agnostic costs, a streamChunk convenience method, and a Lua library upgrade to v80 with per-category HINCRBYFLOAT tracking.",
+  "claims": [
+    {
+      "statement": "JobUsage uses extensible tokens: Record<string, number> and costs: Record<string, number> + costUnit instead of the old flat fields",
+      "evidence_type": "observation",
+      "detail": "breaking change: inputTokens/outputTokens/costUsd removed in favour of the map-based shape"
+    },
+    {
+      "statement": "Budget system supports per-category caps (maxTokens, maxCosts), weighted token totals (tokenWeights), and a configurable costUnit",
+      "evidence_type": "observation",
+      "detail": "BudgetOptions.maxCostUsd is replaced by maxTotalCost"
+    },
+    {
+      "statement": "job.streamChunk(type, content?) is a new public API for typed LLM streaming (reasoning/content/done)",
+      "evidence_type": "example",
+      "detail": "documented in the PR body; expected to be exercised by unit tests or an example"
+    },
+    {
+      "statement": "Lua function library is upgraded to v80 with per-category HINCRBYFLOAT usage + limit checks",
+      "evidence_type": "observation",
+      "detail": "Redis-side logic pushed into the Lua library"
+    },
+    {
+      "statement": "getFlowUsage() return type changes to expose tokens/costs/totalTokens/totalCost instead of totalInputTokens/totalOutputTokens/totalCostUsd",
+      "evidence_type": "test",
+      "detail": "covered by ai-metadata tests (per PR test plan)"
+    },
+    {
+      "statement": "26 ai-metadata tests pass covering reasoning tokens, costs breakdown, and costUnit",
+      "evidence_type": "test",
+      "detail": "claimed in PR test plan"
+    },
+    {
+      "statement": "26 budget tests pass — 13 new covering per-category limits, weighted totals, and mixed limits",
+      "evidence_type": "test",
+      "detail": "claimed in PR test plan"
+    },
+    {
+      "statement": "27 stream tests pass — new coverage for streamChunk unit + testing-mode variants",
+      "evidence_type": "test",
+      "detail": "claimed in PR test plan"
+    },
+    {
+      "statement": "Fuzzer: 115 testing-mode rounds + integration rounds pass",
+      "evidence_type": "observation",
+      "detail": "claimed in PR test plan"
+    }
+  ]
+}

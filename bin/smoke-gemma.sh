@@ -13,7 +13,8 @@ MOCK_DATA="$ROOT/fixtures/smoke-glide-mq-181.json"
 RENDERED=$(mktemp)
 trap "rm -f $RENDERED" EXIT
 
-PROMPT=$(cat "$ROOT/prompts/flow_synthesis.md")
+PROMPT_VERSION="${ADR_PROMPT_VERSION:-v0.2.0}"
+PROMPT=$(cat "$ROOT/prompts/flow_synthesis/$PROMPT_VERSION/flow_synthesis.md")
 PROMPT="${PROMPT//\{\{hunk_count\}\}/13}"
 PROMPT="${PROMPT//\{\{initial_cluster_count\}\}/5}"
 PROMPT="${PROMPT//\{\{max_tool_calls\}\}/200}"
