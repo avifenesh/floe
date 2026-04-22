@@ -1,10 +1,10 @@
 ---
 title: "RFC: Architecture delta review · v0 spike"
-version: 0.2
-date: 2026-04-18
-status: Decided · ready for build
+version: 0.3
+date: 2026-04-22
+status: Decided · in-build (scope 5 continuation)
 supersedes: architecture_delta_review_pre_rfc.md
-prior_version: v0.1 (2026-04-17) — preserved in git history; see Appendix C for the delta
+prior_version: v0.2 (2026-04-18) — preserved in git history; see Appendix D for the v0.2→v0.3 delta. v0.1 delta lives in Appendix C.
 first_analyzed_language: TypeScript
 backend_runtime: Rust (tokio)
 frontend: Vite + React + Tailwind + shadcn/ui
@@ -14,15 +14,17 @@ calibration_repos: glide-mq (primary), Inngest (secondary)
 proposal_sheet_format: Explicit YAML block in PR description
 cost_model_principle: Per-flow deterministic drivers grounded in LLM-navigation research; LLM participates at runtime via MCP to group & validate flows (classifier, not generator)
 baseline_policy: Pinned to (commit_sha, llm_tool, llm_model, llm_version); apples-to-apples enforced structurally
-llm_role: Opt-in hot-path classifier, constrained by host-validated tools; structural fallback when absent
-llm_harness: PI (Ollama's minimal coding agent) — we ship an `adr` extension with our tool surface; PI handles the agent loop, tool calling, Ollama wiring
-local_llm_primary: Gemma 4 26B MoE (A4B) via Ollama — the product target. E4B dropped as a product tier after smoke tests showed quality below the structural floor on real PRs.
+llm_role: Hot-path classifier (flow synthesis) + prose-analysis passes (intent-fit, proof-verification), all constrained by host-validated tools; structural fallback when no LLM is configured
+llm_harness: `adr-mcp` — our own stdio JSON-RPC 2.0 MCP server (Rust). `adr-server` spawns it as a child process, acts as the MCP client and LLM chat client, shuttles tool calls, and writes accepted flows back to the artifact. PI was dropped (per-run extension API undocumented in pi-mono); standard MCP-over-stdio replaces it and works with any MCP-capable harness.
+llm_primary_cloud: GLM-4.7 on Zhipu's coding-paas endpoint — product default for flow synthesis, intent-fit, and proof-verification. ~24s on glide-mq #181 (4 flows). GLM-4.5-air = burst, GLM-5.1 = off-peak flagship.
+llm_primary_local: Qwen 3.5 27B (Q4_K_M, ~17 GB) via Ollama — offline / no-key fallback for flow synthesis. ~3m10s on glide-mq #181 (5 flows). Gemma 4 26B dropped: stalls before `finalize` on real PRs. Gemma 4 E4B dropped earlier (below structural floor).
+llm_role_split: flow synthesis runs on either backend (env-pinned). Intent-fit and proof-verification default to GLM-4.7 when `ADR_GLM_API_KEY` is set — prose/semantic analysis needs strong models; small local models hallucinate here.
 decision_type: Scope and tech lock for spike
 ---
 
-# RFC: Architecture delta review · v0 spike · v0.2
+# RFC: Architecture delta review · v0 spike · v0.3
 
-*Status: decided · ready for build · 2026-04-18*
+*Status: decided · in-build (scope 5 continuation) · 2026-04-22*
 
 ---
 
@@ -47,7 +49,7 @@ Everything in this RFC overrides its v0.1 equivalent.
 
 v0 is a **standalone web review plane for agent-authored TypeScript pull requests**, targeted at teams moving from demo to production. It presents each PR as a set of detected flows (1..N) and renders a flow-scoped review surface per flow: overview, runtime flow diff, intent-vs-result morph, signed deltas, claim evidence, per-flow token-translated cost, and raw diff. Cross-flow views (all-flows map, class/module surface) are available as alternate modes. Flow detection uses hybrid deterministic clustering validated and re-arranged by a local LLM through an MCP surface we own.
 
-Backend is Rust on top of the existing TypeScript analyzer ecosystem (swc · oxc · biome · tree-sitter · scip-typescript). The LLM side is Ollama-hosted local models (primary: Gemma 4 26B MoE; floor: Gemma 4 E4B) with an OpenAI-compatible tool-calling loop against an `adr-mcp` server. Strong cloud models (claude / codex / opus) are a ceiling check, not the build target.
+Backend is Rust on top of the existing TypeScript analyzer ecosystem (swc · oxc · biome · tree-sitter · scip-typescript). The LLM side is **split by task**: flow synthesis is dual-backend (GLM-4.7 cloud by default, Qwen 3.5 27B local via Ollama as the offline fallback), while intent-fit and proof-verification default to GLM-4.7 (prose/semantic analysis). All three passes drive the same `adr-mcp` tool surface over stdio JSON-RPC. Gemma 4 (26B and E4B) was dropped after smoke tests.
 
 Spike is ten to twelve weeks; the exit criterion is ruthless.
 
@@ -77,11 +79,14 @@ Consequence: the first OSS adoption bucket has to arrive on the language these u
 | First analyzed language | **TypeScript** | Largest overlap with the v0 persona. |
 | Second analyzed language | **Deferred to v1.** Candidates by audience: TS → Rust → Go → Swift. Python deliberately deferred. |
 | Analyzer pipeline | `tree-sitter-typescript` for parsing · `scip-typescript` for cross-file index (when repo has one) · within-file cross-ref by qualified name + `this.*` resolution · method-level granularity | Class methods are first-class (`ClassName.methodName`). Real TS code is class-heavy; v0.1 caught zero hunks on PR #181 because it only parsed top-level functions. Fixed. |
-| LLM role | **Opt-in classifier via MCP.** Reads analyzed artifact through tools we expose; returns `[{ name, rationale, hunk_ids, extra_entities? }]`. Validated against graph by the host. | Architectural cognition needs LLM, and we refuse to pretend otherwise. But the LLM gets no free-form write access to source, output, or the artifact — only constrained mutations through `propose_flow` / `mutate_flow` / `remove_flow` tool calls that the host validates. |
-| LLM hosting | **Ollama native**, OpenAI-compatible `/v1` endpoint. | Simplest install; works on Windows, macOS, Linux. Docker / WSL / vLLM reserved for scope 5+. |
-| LLM model — primary | **Gemma 4 26B MoE (A4B, Q4_K_M) — 18 GB, 256 K context** | Native function-calling, reasoning-strong, best fit for laptop RTX 5090 / Mac Mini tier. This is the quality bar the product holds to. |
-| LLM model — secondary (stronger) | Qwen 3.5 27B dense · Qwen 3 Coder Next (ceiling targets), claude-p · codex exec · gemini · opencode | Used when the reviewer can afford them. Our audience runs these comfortably. |
-| LLM model — NOT a target | Gemma 4 E4B and similar <10 B class | Dropped after smoke tests showed quality below the structural floor on real PRs. Vibe-coders don't ship on E4B-class models; there's no reason to pretend our product does. The small-model tier is only useful for internal tooling, never for user-facing flow synthesis. |
+| LLM role | **Classifier + prose analyst via MCP.** Three passes — flow synthesis, intent-fit, proof-verification — all drive the same `adr-mcp` tool surface. LLM reads artifact through read-only tools; all mutations go through validated tool calls (`propose_flow` / `mutate_flow` / `remove_flow` / `finalize` etc.). Host validates every claim against the graph before acceptance. | Architectural cognition + semantic intent matching both need LLMs; neither gets free-form write access to source, output, or artifact. |
+| LLM hosting — cloud (default) | **GLM on Zhipu's `coding-paas` endpoint** — OpenAI-compatible, Bearer auth via `ADR_GLM_API_KEY`. | Coding-plan subscription maps to `/api/coding/paas/v4/`. `glm_client.rs` normalises GLM's stringified tool-call arguments to provider-agnostic `Value` and does defensive JSON repair. |
+| LLM hosting — local (fallback) | **Ollama native**, OpenAI-compatible `/v1` endpoint. | Offline / no-key tester path. Docker / WSL / vLLM reserved for scope 5+. |
+| LLM model — flow-synthesis primary | **GLM-4.7 (cloud)** — ~24s on glide-mq #181, 4 flows. Parallel-batches `propose_flow`. Daily-driver tier (preserves coding-subscription quota for long-horizon use). | Default whenever `ADR_GLM_API_KEY` is set. `glm-4.5-air` = burst speed-up; `glm-5.1` = off-peak flagship (known issue: reasoning layer occasionally swallows tool emission on large schemas — not the default). |
+| LLM model — flow-synthesis local fallback | **Qwen 3.5 27B dense (Q4_K_M, 17 GB, 16 K ctx)** via Ollama — ~3m10s on glide-mq #181, 5 flows. Best structural split on test set (catches `TestQueue.setBudget` as its own small flow). | Engaged when `ADR_LLM=ollama:qwen3.5:27b-q4_K_M`. Fits on an RTX 5090 laptop (24 GB VRAM) with ~6 GB headroom. |
+| LLM model — intent-fit + proof-verification | **GLM-4.7** by default (`ADR_PROOF_LLM`, falls back to GLM-4.7 when only `ADR_GLM_API_KEY` is present). | Proof/intent passes read PR prose, reviewer notes, semantic claims — small local models hallucinate here (see `feedback_proof_uses_glm.md`). `from_env_proof()` warns loudly if forced onto a non-GLM backend. |
+| LLM model — NOT a target | **Gemma 4 26B MoE** (stalls before `finalize` at ~4 tool calls on real PRs) and **Gemma 4 E4B** (below structural floor on smoke tests). | Dropped as product tiers. Vibe-coders don't ship on E4B-class models, and 26B MoE failing `finalize` is a hard product-level problem. Small-model tier only survives for internal tooling. |
+| Strong-CLI ceiling check | claude-p · codex exec · gemini · opencode | Used for calibration probes, not the runtime build target. |
 | Eval / harness | Rust CLI replaying historical PRs | Deterministic replay is essential for the spike's exit criterion. |
 
 ### 3 · Trust model
@@ -163,48 +168,73 @@ Schema additions:
 2. **LLM assist (opt-in):** if an LLM is configured, pass the computed clusters + tool-accessible artifact to the LLM via MCP. LLM may merge, split, rename, or add entities. Host validates every mutation.
 3. **Fallback:** if no LLM configured OR LLM output fails validation, artifact ships with `computed` flows, banner visible on every view.
 
-### 5 · LLM integration — opt-in hot-path via PI + `adr` extension (new in v0.2)
+### 5 · LLM integration — `adr-mcp` over stdio, three passes (revised)
 
-We do **not** write our own agent harness. PI (Ollama's minimal coding agent) is the harness. Its system-prompt footprint is small — critical for letting Gemma 4 E4B (128 K context, our floor) fit the real task instead of harness scaffolding. We ship an **`adr` PI extension** that adds our tool surface on top of PI's built-ins.
+**PI was dropped.** PI's per-run extension API was undocumented in pi-mono and we could not build a stable extension against it. We replaced it with the **standard MCP path**: a Rust crate `adr-mcp` that speaks MCP over stdio JSON-RPC 2.0. `adr-server` spawns `adr-mcp` as a child process per analysis, acts as both the MCP client and the LLM chat client, shuttles tool-call requests between the two, and writes accepted results back to `artifact.flows` / the evidence + proof channels.
 
-**PI-builtin tools we rely on (read-only usage):**
-- `read` — read file bytes in the analyzed worktree
-- `grep` — ripgrep-backed content search, respects .gitignore
-- `glob` — file-path search
+Upside of the swap: the same tool surface works against any MCP-capable harness (Claude Code, Cursor, OpenCode) without code changes. Tool calls go through a provider-agnostic layer, and both cloud (GLM) and local (Ollama) flows share one validation host.
 
-PI also ships `write`, `edit`, `bash`. **We do not rely on those and our host does not honour their outputs.** Flows are mutated only through the extension's tools below; anything else the LLM writes is discarded. The validation is structural — we only accept the extension's emitted JSON — so whether we can physically disable PI's core tools is not blocking.
+**Provider wiring (env-pinned):**
 
-**`adr` extension — read tools (exposed via PI's plugin API):**
-- `list_hunks()` → hunk summaries with stable IDs, kinds, and entity refs
-- `get_entity(id)` → node with name, kind, file, span
-- `neighbors(id, hops)` → graph subgraph around entity
-- `list_flows_initial()` → structural clustering as starting point
+```
+ADR_LLM=glm:glm-4.7                        # default when ADR_GLM_API_KEY is set
+ADR_LLM=ollama:qwen3.5:27b-q4_K_M          # offline / no-key fallback
+ADR_PROBE_LLM=<override>                   # probe pass; falls back to ADR_LLM
+ADR_PROOF_LLM=<override>                   # intent/proof pass; defaults to glm:glm-4.7
+ADR_GLM_API_KEY=<secret, never logged or cached>
+ADR_GLM_URL=<override>                     # default: coding-paas endpoint
+ADR_OLLAMA_URL=http://localhost:11434
+ADR_OLLAMA_CTX=16384                       # 32K was needless on glide-mq
+ADR_OLLAMA_PREDICT=1024
+ADR_OLLAMA_TEMP=0.4                        # higher than classic — Gemma-era escape-hatch, kept for Qwen
+ADR_OLLAMA_KEEP_ALIVE=10m
+ADR_PROMPT_VERSION=v0.3.1                  # pre-inject + small-flow rule
+```
 
-**`adr` extension — mutation tools (host-validated):**
-- `propose_flow(name, rationale, hunk_ids, extra_entities?)` → host validates + appends
-- `mutate_flow(id, patch)` → host validates the patch against invariants
-- `remove_flow(id)` → allowed only if all hunks still covered by some other flow
-- `finalize()` → LLM signals done; host runs all invariants, accepts or rejects whole run
+`LlmConfig::from_env` returns `None` when no LLM is configured — pipeline falls back to structural flows with a banner. `from_env_proof` defaults to GLM-4.7 whenever the API key is present, and warns loudly if forced onto a non-GLM backend.
+
+**GLM endpoint + auth:**
+- URL: `https://api.z.ai/api/coding/paas/v4/chat/completions` (coding-plan path prefix — **not** `/api/paas/v4/`).
+- Auth: `Authorization: Bearer $ADR_GLM_API_KEY`. The legacy JWT/timestamp split-key scheme is no longer required.
+- Response shape: OpenAI-style; `choices[0].message.tool_calls[].function.arguments` is a **stringified JSON** (unlike Ollama's object shape). `glm_client.rs` normalises this to `Value` and does defensive JSON repair on malformed args. Hybrid-reasoning models include `reasoning_content` — ignored.
+- Rate-limit handling: semaphore (`ADR_GLM_CONCURRENCY`, default 3) + bounded retry + Closed/Open/HalfOpen circuit breaker shared across synthesis / probe / proof pipelines.
+
+**Three passes, one tool surface:**
+
+| Pass | Primary backend | Fallback | Writes to |
+|:---|:---|:---|:---|
+| Flow synthesis | GLM-4.7 | Qwen 3.5 27B local | `artifact.flows[]` |
+| Intent-fit (per flow) | GLM-4.7 | — (skipped if no GLM) | `artifact.claims[].intent_fit` |
+| Proof-verification (per flow) | GLM-4.7 | — (skipped if no GLM) | `artifact.claims[].proof` + `Cost.axes.proof` |
+
+**`adr-mcp` tool surface:**
+
+*Read tools (all passes):*
+- `list_hunks()` · `get_entity(id)` · `neighbors(id, hops)` · `list_flows_initial()` — structural clustering as starting point.
+- For intent/proof: `get_pr_intent()` (structured `intent.json` — `{ title, summary, claims[] }`), `get_notes()` (reviewer-pasted bench output / logs / external evidence), file-read / grep / glob (lifted from the Codex CLI's Rust implementation per `feedback_reuse_codex_tools.md`).
+
+*Mutation tools (host-validated, flow synthesis):*
+- `propose_flow(name, rationale, hunk_ids, extra_entities?)` · `mutate_flow(id, patch)` · `remove_flow(id)` · `finalize()`.
+
+*Mutation tools (intent-fit + proof):*
+- `emit_intent_fit(flow_id, fit_level, rationale, claim_refs[])` · `emit_proof(flow_id, proof_level, stated_evidence?, code_evidence?, rationale)`.
+
+**Per-tool error format (frozen at scope 3 week 6):** mutation errors return `isError: true` with a text block prefixed `ERROR: <CODE>\n<json>` so text-reading models can't miss them. Codes: `NAME_RESERVED`, `NAME_TOO_SHORT/LONG`, `RATIONALE_TOO_SHORT/LONG`, `HUNK_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FLOW_NOT_FOUND`, `COVERAGE_BROKEN`, `CALL_BUDGET_EXCEEDED`.
 
 **Host rules (not negotiated with the LLM):**
-- Every hunk must be in ≥ 1 flow at `finalize()`; missing → reject whole LLM run, fall back to structural.
-- All referenced IDs must exist in the graph; no invented entities.
-- `name` must not be generic (reserved keywords rejected).
-- Rate-limit tool calls per run to protect against runaway loops.
-- Ignore any `write` / `edit` / `bash` tool calls at the artifact layer; they do not affect the final flows.
+- Every hunk must be in ≥ 1 flow at `finalize()`; missing → whole-run rejection, fall back to structural.
+- All referenced entity IDs must exist in the graph; no invented entities.
+- Reserved generic names (`misc`, `various`, `other`) rejected except for the structural-fallback bucket.
+- Call budget ≤ 200 tool invocations per run.
+- Whole-run rejection on any invariant violation; structural flows ship with a visible banner.
 
-**Runner shape:**
-- Backend invokes `ollama launch pi` with `--model gemma4:26b-a4b-it-q4_K_M` and the `adr` extension loaded. Ollama knows about PI natively — no separate install, no manual path plumbing, one command.
-- PI drives its own tool-call loop with Ollama; our extension serves the `adr:*` tools and receives proposed mutations.
-- PI streams tool-use events to stdout; backend tees them to the frontend via SSE (so the user sees "detecting flows…" progress).
-- Single pass per PR for models with ≥ 32 K effective context (Gemma 4 26B MoE = 256 K). Flow-by-flow iterative mode for tighter-budget models (E4B) — one computed cluster at a time.
-- PI ships with Ollama; we don't ship PI ourselves.
+**Per-run lifecycle:**
+- `adr-server` parses the graph, writes an artifact, spawns `adr-mcp` (stdio), and opens an LLM chat session against the configured provider.
+- Synthesis pass first → flows stable → intent-fit pass (per flow) → proof-verification pass (per flow). Each pass is a clean chat session with its own context; they communicate only through the mutating tool calls.
+- Events tee'd to the frontend via SSE so the reviewer sees "detecting flows… · intent-fit · proof" progress. UI copy describes WORK, not the model (per `feedback_no_model_names_in_ui.md`).
+- Baselines pin `(commit_sha, llm_tool, llm_model, llm_version, flow_synthesis_model, proof_model)`; any drift refuses the delta.
 
-**Why PI over a bespoke Rust host:**
-- Minimal harness ≈ minimal prompt overhead; floor model gets the token budget.
-- Agent loop + tool routing + Ollama plumbing already works, including against Gemma 4 / Qwen 3.5.
-- Plugin installation is standard (`pi install npm:@adr/pi-extension`), so self-hosters have a single command to turn on flow synthesis.
-- If PI's protocol shifts, we rewrite the extension, not the whole agent loop.
+**GLM tool-call XML drift (known issue):** GLM-4.6/4.7 occasionally leak native `<tool_call>…</tool_call>` XML into content instead of using OpenAI `tool_calls[]`. The client-side parser in `tool_call_drift.rs` rehydrates these into proper tool calls (research consensus over prompt-nudging). Don't describe the tool-call format in the prompt — it increases drift.
 
 ### 6 · Visual / design language
 
@@ -327,7 +357,7 @@ Proceed to full v1 RFC *only if all hold*:
 
 1. Reviewers prefer the v0 flow-first surface to raw-diff review on ≥ **60%** of PR classes. **And**
 2. Reviewers catch all three seeded bugs **faster** on the v0 surface. **And**
-3. **LLM-assisted flow detection ≥ structural-only** on at least one metric (time-to-verdict, confidence, or correctness) with statistical significance on the eval set, using the floor model (Gemma 4 E4B).
+3. **LLM-assisted flow detection ≥ structural-only** on at least one metric (time-to-verdict, confidence, or correctness) with statistical significance on the eval set, tested on **both** the cloud backend (GLM-4.7) and the local fallback (Qwen 3.5 27B). The cloud path is the product default; the local path is the offline promise.
 
 Not all three: stop or narrow.
 
@@ -336,7 +366,8 @@ Not all three: stop or narrow.
 - Observed-graph pipeline requires build-env integration for > 30 % of eval PRs.
 - Cost-model drivers visibly wrong on > 25 % of PRs.
 - Reviewers report the flow-first surface is slower than raw-diff review *even with* LLM assist.
-- Gemma 4 26B fails to produce valid flow assignments (host rejects or output falls below structural quality) on > 25 % of eval PRs. Unlike the dropped E4B check, 26B failing is a product-level problem: our primary target is the bar we sell against.
+- GLM-4.7 fails to produce valid flow assignments (host rejects or output falls below structural quality) on > 25 % of eval PRs — this is the cloud product default, failing it is a product-level stop. AND
+- Qwen 3.5 27B local fails the same bar on > 40 % of eval PRs — we allow a wider floor on the offline path, but past that threshold the "works offline" promise is hollow.
 
 ---
 
@@ -351,7 +382,8 @@ Not all three: stop or narrow.
 
 - **Flow detection ownership**: hybrid deterministic (call-graph + type-propagation) is the floor, always computed. LLM is opt-in via Ollama or configured local CLI. No v0 code path assumes LLM is present.
 - **LLM scope**: classifier only, via MCP-exposed tools. No free-form generation. Host validates every mutation.
-- **Product model target**: Gemma 4 26B MoE (A4B) and stronger. Small models (<10B) are not product targets — our audience ships on capable hardware or hosted frontier models. "Works on everything" is not a promise we make or need.
+- **Product model split**: GLM-4.7 cloud is the default flow-synthesis backend (8× faster than local with comparable quality on glide-mq #181). Qwen 3.5 27B local via Ollama is the offline fallback — the "no key needed" promise. Intent-fit and proof-verification are GLM-only by default; prose-analysis tasks need strong models. Gemma 4 (26B and E4B) dropped.
+- **Harness**: PI extension path abandoned; replaced with `adr-mcp` stdio JSON-RPC. Same tool contract works for any MCP-capable client.
 - **Hosted SaaS still deferred**: v0 self-hostable; hosted tier is v1+ with per-repo indexing, retained baselines, and model routing.
 
 ---
@@ -378,17 +410,33 @@ v0.2 additions:
 
 | ID | Why | Source |
 |:---|:---|:---|
-| R19 | Ollama — local model runtime, OpenAI-compat | https://ollama.com/ |
-| R20 | Gemma 4 — primary local model (26B MoE + E4B floor) | https://deepmind.google/models/gemma/gemma-4/ |
-| R21 | Qwen 3.5 — backup local model family | https://huggingface.co/Qwen |
-| R22 | Model Context Protocol — reference for tool-surface design (we may expose the same tools over MCP later) | https://modelcontextprotocol.io/ |
-| R23 | OpenAI function-calling spec — shared by Gemma 4 / Qwen 3.5 tool calls | https://platform.openai.com/docs/guides/function-calling |
-| R24 | PI — Ollama's minimal coding agent; our LLM harness | https://docs.ollama.com/integrations/pi |
-| R25 | PI extension authoring | https://github.com/can1357/oh-my-pi |
+| R19 | Ollama — local model runtime, OpenAI-compat (offline flow-synthesis fallback) | https://ollama.com/ |
+| R20 | Qwen 3.5 27B dense — local fallback for flow synthesis | https://huggingface.co/Qwen |
+| R21 | GLM-4.7 / GLM family via Zhipu coding-paas — cloud primary for all three passes | https://z.ai/ |
+| R22 | Model Context Protocol — our `adr-mcp` crate implements MCP over stdio JSON-RPC 2.0 | https://modelcontextprotocol.io/ |
+| R23 | OpenAI function-calling spec — tool-call contract shared by GLM and Ollama | https://platform.openai.com/docs/guides/function-calling |
+| R24 | Codex CLI (Rust read/grep/glob implementations lifted for agent file tools, per `feedback_reuse_codex_tools.md`) | https://github.com/openai/codex |
 
 ## Appendix B · changes from pre-RFC
 
 *(carried from v0.1)*
+
+## Appendix D · v0.3 delta from v0.2
+
+- **LLM harness**: PI + `@adr/pi-extension` dropped (per-run extension API undocumented in pi-mono). Replaced with `adr-mcp` — Rust crate speaking MCP over stdio JSON-RPC 2.0. `adr-server` spawns it as a child per analysis and acts as MCP client + LLM chat client.
+- **Backend split by task**:
+  - Flow synthesis: **GLM-4.7 cloud** primary (~24s / 4 flows on glide-mq #181) · **Qwen 3.5 27B local** fallback (~3m10s / 5 flows).
+  - Intent-fit + proof-verification: **GLM-4.7** default (`from_env_proof` warns on non-GLM backend) — prose/semantic analysis needs strong models.
+- **Gemma 4 fully dropped** as a product target. 26B MoE stalls before `finalize` on real PRs; E4B was already below the structural floor.
+- **GLM wiring**: coding-paas endpoint (`/api/coding/paas/v4/`), Bearer auth, OpenAI-style response shape with stringified tool-call arguments (normalised by `glm_client.rs`). Legacy JWT split-key scheme retired.
+- **GLM rate-limit handling**: semaphore (`ADR_GLM_CONCURRENCY`, default 3) + bounded retry + Closed/Open/HalfOpen circuit breaker shared across synthesis / probe / proof.
+- **Tool-call XML drift**: client-side rehydrator for GLM's leaked `<tool_call>` XML (`tool_call_drift.rs`) rather than prompt nudging.
+- **Env knobs renamed / added**: `ADR_LLM`, `ADR_PROBE_LLM`, `ADR_PROOF_LLM`, `ADR_GLM_API_KEY`, `ADR_GLM_URL`, `ADR_GLM_CONCURRENCY`. Bare `ADR_GLM_API_KEY` auto-defaults `ADR_LLM` to `glm:glm-4.7`.
+- **Baseline pin extended** to include `proof_model` alongside `flow_synthesis_model`.
+- **Exit gate + kill conditions** rewritten around the dual backend: LLM-assist-vs-structural must hold on both GLM and Qwen paths; GLM > 25 % / Qwen > 40 % reject rates are kill triggers.
+- **Scope-5 status**: probe baselines + per-flow signed cost delta live (`adr-probe` + `adr-cost`). Intent/proof LLM passes are scope-5 continuation — planned, not built.
+
+---
 
 ## Appendix C · v0.2 delta from v0.1
 
@@ -397,10 +445,10 @@ v0.2 additions:
 - **Schema addition: `artifact.flows[]`.** Host enforces every-hunk-in-at-least-one-flow.
 - **Hunk rule: hunks can appear in multiple flows.** Explicit, not a bug.
 - **Parser gained class-method granularity** (`ClassName.methodName`), `this.*()` resolution, full multi-line signature capture. Tested on glide-mq PR #181: v0.1 produced 0 hunks; v0.2 produces 12.
-- **Local-LLM adapters promoted from v1 to v0.** Ollama is the primary runner. Local CLI adapters (claude, codex, gemini, opencode) remain for ceiling checks.
+- **LLM backend split**: GLM-4.7 cloud is the primary for all three LLM passes (synthesis + intent-fit + proof); Qwen 3.5 27B via Ollama is the offline synthesis fallback. Local CLI adapters (claude, codex, gemini, opencode) remain for ceiling checks. PI dropped; `adr-mcp` stdio JSON-RPC replaces it.
 - **Cost model per-flow primary, aggregate secondary.**
 - **Calibration repo list expanded**: glide-mq as primary (real vibe-coded TS with real multi-flow refactors), Inngest as secondary.
 - **Exit gate adds LLM-assist-matters check** against the structural floor.
-- **Kill condition adds Gemma-4-E4B floor failure.**
+- **Kill conditions updated**: GLM-4.7 cloud > 25 % reject rate is a product stop; Qwen 3.5 27B local > 40 % reject rate hollows the offline promise. Gemma-4 failure condition retired — the model itself is no longer a target.
 - **Non-goal added**: LLM never writes code or free-form content into the artifact.
 - **Audience framing strengthened**: vibe-coding / demo-to-prod reviewers are the explicit target, including the large, multi-flow PR shape they produce.
