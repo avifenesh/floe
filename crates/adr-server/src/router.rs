@@ -21,7 +21,7 @@ use crate::cache::Cache;
 use crate::db::DbStore;
 use crate::git_sync;
 use crate::job::{Job, JobStatus, ProgressEvent};
-use crate::worker::{run_pipeline, PrContext};
+use crate::worker::{run_pipeline, PipelineRequest, PrContext};
 use axum_extra::extract::cookie::SignedCookieJar;
 
 #[derive(Clone)]
@@ -252,7 +252,17 @@ async fn analyze(
     let db = state.db.clone();
     let pr_ctx = PrContext { repo: None, pr_number: None, user_id };
     tokio::spawn(async move {
-        run_pipeline(job, base_root, head_root, cache, db, intent, notes, pr_ctx).await;
+        run_pipeline(PipelineRequest {
+            job,
+            base: base_root,
+            head: head_root,
+            cache,
+            db,
+            intent,
+            notes,
+            pr_ctx,
+        })
+        .await;
         // Clear the inflight entry so a subsequent identical request
         // can re-trigger (cache will serve it instantly if the
         // artifact landed). Only remove when the id still matches —
@@ -363,7 +373,17 @@ async fn analyze_url(
         user_id: Some(session.user_id.clone()),
     };
     tokio::spawn(async move {
-        run_pipeline(job, base_root, head_root, cache, db, intent, notes, pr_ctx).await;
+        run_pipeline(PipelineRequest {
+            job,
+            base: base_root,
+            head: head_root,
+            cache,
+            db,
+            intent,
+            notes,
+            pr_ctx,
+        })
+        .await;
         inflight.remove_if(&dedupe_key, |_, v| *v == id);
     });
     Ok(Json(AnalyzeUrlResponse {

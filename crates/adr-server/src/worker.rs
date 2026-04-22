@@ -23,16 +23,31 @@ pub struct PrContext {
     pub user_id: Option<String>,
 }
 
-pub async fn run_pipeline(
-    job: Arc<Job>,
-    base: PathBuf,
-    head: PathBuf,
-    cache: Arc<Cache>,
-    db: DbStore,
-    intent: Option<IntentInput>,
-    notes: String,
-    pr_ctx: PrContext,
-) {
+/// Everything needed to run one analysis. Bundled so [`run_pipeline`]
+/// stays at one argument — the router builds this in place at the
+/// call site, the worker destructures it into `run_inner` state.
+pub struct PipelineRequest {
+    pub job: Arc<Job>,
+    pub base: PathBuf,
+    pub head: PathBuf,
+    pub cache: Arc<Cache>,
+    pub db: DbStore,
+    pub intent: Option<IntentInput>,
+    pub notes: String,
+    pub pr_ctx: PrContext,
+}
+
+pub async fn run_pipeline(req: PipelineRequest) {
+    let PipelineRequest {
+        job,
+        base,
+        head,
+        cache,
+        db,
+        intent,
+        notes,
+        pr_ctx,
+    } = req;
     match run_inner(&job, &base, &head, &cache, &db, intent, notes, &pr_ctx).await {
         Ok(()) => {}
         Err(e) => {
@@ -73,6 +88,9 @@ async fn upsert_errored_row(db: &DbStore, job_id: &uuid::Uuid, message: &str) ->
     .await
 }
 
+// 1:1 shadow of run_pipeline's destructured args; collapsing further
+// would require heap-allocating the borrow bundle and buys nothing.
+#[allow(clippy::too_many_arguments)]
 async fn run_inner(
     job: &Arc<Job>,
     base: &Path,
@@ -343,16 +361,16 @@ async fn run_inner(
         let head_path = head.to_path_buf();
         let artifact_for_probe = artifact.clone();
         tokio::spawn(async move {
-            run_probe_pass(
-                job_bg,
-                cache_bg,
+            run_probe_pass(ProbePassInputs {
+                job: job_bg,
+                cache: cache_bg,
                 cache_eligible,
-                key_bg,
-                artifact_for_probe,
+                key: key_bg,
+                artifact: artifact_for_probe,
                 probe_cfg,
                 base_path,
                 head_path,
-            )
+            })
             .await;
         });
     }
@@ -465,18 +483,33 @@ async fn run_synth_pass(
     }
 }
 
-/// Background task: drive the probe pass, update the artifact's
-/// `cost_status`, and write the refreshed artifact back to cache.
-async fn run_probe_pass(
+/// Inputs for [`run_probe_pass`] — a spawned tokio task, so all args
+/// are owned. Bundled as a struct so the spawn site reads field-by-
+/// field instead of 8 positional args.
+struct ProbePassInputs {
     job: Arc<Job>,
     cache: Arc<Cache>,
     cache_eligible: bool,
     key: String,
-    mut artifact: Artifact,
+    artifact: Artifact,
     probe_cfg: LlmConfig,
     base_path: PathBuf,
     head_path: PathBuf,
-) {
+}
+
+/// Background task: drive the probe pass, update the artifact's
+/// `cost_status`, and write the refreshed artifact back to cache.
+async fn run_probe_pass(inputs: ProbePassInputs) {
+    let ProbePassInputs {
+        job,
+        cache,
+        cache_eligible,
+        key,
+        mut artifact,
+        probe_cfg,
+        base_path,
+        head_path,
+    } = inputs;
     let _ = job.progress.send(ProgressEvent {
         stage: "probe".into(),
         percent: 0,
