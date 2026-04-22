@@ -16,6 +16,10 @@ adr-parse = { workspace = true }
 adr-cfg = { workspace = true }
 adr-hunks = { workspace = true }
 adr-flows = { workspace = true }
+adr-mcp = { workspace = true }
+adr-evidence = { workspace = true }
+adr-cost = { workspace = true }
+adr-probe = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true }
 tokio = { workspace = true }
@@ -31,6 +35,15 @@ uuid = { workspace = true }
 dashmap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }
+dotenvy = { workspace = true }
+libsql = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+oauth2 = { workspace = true }
+axum-extra = { workspace = true }
+time = { workspace = true }
+hex = "0.4"
+url = "2"
 
 [dev-dependencies]
 reqwest = { workspace = true }

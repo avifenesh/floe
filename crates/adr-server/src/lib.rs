@@ -9,9 +9,15 @@
 //! re-analysis returns instantly. A finished job remains retrievable until the
 //! server restarts; the cache file survives across restarts.
 
+pub mod auth;
 pub mod cache;
+pub mod db;
+pub mod git_sync;
 pub mod job;
+pub mod llm;
 pub mod router;
 pub mod worker;
 
+pub use auth::{AuthConfig, Session};
+pub use db::{AnalysisRow, AnalysisStatus, DbStore, UserRow};
 pub use router::{build_router, AppState};

@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 /// Tool versions baked into the cache key. Bump any of these and all entries
 /// silently invalidate.
-const PIPELINE_VERSION: &str = "0.3.0";
+const PIPELINE_VERSION: &str = "0.5.1";
 
 pub struct Cache {
     dir: PathBuf,
@@ -18,13 +18,41 @@ impl Cache {
         Ok(Self { dir })
     }
 
-    pub fn key(&self, base: &Path, head: &Path) -> String {
+    /// Cache root on disk. Also used as the parent for adjacent
+    /// state like git checkouts (see `git_sync::repos_root`).
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// Build the cache key from the content-addressed head snapshot
+    /// plus the intent + LLM regime. We deliberately do **not** mix
+    /// paths into the key — two users analysing the same PR head
+    /// should share cache hits regardless of where the worktree
+    /// lives. `head_sha` comes from [`adr_core::Artifact::snapshot_sha`]
+    /// (blake3 over qualified-name + provenance-hash rows).
+    ///
+    /// `llm_signature` = `None` when LLM synthesis is disabled and
+    /// `Some("<provider>:<model>@<prompt-version>")` when it's on —
+    /// changing any of those invalidates the entry rather than
+    /// silently serving stale LLM-flavoured results.
+    ///
+    /// `intent_fingerprint` = blake3 over caller intent + notes;
+    /// supplying different intent or notes changes the output so
+    /// the key has to change.
+    pub fn key(
+        &self,
+        head_sha: &str,
+        llm_signature: Option<&str>,
+        intent_fingerprint: &str,
+    ) -> String {
         let mut h = blake3::Hasher::new();
         h.update(PIPELINE_VERSION.as_bytes());
         h.update(b"|");
-        h.update(base.to_string_lossy().as_bytes());
+        h.update(head_sha.as_bytes());
         h.update(b"|");
-        h.update(head.to_string_lossy().as_bytes());
+        h.update(llm_signature.unwrap_or("structural").as_bytes());
+        h.update(b"|");
+        h.update(intent_fingerprint.as_bytes());
         h.finalize().to_hex().to_string()
     }
 
@@ -48,5 +76,11 @@ impl Cache {
         let bytes = serde_json::to_vec_pretty(artifact)?;
         std::fs::write(&p, bytes).with_context(|| format!("write {}", p.display()))?;
         Ok(())
+    }
+
+    /// The on-disk root this cache writes to. Used by the probe pass to
+    /// locate the sibling `baseline/` directory.
+    pub fn root(&self) -> &Path {
+        &self.dir
     }
 }
