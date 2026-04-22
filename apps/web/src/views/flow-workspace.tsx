@@ -725,7 +725,7 @@ function FlowMorph({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
 
       {/* Intent vs Result — two columns, one row per claim. */}
       {panels.length > 0 ? (
-        <section className="rounded border border-border/60 overflow-hidden">
+        <section className="rounded border border-border/60 overflow-hidden shadow-sm">
           <div className="grid grid-cols-2 text-[10px] font-mono uppercase tracking-wide text-muted-foreground bg-muted/20 border-b border-border/60">
             <div className="px-3 py-1.5">Intent</div>
             <div className="px-3 py-1.5 border-l border-border/60">Result</div>
@@ -1636,7 +1636,7 @@ function IntentCard({
   // IntentInput is Intent | string.
   const isStructured = typeof intent !== "string";
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2">
+    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2 shadow-sm">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Intent
@@ -1881,7 +1881,7 @@ function IntentFitCard({
   fit: import("@/types/artifact").IntentFit | null;
 }) {
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5">
+    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5 shadow-sm">
       <div className="flex items-baseline justify-between">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Intent fit
@@ -1923,7 +1923,7 @@ function ProofCard({
   proof: import("@/types/artifact").Proof | null;
 }) {
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5">
+    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5 shadow-sm">
       <div className="flex items-baseline justify-between">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Proof

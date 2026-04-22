@@ -51,13 +51,32 @@ export default function App() {
     }
 
     let cancelled = false;
+    let aborted = false;
     const tick = async () => {
+      if (aborted) return;
       try {
         const v = await getJob(job.jobId);
         if (cancelled || !v.artifact) return;
         setJob({ jobId: job.jobId, artifact: v.artifact });
-      } catch {
-        // swallow — transient; next tick will try again
+      } catch (e) {
+        const msg = String(e);
+        if (msg.includes("404")) {
+          // Job is gone — server restarted without a DB row, or the
+          // cache was wiped. Stop polling and flip the still-
+          // analyzing statuses to errored locally so the UI stops
+          // spinning. Ready fields stay put.
+          aborted = true;
+          setJob((prev) => {
+            if (!prev) return prev;
+            const a = { ...prev.artifact };
+            if (a.cost_status === "analyzing") a.cost_status = "errored";
+            if (a.proof_status === "analyzing") a.proof_status = "errored";
+            if (a.synth_status === "analyzing") a.synth_status = "errored";
+            return { jobId: prev.jobId, artifact: a };
+          });
+          return;
+        }
+        // Other failures are transient; next tick will try again.
       }
     };
     const t = setInterval(() => void tick(), 4000);

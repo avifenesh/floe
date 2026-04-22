@@ -57,7 +57,7 @@ export function BaselineDriftBanner({
   return (
     <div
       role="alert"
-      className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px] font-mono text-foreground"
+      className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px] font-mono text-foreground shadow-sm"
     >
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="text-amber-500 font-semibold">re-baseline required</span>

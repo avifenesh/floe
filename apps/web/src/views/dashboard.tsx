@@ -240,6 +240,16 @@ function Sidebar({
   onDismiss: (row: AnalysisRow) => void;
   onRetry: (row: AnalysisRow) => void;
 }) {
+  // Errored rows stay out of the default list — they're noise for a
+  // reviewer scanning for work, and they accumulate fast when a
+  // GitHub URL is mistyped. The reviewer can reveal them via the
+  // "N errored" toggle; ready + pending always surface.
+  const [showErrored, setShowErrored] = useState(false);
+  const errored = history.filter((r) => r.status === "errored");
+  const visible = showErrored
+    ? history
+    : history.filter((r) => r.status !== "errored");
+
   return (
     <aside className="space-y-3">
       <div className="flex items-baseline justify-between">
@@ -263,13 +273,15 @@ function Sidebar({
           </button>
         </div>
       </div>
-      {history.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">
-          Nothing yet. Start an analysis — results persist across restarts.
+          {showErrored || errored.length === 0
+            ? "Nothing yet. Start an analysis — results persist across restarts."
+            : "No ready runs yet. Start an analysis below."}
         </p>
       ) : (
         <ol className="space-y-1.5">
-          {history.map((r) => (
+          {visible.map((r) => (
             <li key={r.id}>
               <HistoryRow
                 row={r}
@@ -280,6 +292,16 @@ function Sidebar({
             </li>
           ))}
         </ol>
+      )}
+      {errored.length > 0 && (
+        <button
+          onClick={() => setShowErrored((x) => !x)}
+          className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showErrored
+            ? `hide ${errored.length} errored`
+            : `show ${errored.length} errored`}
+        </button>
       )}
     </aside>
   );

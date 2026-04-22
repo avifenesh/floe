@@ -585,7 +585,40 @@ async fn run_probe_pass(inputs: ProbePassInputs) {
     // own stale clone.
     merge_into_artifact(&job, &cache, cache_eligible, &key, |current| {
         current.cost_status = artifact.cost_status;
-        current.baseline = artifact.baseline.clone();
+        // Baseline rewrite — but preserve synthesis_model / proof_model
+        // if they were already populated. Probe ran on a clone of the
+        // pre-synth/pre-proof artifact, so its `attribute_from_baselines`
+        // sees structural flows + no Proof → derives None for those
+        // pins. Synth/proof may have set them on the live artifact
+        // concurrently; don't clobber.
+        let mut new_baseline = artifact.baseline.clone();
+        if let (Some(nb), Some(prev)) = (new_baseline.as_mut(), current.baseline.as_ref()) {
+            if nb.synthesis_model.is_none() && prev.synthesis_model.is_some() {
+                nb.synthesis_model = prev.synthesis_model.clone();
+            }
+            if nb.proof_model.is_none() && prev.proof_model.is_some() {
+                nb.proof_model = prev.proof_model.clone();
+            }
+        }
+        // After merging, also pluck synthesis_model / proof_model from
+        // the live flows in case synth/proof already landed on the
+        // artifact without having set the baseline pin (pre-baseline
+        // arrivals).
+        if let Some(nb) = new_baseline.as_mut() {
+            if nb.synthesis_model.is_none() {
+                nb.synthesis_model = current.flows.iter().find_map(|f| match &f.source {
+                    adr_core::FlowSource::Llm { model, .. } => Some(model.clone()),
+                    adr_core::FlowSource::Structural => None,
+                });
+            }
+            if nb.proof_model.is_none() {
+                nb.proof_model = current
+                    .flows
+                    .iter()
+                    .find_map(|f| f.proof.as_ref().map(|p| p.model.clone()));
+            }
+        }
+        current.baseline = new_baseline;
         // Copy per-flow cost entries by flow_id.
         for src in &artifact.flows {
             if let Some(dst) = current.flows.iter_mut().find(|f| f.id == src.id) {

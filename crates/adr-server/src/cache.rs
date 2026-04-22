@@ -17,7 +17,13 @@ use anyhow::{Context, Result};
 /// collide with synthesis-only signatures and serve stale proof
 /// claims). Old entries become dead weight; they disappear on the
 /// next run that builds a new key.
-const PIPELINE_VERSION: &str = "0.5.2";
+///
+/// 0.5.3 (2026-04-23): synth pass now refreshes
+/// `baseline.synthesis_model` on writeback to fix the probe/synth
+/// race that left the drift banner saying "synthesis was skipped"
+/// for LLM-named flows. Bumped to invalidate artifacts captured
+/// under the buggy pin logic.
+const PIPELINE_VERSION: &str = "0.5.3";
 
 pub struct Cache {
     dir: PathBuf,
