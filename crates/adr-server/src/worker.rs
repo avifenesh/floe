@@ -38,17 +38,12 @@ pub struct PipelineRequest {
 }
 
 pub async fn run_pipeline(req: PipelineRequest) {
-    let PipelineRequest {
-        job,
-        base,
-        head,
-        cache,
-        db,
-        intent,
-        notes,
-        pr_ctx,
-    } = req;
-    match run_inner(&job, &base, &head, &cache, &db, intent, notes, &pr_ctx).await {
+    // We need `job` + `db` after the inner call to report errors, so
+    // hold onto them before moving the rest of the request downstream.
+    // `Arc<Job>` and `DbStore` both clone cheaply.
+    let job = req.job.clone();
+    let db = req.db.clone();
+    match run_inner(req).await {
         Ok(()) => {}
         Err(e) => {
             let msg = format!("{e:#}");
@@ -88,19 +83,26 @@ async fn upsert_errored_row(db: &DbStore, job_id: &uuid::Uuid, message: &str) ->
     .await
 }
 
-// 1:1 shadow of run_pipeline's destructured args; collapsing further
-// would require heap-allocating the borrow bundle and buys nothing.
-#[allow(clippy::too_many_arguments)]
-async fn run_inner(
-    job: &Arc<Job>,
-    base: &Path,
-    head: &Path,
-    cache: &Arc<Cache>,
-    db: &DbStore,
-    intent: Option<IntentInput>,
-    notes: String,
-    pr_ctx: &PrContext,
-) -> Result<()> {
+async fn run_inner(req: PipelineRequest) -> Result<()> {
+    let PipelineRequest {
+        job: owned_job,
+        base: owned_base,
+        head: owned_head,
+        cache: owned_cache,
+        db: owned_db,
+        intent,
+        notes,
+        pr_ctx: owned_pr_ctx,
+    } = req;
+    // Re-bind as borrows so the rest of the body (which takes
+    // references for a bunch of calls) doesn't care that we switched
+    // to an owned-request input.
+    let job = &owned_job;
+    let base = owned_base.as_path();
+    let head = owned_head.as_path();
+    let cache = &owned_cache;
+    let db = &owned_db;
+    let pr_ctx = &owned_pr_ctx;
     let repo_label = pr_ctx
         .repo
         .clone()
