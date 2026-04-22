@@ -266,11 +266,12 @@ function PrCost({ artifact }: { artifact: Artifact }) {
 }
 
 /** Baseline-pin stamp — "what produced this number." Shows the
- *  probe model + probe-set version so a reviewer comparing two
+ *  probe + synthesis + proof models so a reviewer comparing two
  *  analyses across model swaps can SEE the pin instead of guessing.
- *  Per scope-5 spec, full refusal-on-drift compares against the
- *  current LLM config; this strip is the visible-pin half of that
- *  contract. */
+ *  The refusal-on-drift half of the RFC v0.3 §9 contract lives in
+ *  the `adr baseline --against` CLI; this strip is the visible-pin
+ *  half. (`baselinePinMatches` in `lib/baseline-pin.ts` mirrors the
+ *  Rust check for when an in-UI compare view arrives.) */
 function BaselineStamp({
   baseline,
 }: {
