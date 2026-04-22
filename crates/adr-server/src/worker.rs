@@ -323,7 +323,14 @@ async fn run_inner(req: PipelineRequest) -> Result<()> {
             head_sha: head_sha.clone(),
             intent_fp: intent_fp.clone(),
             llm_sig: llm_sig_db.clone(),
-            artifact_key: if should_cache { Some(key.clone()) } else { None },
+            // Always stamp the artifact_key. When synth is going to
+            // run we haven't called `cache.put` yet, but synth's
+            // writeback will — so pointing the row at the key NOW
+            // means a post-restart get_job can resolve it once the
+            // cache file lands. Without this the row is reachable
+            // via /analyses but /analyze/:id 404s until the next
+            // fresh run happens.
+            artifact_key: Some(key.clone()),
             status: AnalysisStatus::Ready,
             message: None,
             created_at: now.clone(),

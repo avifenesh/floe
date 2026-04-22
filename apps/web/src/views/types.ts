@@ -20,7 +20,6 @@ export type FlowSubTab =
   | "flow"
   | "morph"
   | "delta"
-  | "evidence"
   | "source"
   | "cost"
   | "proof";
@@ -41,7 +40,6 @@ export const FLOW_SUB_TABS: { key: FlowSubTab; label: string }[] = [
   { key: "flow", label: "Flow" },
   { key: "morph", label: "Morph" },
   { key: "delta", label: "Delta" },
-  { key: "evidence", label: "Evidence" },
   { key: "source", label: "Source" },
   { key: "cost", label: "Cost" },
   { key: "proof", label: "Intent & Proof" },

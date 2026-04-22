@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { Artifact, Flow } from "@/types/artifact";
 import type { FlowSubTab } from "./types";
 import { PrHunks } from "./pr/PrHunks";
@@ -41,8 +41,6 @@ export function FlowWorkspace({ artifact, jobId, flow, sub }: Props) {
         return <FlowMorph artifact={artifact} flow={flow} />;
       case "delta":
         return <FlowDelta artifact={artifact} flow={flow} />;
-      case "evidence":
-        return <FlowEvidence flow={flow} />;
       case "source":
         return <FlowSource artifact={artifact} jobId={jobId} flow={flow} />;
       case "cost":
@@ -130,48 +128,10 @@ function FlowSource({
   return <SourceView artifact={artifact} jobId={jobId} scope={scope} />;
 }
 
-function FlowEvidence({ flow }: { flow: Flow }) {
-  const claims = flow.evidence ?? [];
-  const hasProof = flow.proof != null;
-  return (
-    <section className="space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-[15px] font-mono text-foreground">
-          Evidence
-          <span className="font-normal text-muted-foreground"> · {flow.name}</span>
-        </h1>
-        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
-          Cheap structural observations about this flow's shape —
-          file scope, connected call edges, signature consistency,
-          test coverage. Context for the reviewer before reading hunks.
-          Proof (semantic, LLM) lives on the{" "}
-          <em className="text-foreground/80">Intent &amp; Proof</em> tab.
-        </p>
-      </header>
-      {claims.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground italic">
-          No structural claims for this flow yet — either the hunks
-          don't overlap with any active collector, or the evidence
-          pass hasn't landed.
-        </p>
-      ) : (
-        <ol className="space-y-2">
-          {claims.map((c) => (
-            <li key={c.id}>
-              <ClaimRow claim={c} />
-            </li>
-          ))}
-        </ol>
-      )}
-      <footer className="text-[11px] text-muted-foreground italic pt-1 border-t border-border/40">
-        Looking for &quot;did this PR deliver its stated intent?&quot; — check{" "}
-        <em className="text-foreground/80">Intent &amp; Proof</em>
-        {hasProof ? " (already populated for this flow)." : "."}
-        {" "}Want to read the actual code? <em className="text-foreground/80">Source</em> shows the diff.
-      </footer>
-    </section>
-  );
-}
+// FlowEvidence was merged into FlowProof per user request — one
+// page covers both "did the PR deliver its intent?" (Proof cards +
+// per-claim breakdown) and "cheap structural context" (Evidence
+// section below). ClaimRow stays for reuse inside FlowProof.
 
 function ClaimRow({ claim }: { claim: import("@/types/artifact").Claim }) {
   const kindLabel = kindToLabel(claim.kind);
@@ -942,7 +902,21 @@ function ReplacementRow({ from, to, file }: { from: string; to: string; file: st
  *  click for a reviewer who wants that depth. */
 function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; jobId: string }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const entities: string[] = flow.entities ?? [];
+  // Reviewer-managed reorder of entity cards. Starts at the flow's
+  // natural entity order; drag-and-drop shuffles in-place. Resets
+  // when the flow id changes so opening a different flow doesn't
+  // inherit a stale layout.
+  const [order, setOrder] = useState<string[]>(flow.entities ?? []);
+  useEffect(() => {
+    setOrder(flow.entities ?? []);
+  }, [flow.id, flow.entities]);
+  const [dragName, setDragName] = useState<string | null>(null);
+  const entities: string[] = order.filter((n) => (flow.entities ?? []).includes(n));
+  // Drop any reordered names that aren't in the flow any more (
+  // e.g. after a re-run); append any new names at the end.
+  for (const n of flow.entities ?? []) {
+    if (!entities.includes(n)) entities.push(n);
+  }
   const items = entities.map((name) => {
     const base = findNodeByName(artifact.base.nodes, name);
     const head = findNodeByName(artifact.head.nodes, name);
@@ -1061,7 +1035,38 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
           )}
           <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {items.map((it) => (
-              <li key={it.name}>
+              <li
+                key={it.name}
+                draggable
+                onDragStart={(e) => {
+                  setDragName(it.name);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", it.name);
+                }}
+                onDragEnd={() => setDragName(null)}
+                onDragOver={(e) => {
+                  if (dragName && dragName !== it.name) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (!dragName || dragName === it.name) return;
+                  setOrder((prev) => {
+                    const names = [...prev];
+                    const from = names.indexOf(dragName);
+                    const to = names.indexOf(it.name);
+                    if (from < 0 || to < 0) return prev;
+                    names.splice(from, 1);
+                    names.splice(to, 0, dragName);
+                    return names;
+                  });
+                  setDragName(null);
+                }}
+                className={
+                  "transition-opacity cursor-grab active:cursor-grabbing " +
+                  (dragName === it.name ? "opacity-50" : "opacity-100")
+                }
+                title="Drag to reorder · click to open source"
+              >
                 <EntityCard
                   item={it}
                   onClick={() => setSelected(it.name)}
@@ -1619,6 +1624,31 @@ function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
             {proof.claims.map((c, i) => (
               <li key={i}>
                 <ClaimProofRow claim={c} />
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+      {/* Structural evidence — file scope, call-chain, signature
+          consistency, test coverage. Lives alongside proof because
+          both answer "what's the context + evidence for this flow?"
+          Cheap observations from the analyzer, not the LLM. */}
+      {(flow.evidence ?? []).length > 0 && (
+        <section className="space-y-2">
+          <div>
+            <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
+              Structural evidence ({(flow.evidence ?? []).length})
+            </h2>
+            <p className="text-[11px] text-muted-foreground max-w-3xl leading-relaxed">
+              Cheap context from the analyzer — file scope, call-chain
+              connectedness, signature consistency, test coverage. Not
+              a verdict on intent; that's above.
+            </p>
+          </div>
+          <ol className="space-y-2">
+            {(flow.evidence ?? []).map((c) => (
+              <li key={c.id}>
+                <ClaimRow claim={c} />
               </li>
             ))}
           </ol>
