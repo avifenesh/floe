@@ -22,11 +22,11 @@ interface Props {
 
 /**
  * Flow workspace. Each flow has its own set of sub-tabs; we render one at
- * a time based on the current sub selection.
- *
- * Overview is the first cut: the flow's header + its hunks. Source and
- * Cost are deliberate stubs — the real versions reuse the existing Source
- * view scoped to this flow's entities (lands next).
+ * a time based on the current sub selection. Every sub-tab is fully
+ * implemented: Overview (header + hunks), Flow (graph visualization),
+ * Morph (intent vs. result), Delta (cost drivers + evidence + proof
+ * ordered by impact), Evidence (claim list), Source (flow-scoped diff),
+ * Cost (axes + drivers + proof peer), Intent & Proof (verdict cards).
  */
 export function FlowWorkspace({ artifact, jobId, flow, sub }: Props) {
   const order = FLOW_SUB_TABS.findIndex((t) => t.key === sub);

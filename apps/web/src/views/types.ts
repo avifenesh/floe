@@ -14,8 +14,7 @@ export type TopTab =
   | { kind: "flow"; flowId: string }
   | { kind: "pr" };
 
-/** Per-flow sub-tabs — the full set we'll try visually; a few are stubbed
- *  while we decide the order and which ones earn space. */
+/** Per-flow sub-tabs — every one is fully rendered (no stubs). */
 export type FlowSubTab =
   | "overview"
   | "flow"
@@ -26,11 +25,13 @@ export type FlowSubTab =
   | "cost"
   | "proof";
 
-/** Whole-PR sub-tabs. */
+/** Whole-PR sub-tabs. A `structure` tab was in the original design but
+ *  dropped here until the analyzer grows a first-class class / module /
+ *  interface extraction pass — "no stubs" is a hard rule for reviewer
+ *  testing. Restore when that analyzer lands. */
 export type PrSubTab =
   | "flows-map"
   | "diff"
-  | "structure"
   | "cost"
   | "proof"
   | "meta";
@@ -49,7 +50,6 @@ export const FLOW_SUB_TABS: { key: FlowSubTab; label: string }[] = [
 export const PR_SUB_TABS: { key: PrSubTab; label: string }[] = [
   { key: "flows-map", label: "Flows" },
   { key: "diff", label: "Diff" },
-  { key: "structure", label: "Structure" },
   { key: "cost", label: "Cost" },
   { key: "proof", label: "Intent & Proof" },
   { key: "meta", label: "Meta" },

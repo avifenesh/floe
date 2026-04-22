@@ -23,11 +23,9 @@ interface Props {
  *   flows-map — overview of detected flows; click a flow card to open its
  *     top-tab workspace.
  *   diff — the full textual diff, unscoped (the existing Source view).
- *   cost — aggregate PR cost (stub).
+ *   cost — aggregate PR cost: axes, tokens, per-flow contribution.
+ *   proof — intent + per-flow proof verdicts with claim breakdown.
  *   meta — identity header + stats + raw hunk list.
- *
- * "Structure" — code-surface view (classes, modules, exported symbols) —
- * is reserved as a future sub-tab and not in the first iteration.
  */
 export function PrWorkspace({ artifact, jobId, sub, onTop }: Props) {
   const order = PR_SUB_TABS.findIndex((t) => t.key === sub);
@@ -37,8 +35,6 @@ export function PrWorkspace({ artifact, jobId, sub, onTop }: Props) {
         return <FlowsMap artifact={artifact} onTop={onTop} />;
       case "diff":
         return <SourceView artifact={artifact} jobId={jobId} />;
-      case "structure":
-        return <StructureStub />;
       case "cost":
         return <PrCost artifact={artifact} />;
       case "proof":
@@ -54,19 +50,6 @@ export function PrWorkspace({ artifact, jobId, sub, onTop }: Props) {
         {body}
       </SlideSwitch>
     </>
-  );
-}
-
-function StructureStub() {
-  return (
-    <div className="space-y-2">
-      <h2 className="text-[13px] font-mono text-foreground">Structure</h2>
-      <p className="text-[12px] text-muted-foreground max-w-3xl">
-        Code-surface view independent of the flow cut: classes, interfaces,
-        modules, and their exported symbols. Stub for now — lands after the
-        analyzer grows a class / interface extraction pass.
-      </p>
-    </div>
   );
 }
 
