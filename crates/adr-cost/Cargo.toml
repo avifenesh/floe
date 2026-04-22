@@ -1,0 +1,12 @@
+[package]
+name = "adr-cost"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Per-flow review-effort estimator — attributes cost drivers to each flow's hunks, entities, and cross-file reach."
+
+[dependencies]
+adr-core.workspace = true
+adr-probe.workspace = true
