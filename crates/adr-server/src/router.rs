@@ -559,3 +559,121 @@ async fn stream_job(
         axum::response::sse::KeepAlive::new().interval(Duration::from_secs(15)),
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    //! Security + dedupe tests for the router-local pure helpers.
+    //! `resolve_inside` is the gatekeeper for `/analyze/:id/file` —
+    //! a bug here is a path-traversal exposure. `request_dedupe_key`
+    //! decides when two concurrent analyses get coalesced.
+
+    use super::*;
+    use adr_core::intent::{Intent, IntentClaim, IntentInput};
+
+    // ---- request_dedupe_key -------------------------------------------
+
+    fn structured(title: &str) -> IntentInput {
+        IntentInput::Structured(Intent {
+            title: title.into(),
+            summary: "".into(),
+            claims: vec![IntentClaim {
+                statement: "c".into(),
+                evidence_type: adr_core::intent::EvidenceType::Observation,
+                detail: "".into(),
+            }],
+        })
+    }
+
+    #[test]
+    fn dedupe_key_is_deterministic() {
+        let a = request_dedupe_key(Path::new("/a"), Path::new("/b"), None, "");
+        let b = request_dedupe_key(Path::new("/a"), Path::new("/b"), None, "");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn dedupe_key_splits_on_head_path() {
+        let a = request_dedupe_key(Path::new("/a"), Path::new("/b"), None, "");
+        let b = request_dedupe_key(Path::new("/a"), Path::new("/c"), None, "");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn dedupe_key_splits_on_intent() {
+        let a =
+            request_dedupe_key(Path::new("/a"), Path::new("/b"), Some(&structured("t1")), "");
+        let b =
+            request_dedupe_key(Path::new("/a"), Path::new("/b"), Some(&structured("t2")), "");
+        assert_ne!(a, b, "two users analysing the same PR with different intents must not coalesce");
+    }
+
+    #[test]
+    fn dedupe_key_splits_on_notes() {
+        let a = request_dedupe_key(Path::new("/a"), Path::new("/b"), None, "notes-a");
+        let b = request_dedupe_key(Path::new("/a"), Path::new("/b"), None, "notes-b");
+        assert_ne!(a, b);
+    }
+
+    // ---- resolve_inside -----------------------------------------------
+
+    fn tmp_root() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        // Create a safe inner file so canonicalize has something to land on.
+        std::fs::write(root.join("inner.ts"), "ok").unwrap();
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/nested.ts"), "ok").unwrap();
+        (dir, root)
+    }
+
+    #[test]
+    fn resolve_inside_accepts_relative_file() {
+        let (_tmp, root) = tmp_root();
+        let p = resolve_inside(&root, "inner.ts").unwrap();
+        assert_eq!(p, root.join("inner.ts"));
+    }
+
+    #[test]
+    fn resolve_inside_accepts_nested_relative_file() {
+        let (_tmp, root) = tmp_root();
+        let p = resolve_inside(&root, "sub/nested.ts").unwrap();
+        assert_eq!(p, root.join("sub").join("nested.ts"));
+    }
+
+    #[test]
+    fn resolve_inside_rejects_absolute_unix_path() {
+        let (_tmp, root) = tmp_root();
+        // On Windows, Path::is_absolute rejects this (no drive), so
+        // canonicalize fails; the starts_with check catches any
+        // accidental traversal. Either way: error.
+        assert!(resolve_inside(&root, "/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn resolve_inside_rejects_windows_drive_paths() {
+        let (_tmp, root) = tmp_root();
+        // `C:\Windows\notepad.exe` — the `:` check catches this even on
+        // non-Windows hosts (defence in depth against cross-platform
+        // path strings landing on a Windows server).
+        assert!(resolve_inside(&root, "C:\\Windows\\notepad.exe").is_err());
+    }
+
+    #[test]
+    fn resolve_inside_rejects_backslash_root() {
+        let (_tmp, root) = tmp_root();
+        assert!(resolve_inside(&root, "\\\\server\\share").is_err());
+    }
+
+    #[test]
+    fn resolve_inside_rejects_dotdot_escape() {
+        let (_tmp, root) = tmp_root();
+        // Create a sibling file outside root that ../ would reach.
+        let outside = root.parent().unwrap().join("outside.ts");
+        let _ = std::fs::write(&outside, "leak").ok();
+        let res = resolve_inside(&root, "../outside.ts");
+        // Either canonicalize fails (file absent on this platform) or
+        // the starts_with check rejects. Both end as errors.
+        assert!(res.is_err(), "dotdot escape must be rejected");
+        let _ = std::fs::remove_file(&outside);
+    }
+}
