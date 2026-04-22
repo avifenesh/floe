@@ -8,6 +8,10 @@ members = [
     "crates/adr-flows",
     "crates/adr-server",
     "crates/adr-cli",
+    "crates/adr-mcp",
+    "crates/adr-evidence",
+    "crates/adr-cost",
+    "crates/adr-probe",
 ]
 
 [workspace.package]
@@ -29,6 +33,16 @@ clap = { version = "4", features = ["derive"] }
 tree-sitter = "0.22"
 tree-sitter-typescript = "0.21"
 walkdir = "2"
+ignore = "0.4"
+globset = "0.4"
+grep-searcher = "0.1"
+grep-regex = "0.1"
+grep-matcher = "0.1"
+dotenvy = "0.15"
+libsql = { version = "0.9", default-features = false, features = ["core", "serde"] }
+oauth2 = "4"
+axum-extra = { version = "0.9", features = ["cookie", "cookie-signed"] }
+time = { version = "0.3", features = ["serde"] }
 insta = { version = "1", features = ["json", "redactions"] }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -47,6 +61,10 @@ adr-hunks = { path = "crates/adr-hunks" }
 adr-cfg = { path = "crates/adr-cfg" }
 adr-flows = { path = "crates/adr-flows" }
 adr-server = { path = "crates/adr-server" }
+adr-mcp = { path = "crates/adr-mcp" }
+adr-evidence = { path = "crates/adr-evidence" }
+adr-cost = { path = "crates/adr-cost" }
+adr-probe = { path = "crates/adr-probe" }
 
 [profile.release]
 lto = "thin"

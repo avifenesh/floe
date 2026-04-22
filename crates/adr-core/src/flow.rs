@@ -1,6 +1,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::evidence::{Claim, Cost};
+use crate::intent::{IntentFit, Proof};
+
 /// A flow — the primary unit of review in v0.2. Lives at
 /// `artifact.flows[]` (schema update lands with this crate).
 ///
@@ -33,9 +36,38 @@ pub struct Flow {
     /// callers/callees the reviewer should see in context. Empty for
     /// structural flows.
     pub extra_entities: Vec<String>,
+    /// Unchanged call-sites / refs that reach this flow's entities
+    /// (1-hop in v0). Each tuple is `(from_qualified_name,
+    /// to_qualified_name)` where at least one endpoint is in
+    /// `entities`. The frontend renders these as dashed context
+    /// arrows so the reviewer sees "who else calls into this flow"
+    /// without the noise of the full graph.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub propagation_edges: Vec<(String, String)>,
     /// Render order — stable in structural output; LLM runs preserve
     /// whatever order the host finalises.
     pub order: u32,
+    /// Per-flow evidence — claims that back or caution about the flow's
+    /// rationale. Populated by the `adr-evidence` pass after flows are
+    /// finalised; may be empty for a flow with no extractable claims.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<Claim>,
+    /// Per-flow review-effort estimate. Populated by the `adr-cost`
+    /// pass; `None` when the pass hasn't run or errored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<Cost>,
+    /// Intent-fit verdict for this flow — does it deliver something the
+    /// PR's stated intent claims? Populated by the intent-fit LLM pass
+    /// (see `docs/scope-5-cost-model.md` and `feedback_proof_uses_glm.md`).
+    /// `None` when no intent was supplied or the pass hasn't run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_fit: Option<IntentFit>,
+    /// Proof-verification result for this flow — is there evidence
+    /// backing the intent's claims? Populated by the proof-verification
+    /// LLM pass. Independent of `cost` — proof is its own section in
+    /// the product, not a cost dimension.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<Proof>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

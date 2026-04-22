@@ -8,11 +8,15 @@ pub mod graph;
 pub mod provenance;
 pub mod hunks;
 pub mod cfg;
+pub mod evidence;
 pub mod flow;
+pub mod intent;
 pub mod artifact;
 
-pub use artifact::{Artifact, SCHEMA_VERSION};
+pub use artifact::{Artifact, ArtifactBaseline, CostStatus, ProofStatus, Side, SynthStatus, SCHEMA_VERSION};
 pub use cfg::{Cfg, CfgEdge, CfgEntry, CfgMap, CfgNode, CfgNodeId, CfgNodeKind};
+pub use evidence::{Axes, Claim, ClaimKind, Cost, CostDriver, Strength};
+pub use intent::{EvidenceType, Intent, IntentClaim, IntentInput};
 pub use flow::{Flow, FlowSource};
 pub use graph::{Edge, EdgeId, EdgeKind, Graph, Node, NodeId, NodeKind};
 pub use hunks::{Hunk, HunkKind};

@@ -21,6 +21,26 @@
         "$ref": "#/definitions/CfgEntry"
       }
     },
+    "baseline": {
+      "description": "Repo-wide baseline summary from the probe pass. Populated by `adr-cost` alongside per-flow `Cost`; carries the denominators the frontend needs to render bars as *percent-of-baseline* rather than *relative rank*. `None` until the probe pass lands.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ArtifactBaseline"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cost_status": {
+      "description": "Status of the cost-attribution (probe) pass. See [`CostStatus`].",
+      "default": "not-run",
+      "allOf": [
+        {
+          "$ref": "#/definitions/CostStatus"
+        }
+      ]
+    },
     "flows": {
       "description": "Flows — groups of hunks that belong to one architectural story. The primary unit of review in v0.2. Deterministic structural clustering always produces this list; the `adr` PI extension may replace it with LLM-validated flows.",
       "type": "array",
@@ -44,14 +64,107 @@
         "$ref": "#/definitions/Hunk"
       }
     },
+    "intent": {
+      "description": "What the PR claims to accomplish — consumed by the intent-fit and proof-verification LLM passes. Either pre-structured by the caller or raw PR text the passes structure on the fly. `None` when the caller didn't supply one (passes then emit a \"no-intent\" claim and proof stays at 0).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IntentInput"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notes": {
+      "description": "Side-channel notes from the reviewer — pasted benchmark output, staging logs, corroborating screenshots turned into text. The proof-verification pass reads this alongside the code when deciding whether a claim has evidence.",
+      "type": "string"
+    },
     "pr": {
       "$ref": "#/definitions/PrRef"
     },
+    "proof_status": {
+      "description": "Status of the intent-fit + proof-verification LLM passes. See [`ProofStatus`]. Independent of `cost_status` — probe runs local, proof runs cloud (GLM), they spawn in parallel.",
+      "default": "not-run",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ProofStatus"
+        }
+      ]
+    },
     "schema_version": {
       "type": "string"
+    },
+    "synth_status": {
+      "description": "Status of the parallel flow-naming pass. See [`SynthStatus`]. Initially `Analyzing` when an LLM is configured; flips to `Ready` once every cluster's proposal is merged. The FE uses this to decide whether to keep polling for flow-name updates after the workspace opens.",
+      "default": "not-run",
+      "allOf": [
+        {
+          "$ref": "#/definitions/SynthStatus"
+        }
+      ]
     }
   },
   "definitions": {
+    "ArtifactBaseline": {
+      "description": "Base-side totals used as denominators for the UI's %-of-baseline bars.\n\nPer-axis cost is summed across every entity in the base probe run on the axis's probe (e.g. `continuation = Σ base.per_probe_entity_cost[\"api-surface\"]`). `tokens_base` is the base probe run's total token usage; `tokens_head` is the head run's, used for the PR-level \"token cost moved by X%\" headline.",
+      "type": "object",
+      "required": [
+        "axes_base",
+        "probe_model",
+        "probe_set_version",
+        "tokens_base",
+        "tokens_head"
+      ],
+      "properties": {
+        "axes_base": {
+          "description": "Per-axis base-run cost. All four fields non-negative.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Axes"
+            }
+          ]
+        },
+        "probe_model": {
+          "type": "string"
+        },
+        "probe_set_version": {
+          "type": "string"
+        },
+        "tokens_base": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "tokens_head": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "Axes": {
+      "description": "Signed per-axis breakdown — each axis accumulates the contribution from the probe assigned to it. v0 assignment:\n\n| axis          | source probe              | |---------------|---------------------------| | continuation  | `probe-api-surface`       | | operational   | `probe-external-boundaries` | | runtime       | `probe-type-callsites`    |\n\nProof intentionally lives *outside* the cost axes — see [`crate::intent::Proof`] on each [`crate::Flow`]. Cost is navigation movement; proof is evidence of stated intent. Avi's call: mixing them confuses the reviewer about what each bar is saying.",
+      "type": "object",
+      "required": [
+        "continuation",
+        "operational",
+        "runtime"
+      ],
+      "properties": {
+        "continuation": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "operational": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "runtime": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
     "Cfg": {
       "type": "object",
       "required": [
@@ -260,6 +373,248 @@
         }
       ]
     },
+    "Claim": {
+      "description": "A single claim backing (or cautioning about) a flow's rationale.",
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "provenance",
+        "strength",
+        "text"
+      ],
+      "properties": {
+        "entities": {
+          "description": "Qualified entity names that participate in this claim. Empty is valid for flow-global observations.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "description": "Stable id — `claim-<blake3>` over `(flow_id, kind, text)`. Lets the frontend key rows without mutating positions across re-runs.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/ClaimKind"
+        },
+        "provenance": {
+          "description": "Which pass produced this claim — lets the UI answer \"where did this come from?\" without guessing.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Provenance"
+            }
+          ]
+        },
+        "strength": {
+          "$ref": "#/definitions/Strength"
+        },
+        "text": {
+          "description": "Human-readable one-liner. The reviewer's eye goes here first.",
+          "type": "string"
+        }
+      }
+    },
+    "ClaimKind": {
+      "description": "Kind of claim. Drives the icon / color the frontend picks. Kept coarse so the enum stays stable as collectors are added.",
+      "oneOf": [
+        {
+          "description": "All API hunks in the flow share a signature shape (parameter added, return type widened, etc.).",
+          "type": "string",
+          "enum": [
+            "signature-consistency"
+          ]
+        },
+        {
+          "description": "The Call hunks in the flow form a connected call chain rather than independent edges.",
+          "type": "string",
+          "enum": [
+            "call-chain"
+          ]
+        },
+        {
+          "description": "Hunks touch N files (often a \"yes, but watch the fanout\" signal).",
+          "type": "string",
+          "enum": [
+            "cross-file"
+          ]
+        },
+        {
+          "description": "Test files touch entities in this flow (or don't).",
+          "type": "string",
+          "enum": [
+            "test-coverage"
+          ]
+        },
+        {
+          "description": "The flow sits entirely within one file — review scope is tight.",
+          "type": "string",
+          "enum": [
+            "single-file"
+          ]
+        },
+        {
+          "description": "LLM intent-fit verdict: this flow delivers (or doesn't) something the PR's stated intent mentions. Produced by the intent-fit pass.",
+          "type": "string",
+          "enum": [
+            "intent-fit"
+          ]
+        },
+        {
+          "description": "LLM proof-verification verdict: an intent-claim has (or lacks) corresponding evidence — a benchmark result, an example file, a test that asserts the claim, or a corroborating observation from reviewer notes. Produced by the proof-verification pass. Drives [`Axes::proof`].",
+          "type": "string",
+          "enum": [
+            "proof"
+          ]
+        },
+        {
+          "description": "Generic observation — used when no more specific kind applies.",
+          "type": "string",
+          "enum": [
+            "observation"
+          ]
+        }
+      ]
+    },
+    "ClaimProofKind": {
+      "type": "string",
+      "enum": [
+        "found",
+        "partial",
+        "missing"
+      ]
+    },
+    "ClaimProofStatus": {
+      "description": "Status of a single claim's proof search, emitted by the LLM and surfaced per-claim in the UI so the reviewer can see exactly which claim is unverified.",
+      "type": "object",
+      "required": [
+        "claim_index",
+        "statement",
+        "status",
+        "strength"
+      ],
+      "properties": {
+        "claim_index": {
+          "description": "Index into `Intent.claims[]` — -1 when the LLM structured a claim out of raw text and doesn't map to a pre-structured index.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProofEvidence"
+          }
+        },
+        "statement": {
+          "description": "Claim statement echo, so the UI can render without re-resolving.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Whether the LLM found proof for *this specific claim*.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ClaimProofKind"
+            }
+          ]
+        },
+        "strength": {
+          "$ref": "#/definitions/Strength"
+        }
+      }
+    },
+    "Cost": {
+      "description": "Per-flow review-effort estimate, emitted by the `adr-cost` pass from the probe baselines (see `docs/scope-5-cost-model.md`).\n\n`net` is **signed**: negative means the PR made the affected flow cheaper for the next LLM session to navigate (a refactor that dropped complexity), positive means harder. Scale is \"arbitrary cost units\" from the probe — comparable across flows of one PR and across PRs on the same repo, not across repos.",
+      "type": "object",
+      "required": [
+        "axes",
+        "net",
+        "probe_model",
+        "probe_set_version"
+      ],
+      "properties": {
+        "axes": {
+          "$ref": "#/definitions/Axes"
+        },
+        "drivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CostDriver"
+          }
+        },
+        "net": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "probe_model": {
+          "description": "Which probe model produced the baselines these deltas came from. Stamped so a reviewer can ask \"why did the number move?\" when a probe-model change drifts the baseline.",
+          "type": "string"
+        },
+        "probe_set_version": {
+          "type": "string"
+        },
+        "tokens_delta": {
+          "description": "Signed token-usage delta for this flow — `Σ (head.tokens - base.tokens)` across the flow's entities. Translates directly to API-billing impact for users running LLM sessions against the head repo.",
+          "default": 0,
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "CostDriver": {
+      "type": "object",
+      "required": [
+        "label",
+        "value"
+      ],
+      "properties": {
+        "detail": {
+          "description": "Optional expanded detail — e.g. a sample entity or per-axis note.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Short reviewer-facing label — \"api-surface probe\", \"type-callsites probe\".",
+          "type": "string"
+        },
+        "value": {
+          "description": "Signed contribution to `net`. Drivers sum to `net`.",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "CostStatus": {
+      "description": "Where the cost-attribution pass stands for this artifact.\n\nCost comes from an LLM probe pass that runs asynchronously after the synchronous pipeline finishes — we don't want the reviewer waiting on 2 × probe latency just to see flows and evidence. `cost_status` lets the frontend differentiate \"no cost yet, try again shortly\" from \"cost attribution is genuinely missing\".",
+      "oneOf": [
+        {
+          "description": "Cost pass never ran. Either probe is disabled or the pipeline completed without reaching the cost stage.",
+          "type": "string",
+          "enum": [
+            "not-run"
+          ]
+        },
+        {
+          "description": "Probe pass is mid-flight. UI should show \"analysing…\".",
+          "type": "string",
+          "enum": [
+            "analyzing"
+          ]
+        },
+        {
+          "description": "Probe pass completed; every flow's `cost` field is populated.",
+          "type": "string",
+          "enum": [
+            "ready"
+          ]
+        },
+        {
+          "description": "Probe pass errored. Partial cost may still be present on some flows; banner shown to the reviewer.",
+          "type": "string",
+          "enum": [
+            "errored"
+          ]
+        }
+      ]
+    },
     "Edge": {
       "type": "object",
       "required": [
@@ -329,6 +684,39 @@
         }
       ]
     },
+    "EvidenceType": {
+      "description": "The kind of evidence a claim expects. Drives how the proof-verification pass looks for corroborating artefacts.",
+      "oneOf": [
+        {
+          "description": "A benchmark run — numbers in the PR body, perf log, etc.",
+          "type": "string",
+          "enum": [
+            "bench"
+          ]
+        },
+        {
+          "description": "An `examples/` file (or similar) exercising the claim end-to-end.",
+          "type": "string",
+          "enum": [
+            "example"
+          ]
+        },
+        {
+          "description": "A test that **asserts the specific claim** (not just touches the function — see the RFC).",
+          "type": "string",
+          "enum": [
+            "test"
+          ]
+        },
+        {
+          "description": "A stated observation — \"p99 dropped 40% in staging\". Weakest form of proof; still counts if the reviewer's notes corroborate.",
+          "type": "string",
+          "enum": [
+            "observation"
+          ]
+        }
+      ]
+    },
     "Flow": {
       "description": "A flow — the primary unit of review in v0.2. Lives at `artifact.flows[]` (schema update lands with this crate).\n\nThe structural floor produces flows with `FlowSource::Structural`. The `adr` PI extension replaces the list with LLM-validated flows tagged `FlowSource::Llm`. If the LLM run is rejected, we ship the structural list unchanged and the UI surfaces a \"structural only\" banner.",
       "type": "object",
@@ -343,11 +731,29 @@
         "source"
       ],
       "properties": {
+        "cost": {
+          "description": "Per-flow review-effort estimate. Populated by the `adr-cost` pass; `None` when the pass hasn't run or errored.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Cost"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "entities": {
           "description": "Qualified entity names participating in this flow. Kept as strings so they match across base/head snapshots.",
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "evidence": {
+          "description": "Per-flow evidence — claims that back or caution about the flow's rationale. Populated by the `adr-evidence` pass after flows are finalised; may be empty for a flow with no extractable claims.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Claim"
           }
         },
         "extra_entities": {
@@ -368,6 +774,17 @@
           "description": "Stable id — `flow-<blake3>` computed from the bucket name and hunk-id list. Two runs of the structural clustering on the same artifact produce identical ids.",
           "type": "string"
         },
+        "intent_fit": {
+          "description": "Intent-fit verdict for this flow — does it deliver something the PR's stated intent claims? Populated by the intent-fit LLM pass (see `docs/scope-5-cost-model.md` and `feedback_proof_uses_glm.md`). `None` when no intent was supplied or the pass hasn't run.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IntentFit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "description": "Reviewer-facing name. Structural flows use `<structural: <bucket>>`; LLM flows use an intent-shaped name.",
           "type": "string"
@@ -377,6 +794,17 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
+        },
+        "proof": {
+          "description": "Proof-verification result for this flow — is there evidence backing the intent's claims? Populated by the proof-verification LLM pass. Independent of `cost` — proof is its own section in the product, not a cost dimension.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Proof"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "rationale": {
           "description": "One-or-two-sentence explanation of why these hunks are together.",
@@ -573,6 +1001,130 @@
         }
       ]
     },
+    "Intent": {
+      "description": "Structured PR intent. This is the shape the intent-fit and proof-verification passes consume. Raw text intents are fed through a pre-pass that reshapes them into this form.",
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IntentClaim"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "IntentClaim": {
+      "description": "One claim a PR makes about itself.\n\nExample: `\"streams now back-pressure at 64 KB\" / EvidenceType::Bench` with `detail = \"ran bin/smoke-stream.sh — head p99 dropped from 180ms to 72ms\"`.",
+      "type": "object",
+      "required": [
+        "evidence_type",
+        "statement"
+      ],
+      "properties": {
+        "detail": {
+          "description": "Optional human-readable detail — benchmark output, example path, test file reference, observation context. Reviewer pastes this into intent.json or the PR body.",
+          "type": "string"
+        },
+        "evidence_type": {
+          "$ref": "#/definitions/EvidenceType"
+        },
+        "statement": {
+          "description": "The claim itself in one sentence. Reviewer-facing copy.",
+          "type": "string"
+        }
+      }
+    },
+    "IntentFit": {
+      "description": "Per-flow intent-fit result from the intent-fit LLM pass.",
+      "type": "object",
+      "required": [
+        "model",
+        "prompt_version",
+        "reasoning",
+        "strength",
+        "verdict"
+      ],
+      "properties": {
+        "matched_claims": {
+          "description": "Indices into the intent's `claims[]` that this flow addresses.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0.0
+          }
+        },
+        "model": {
+          "type": "string"
+        },
+        "prompt_version": {
+          "type": "string"
+        },
+        "reasoning": {
+          "description": "One-paragraph justification the reviewer can scan.",
+          "type": "string"
+        },
+        "strength": {
+          "$ref": "#/definitions/Strength"
+        },
+        "verdict": {
+          "$ref": "#/definitions/IntentFitVerdict"
+        }
+      }
+    },
+    "IntentFitVerdict": {
+      "description": "Intent-fit verdict for one flow — does this flow deliver something the PR's stated intent mentions?",
+      "oneOf": [
+        {
+          "description": "The flow clearly delivers one or more intent claims.",
+          "type": "string",
+          "enum": [
+            "delivers"
+          ]
+        },
+        {
+          "description": "The flow touches the intent's area but doesn't close the loop — partial progress, further work needed.",
+          "type": "string",
+          "enum": [
+            "partial"
+          ]
+        },
+        {
+          "description": "The flow is off-topic relative to the stated intent (potential scope-creep or unrelated side-change).",
+          "type": "string",
+          "enum": [
+            "unrelated"
+          ]
+        },
+        {
+          "description": "No intent was supplied; the pass short-circuits.",
+          "type": "string",
+          "enum": [
+            "no-intent"
+          ]
+        }
+      ]
+    },
+    "IntentInput": {
+      "description": "How the caller supplied intent. `Structured` is the canonical shape the downstream passes want; `RawText` is the author's PR description verbatim — structured on the fly before the passes run.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Intent"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
     "Node": {
       "type": "object",
       "required": [
@@ -738,6 +1290,132 @@
         }
       }
     },
+    "Proof": {
+      "description": "Per-flow proof-verification result.",
+      "type": "object",
+      "required": [
+        "model",
+        "prompt_version",
+        "reasoning",
+        "strength",
+        "verdict"
+      ],
+      "properties": {
+        "claims": {
+          "description": "Per-claim breakdown. Empty when `verdict = NoIntent`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ClaimProofStatus"
+          }
+        },
+        "model": {
+          "type": "string"
+        },
+        "prompt_version": {
+          "type": "string"
+        },
+        "reasoning": {
+          "description": "One-paragraph reviewer-facing summary — \"2 of 3 claims verified via examples/stream-backpressure.ts and the pasted benchmark; the retry-limit claim has no evidence.\"",
+          "type": "string"
+        },
+        "strength": {
+          "$ref": "#/definitions/Strength"
+        },
+        "verdict": {
+          "$ref": "#/definitions/ProofVerdict"
+        }
+      }
+    },
+    "ProofEvidence": {
+      "description": "One piece of evidence the LLM cited for a claim.",
+      "type": "object",
+      "required": [
+        "detail",
+        "evidence_type"
+      ],
+      "properties": {
+        "detail": {
+          "description": "What the LLM actually found — benchmark line, example path, test name, reviewer-note excerpt. Human-readable, reviewer-facing.",
+          "type": "string"
+        },
+        "evidence_type": {
+          "$ref": "#/definitions/EvidenceType"
+        },
+        "path": {
+          "description": "Optional path into the repo when the evidence is a file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ProofStatus": {
+      "description": "Where the intent-fit + proof-verification LLM passes stand for this artifact. Mirrors [`CostStatus`] — proof lands asynchronously because the passes run against GLM and each flow burns a cloud session.",
+      "oneOf": [
+        {
+          "description": "No intent supplied, or the passes are disabled. Proof axis stays 0.",
+          "type": "string",
+          "enum": [
+            "not-run"
+          ]
+        },
+        {
+          "description": "Intent + proof passes in flight. UI should show \"analysing…\".",
+          "type": "string",
+          "enum": [
+            "analyzing"
+          ]
+        },
+        {
+          "description": "Passes completed; per-flow IntentFit + Proof claims populated.",
+          "type": "string",
+          "enum": [
+            "ready"
+          ]
+        },
+        {
+          "description": "One or more sessions errored. Partial claims may be present; banner shown to the reviewer.",
+          "type": "string",
+          "enum": [
+            "errored"
+          ]
+        }
+      ]
+    },
+    "ProofVerdict": {
+      "description": "Proof verdict for one flow — aggregate over all intent-claims the proof-verification pass checked against this flow's code + reviewer notes.",
+      "oneOf": [
+        {
+          "description": "Proof found for the claim(s) — benchmarks quoted, examples present, claim-asserting tests exist.",
+          "type": "string",
+          "enum": [
+            "strong"
+          ]
+        },
+        {
+          "description": "Proof exists for some claim(s) but not others, or evidence is indirect (test exercises the function but doesn't assert the specific claim).",
+          "type": "string",
+          "enum": [
+            "partial"
+          ]
+        },
+        {
+          "description": "Intent claims exist but no evidence backs them.",
+          "type": "string",
+          "enum": [
+            "missing"
+          ]
+        },
+        {
+          "description": "No intent was supplied; the pass short-circuits.",
+          "type": "string",
+          "enum": [
+            "no-intent"
+          ]
+        }
+      ]
+    },
     "Provenance": {
       "description": "Every node, edge, and hunk carries provenance so the UI can answer \"where did this fact come from?\" without guessing.\n\n`source` names the pass that produced the fact (e.g. `tree-sitter-typescript`, `scip-typescript`, `adr-hunks/call`). `version` is the tool version at the time of the run. `pass_id` is stable across a single analysis; `hash` is a blake3 of the raw input bytes the pass consumed — used to detect stale cached facts.",
       "type": "object",
@@ -781,6 +1459,48 @@
           "minimum": 0.0
         }
       }
+    },
+    "Strength": {
+      "description": "The reviewer-visible strength of a claim. Three tiers, tuned to the scan rate of a human reading a PR: \"I trust this\", \"worth a look\", \"gesture only\".",
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "SynthStatus": {
+      "description": "Where the parallel flow-naming (synth) pass stands for this artifact. Mirrors [`CostStatus`] — synth runs as a background task after READY so the workspace can open with structural flow names immediately, refreshing to LLM names when the pass completes (~30–90s on GLM-4.7).",
+      "oneOf": [
+        {
+          "description": "No LLM configured; structural names are final.",
+          "type": "string",
+          "enum": [
+            "not-run"
+          ]
+        },
+        {
+          "description": "Background synth in flight — flow names may update shortly.",
+          "type": "string",
+          "enum": [
+            "analyzing"
+          ]
+        },
+        {
+          "description": "Background synth completed; LLM-named flows in place.",
+          "type": "string",
+          "enum": [
+            "ready"
+          ]
+        },
+        {
+          "description": "Background synth errored; structural names stand, banner shown.",
+          "type": "string",
+          "enum": [
+            "errored"
+          ]
+        }
+      ]
     }
   }
 }
