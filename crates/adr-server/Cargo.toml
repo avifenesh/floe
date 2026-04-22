@@ -48,3 +48,4 @@ url = "2"
 [dev-dependencies]
 reqwest = { workspace = true }
 tokio = { workspace = true }
+tempfile = "3"
