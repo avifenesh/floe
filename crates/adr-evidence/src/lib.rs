@@ -572,3 +572,248 @@ fn claim(
         ),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use adr_core::artifact::PrRef;
+    use adr_core::flow::FlowSource;
+    use adr_core::graph::{Edge, EdgeId, EdgeKind, Node, NodeId, NodeKind, Span};
+    use adr_core::hunks::Hunk;
+
+    fn prov() -> Provenance {
+        Provenance::new("test", "0", "t", b"")
+    }
+
+    fn fn_node(id: u32, qname: &str, file: &str) -> Node {
+        Node {
+            id: NodeId(id),
+            kind: NodeKind::Function {
+                name: qname.into(),
+                signature: format!("{qname}()"),
+            },
+            file: file.into(),
+            span: Span { start: 0, end: 1 },
+            provenance: prov(),
+        }
+    }
+
+    fn api_hunk(hid: &str, node_id: u32, before: &str, after: &str) -> Hunk {
+        Hunk {
+            id: hid.into(),
+            kind: HunkKind::Api {
+                node: NodeId(node_id),
+                before_signature: Some(before.into()),
+                after_signature: Some(after.into()),
+            },
+            provenance: prov(),
+        }
+    }
+
+    fn call_hunk(hid: &str, added: &[u32]) -> Hunk {
+        Hunk {
+            id: hid.into(),
+            kind: HunkKind::Call {
+                added_edges: added.iter().copied().map(EdgeId).collect(),
+                removed_edges: Vec::new(),
+            },
+            provenance: prov(),
+        }
+    }
+
+    fn edge(id: u32, from: u32, to: u32) -> Edge {
+        Edge {
+            id: EdgeId(id),
+            from: NodeId(from),
+            to: NodeId(to),
+            kind: EdgeKind::Calls,
+            provenance: prov(),
+        }
+    }
+
+    fn flow_with(
+        id: &str,
+        hunk_ids: &[&str],
+        entities: &[&str],
+    ) -> Flow {
+        Flow {
+            id: id.into(),
+            name: format!("<structural: {id}>"),
+            rationale: "t".into(),
+            source: FlowSource::Structural,
+            hunk_ids: hunk_ids.iter().map(|s| s.to_string()).collect(),
+            entities: entities.iter().map(|s| s.to_string()).collect(),
+            extra_entities: Vec::new(),
+            propagation_edges: Vec::new(),
+            order: 0,
+            evidence: Vec::new(),
+            cost: None,
+            intent_fit: None,
+            proof: None,
+        }
+    }
+
+    fn seed() -> Artifact {
+        let mut a = Artifact::new(PrRef {
+            repo: "r".into(),
+            base_sha: "b".into(),
+            head_sha: "h".into(),
+        });
+        a.head.nodes = vec![
+            fn_node(1, "Queue.enqueue", "src/queue.ts"),
+            fn_node(2, "Queue.dequeue", "src/queue.ts"),
+            fn_node(3, "formatBudget", "src/budget.ts"),
+        ];
+        a.base.nodes = a.head.nodes.clone();
+        a
+    }
+
+    #[test]
+    fn single_file_scope_emits_high_claim() {
+        let mut a = seed();
+        a.hunks = vec![
+            api_hunk("h1", 1, "old1", "new1"),
+            api_hunk("h2", 2, "old2", "new2"),
+        ];
+        let flow = flow_with("f1", &["h1", "h2"], &["Queue.enqueue", "Queue.dequeue"]);
+        a.flows = vec![flow];
+        let out = collect(a);
+        let file_claims: Vec<&Claim> = out.flows[0]
+            .evidence
+            .iter()
+            .filter(|c| c.kind == ClaimKind::SingleFile)
+            .collect();
+        assert_eq!(file_claims.len(), 1);
+        assert!(matches!(file_claims[0].strength, Strength::High));
+    }
+
+    #[test]
+    fn multi_file_scope_downgrades_strength() {
+        let mut a = seed();
+        a.hunks = vec![
+            api_hunk("h1", 1, "old", "new"),
+            api_hunk("h2", 3, "old", "new"),
+        ];
+        a.flows = vec![flow_with("f1", &["h1", "h2"], &["Queue.enqueue", "formatBudget"])];
+        let out = collect(a);
+        let cross: Vec<&Claim> = out.flows[0]
+            .evidence
+            .iter()
+            .filter(|c| c.kind == ClaimKind::CrossFile)
+            .collect();
+        assert_eq!(cross.len(), 1);
+        assert!(matches!(cross[0].strength, Strength::Medium));
+    }
+
+    #[test]
+    fn signature_consistency_detects_identical_renames() {
+        let mut a = seed();
+        a.hunks = vec![
+            api_hunk("h1", 1, "(n: number): void", "(n: number): Promise<void>"),
+            api_hunk("h2", 2, "(n: number): void", "(n: number): Promise<void>"),
+        ];
+        a.flows = vec![flow_with("f1", &["h1", "h2"], &["Queue.enqueue", "Queue.dequeue"])];
+        let out = collect(a);
+        let sig: Vec<&Claim> = out.flows[0]
+            .evidence
+            .iter()
+            .filter(|c| c.kind == ClaimKind::SignatureConsistency)
+            .collect();
+        assert!(!sig.is_empty(), "expected a SignatureConsistency claim");
+    }
+
+    #[test]
+    fn call_chain_connected_edges_emit_claim() {
+        let mut a = seed();
+        // Two call edges sharing Queue.enqueue as an endpoint → connected.
+        a.head.edges = vec![edge(10, 3, 1), edge(11, 1, 2)];
+        a.hunks = vec![call_hunk("h1", &[10, 11])];
+        a.flows = vec![flow_with(
+            "f1",
+            &["h1"],
+            &["formatBudget", "Queue.enqueue", "Queue.dequeue"],
+        )];
+        let out = collect(a);
+        let chain: Vec<&Claim> = out.flows[0]
+            .evidence
+            .iter()
+            .filter(|c| c.kind == ClaimKind::CallChain)
+            .collect();
+        assert!(!chain.is_empty(), "connected call edges should emit a CallChain claim");
+    }
+
+    /// Claim IDs are stable over the (flow_id, kind, text) tuple so the
+    /// frontend can key rows without positions drifting across re-runs.
+    #[test]
+    fn claim_ids_are_deterministic() {
+        let mut a = seed();
+        a.hunks = vec![api_hunk("h1", 1, "old", "new")];
+        a.flows = vec![flow_with("f1", &["h1"], &["Queue.enqueue"])];
+        let out1 = collect(a.clone());
+        let out2 = collect(a);
+        let ids1: Vec<&str> = out1.flows[0].evidence.iter().map(|c| c.id.as_str()).collect();
+        let ids2: Vec<&str> = out2.flows[0].evidence.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids1, ids2);
+    }
+
+    #[test]
+    fn path_classifiers_catch_common_conventions() {
+        assert!(is_test_path("src/__tests__/foo.test.ts"));
+        assert!(is_test_path("tests/integration/queue.test.ts"));
+        assert!(is_test_path("src/queue.spec.ts"));
+        assert!(!is_test_path("src/queue.ts"));
+        assert!(is_example_path("examples/stream-backpressure.ts"));
+        assert!(!is_example_path("src/queue.ts"));
+    }
+
+    /// NOTE: per `feedback_proof_not_tests.md` + `project_cost_model.md`,
+    /// test-coverage claims are supposed to be a "weak Medium context
+    /// signal, never primary proof". The current collector still emits
+    /// Strength::High on a name-match. This test captures the current
+    /// behaviour so a deliberate strength-downgrade shows up as a diff
+    /// rather than silently changing. See `test_coverage_claim` in
+    /// lib.rs if you need to revisit the rule.
+    #[test]
+    fn test_coverage_name_match_currently_emits_high() {
+        let mut a = seed();
+        // Add a name-matching test file into the graph.
+        a.head.nodes.push(fn_node(10, "testQueue", "tests/queue.test.ts"));
+        a.hunks = vec![api_hunk("h1", 1, "old", "new")];
+        a.flows = vec![flow_with("f1", &["h1"], &["Queue.enqueue"])];
+        let out = collect(a);
+        let tc: Option<&Claim> = out.flows[0]
+            .evidence
+            .iter()
+            .find(|c| c.kind == ClaimKind::TestCoverage);
+        let tc = tc.expect("expected a TestCoverage claim");
+        // Current behaviour: name-match → High. Change this assertion
+        // if you intentionally downgrade the collector per the memo.
+        assert!(
+            matches!(tc.strength, Strength::High),
+            "TestCoverage strength changed from High — if this was on purpose, \
+             update this assertion + the feedback_proof_not_tests.md memory."
+        );
+    }
+
+    #[test]
+    fn no_tests_in_repo_emits_low_strength() {
+        let mut a = seed();
+        a.hunks = vec![api_hunk("h1", 1, "old", "new")];
+        a.flows = vec![flow_with("f1", &["h1"], &["Queue.enqueue"])];
+        let out = collect(a);
+        let tc = out.flows[0]
+            .evidence
+            .iter()
+            .find(|c| c.kind == ClaimKind::TestCoverage)
+            .expect("expected a TestCoverage claim even when no tests exist");
+        assert!(matches!(tc.strength, Strength::Low));
+    }
+
+    #[test]
+    fn empty_flow_produces_no_evidence() {
+        let mut a = seed();
+        a.flows = vec![flow_with("f1", &[], &[])];
+        let out = collect(a);
+        assert!(out.flows[0].evidence.is_empty());
+    }
+}

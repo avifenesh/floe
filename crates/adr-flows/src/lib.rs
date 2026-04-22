@@ -203,3 +203,197 @@ fn node_name(n: &Node) -> Option<String> {
         NodeKind::File { .. } => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use adr_core::artifact::PrRef;
+    use adr_core::graph::{Edge, EdgeId, EdgeKind, NodeId, Span};
+    use adr_core::provenance::Provenance;
+
+    fn prov() -> Provenance {
+        Provenance::new("test", "0", "t", b"")
+    }
+
+    fn fn_node(id: u32, qname: &str) -> Node {
+        Node {
+            id: NodeId(id),
+            kind: NodeKind::Function {
+                name: qname.into(),
+                signature: format!("{qname}()"),
+            },
+            file: "src/t.ts".into(),
+            span: Span { start: 0, end: 1 },
+            provenance: prov(),
+        }
+    }
+
+    fn api_hunk(hid: &str, node_id: u32) -> Hunk {
+        Hunk {
+            id: hid.into(),
+            kind: HunkKind::Api {
+                node: NodeId(node_id),
+                before_signature: Some("old".into()),
+                after_signature: Some("new".into()),
+            },
+            provenance: prov(),
+        }
+    }
+
+    fn call_hunk(hid: &str, added_edge_ids: &[u32]) -> Hunk {
+        Hunk {
+            id: hid.into(),
+            kind: HunkKind::Call {
+                added_edges: added_edge_ids.iter().copied().map(EdgeId).collect(),
+                removed_edges: Vec::new(),
+            },
+            provenance: prov(),
+        }
+    }
+
+    fn seeded_artifact() -> Artifact {
+        let mut a = Artifact::new(PrRef {
+            repo: "r".into(),
+            base_sha: "b".into(),
+            head_sha: "h".into(),
+        });
+        // Two class-methods under `Queue.*` and one top-level helper.
+        a.head.nodes = vec![
+            fn_node(1, "Queue.enqueue"),
+            fn_node(2, "Queue.dequeue"),
+            fn_node(3, "formatTimestamp"),
+        ];
+        a.base.nodes = a.head.nodes.clone();
+        a.hunks = vec![
+            api_hunk("hunk-1", 1),
+            api_hunk("hunk-2", 2),
+            api_hunk("hunk-3", 3),
+        ];
+        a
+    }
+
+    /// Invariant (RFC §4a #1): every hunk appears in ≥ 1 flow. The
+    /// structural clustering is the floor — if this invariant breaks,
+    /// fallback behaviour downstream is silently wrong.
+    #[test]
+    fn every_hunk_appears_in_some_flow() {
+        let a = seeded_artifact();
+        let flows = cluster(&a);
+        let mut seen = std::collections::HashSet::new();
+        for f in &flows {
+            for h in &f.hunk_ids {
+                seen.insert(h.clone());
+            }
+        }
+        for h in &a.hunks {
+            assert!(
+                seen.contains(&h.id),
+                "hunk {} fell out of structural clustering",
+                h.id
+            );
+        }
+    }
+
+    #[test]
+    fn shared_class_prefix_groups_methods() {
+        let a = seeded_artifact();
+        let flows = cluster(&a);
+        let queue_flow = flows
+            .iter()
+            .find(|f| f.name.contains("Queue"))
+            .expect("expected a Queue.* flow");
+        assert_eq!(queue_flow.hunk_ids.len(), 2);
+        assert!(queue_flow.entities.iter().any(|e| e == "Queue.enqueue"));
+        assert!(queue_flow.entities.iter().any(|e| e == "Queue.dequeue"));
+    }
+
+    #[test]
+    fn all_flows_are_structurally_sourced() {
+        let a = seeded_artifact();
+        let flows = cluster(&a);
+        for f in &flows {
+            assert!(
+                matches!(f.source, FlowSource::Structural),
+                "structural pass must not emit FlowSource::Llm"
+            );
+        }
+    }
+
+    #[test]
+    fn flow_id_is_deterministic_across_runs() {
+        let a = seeded_artifact();
+        let f1 = cluster(&a);
+        let f2 = cluster(&a);
+        let ids1: Vec<&str> = f1.iter().map(|f| f.id.as_str()).collect();
+        let ids2: Vec<&str> = f2.iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(
+            ids1, ids2,
+            "flow IDs must be deterministic so the cache + reviewer links stay stable"
+        );
+    }
+
+    #[test]
+    fn top_level_bucket_catches_orphan_helper() {
+        let a = seeded_artifact();
+        let flows = cluster(&a);
+        let top = flows
+            .iter()
+            .find(|f| f.name.contains("top-level") || f.name.contains("formatTimestamp"))
+            .expect("top-level helper bucket missing");
+        assert!(top.hunk_ids.iter().any(|h| h == "hunk-3"));
+    }
+
+    /// Propagation edges surface 1-hop callers/callees that reach a
+    /// flow's entities without being in the flow themselves.
+    #[test]
+    fn propagation_edges_span_flow_boundary() {
+        let mut a = seeded_artifact();
+        // formatTimestamp calls Queue.enqueue — reviewer should see
+        // that propagation on the Queue flow.
+        a.head.edges.push(Edge {
+            id: EdgeId(1),
+            from: NodeId(3),
+            to: NodeId(1),
+            kind: EdgeKind::Calls,
+            provenance: prov(),
+        });
+        let flows = cluster(&a);
+        let queue_flow = flows.iter().find(|f| f.name.contains("Queue")).unwrap();
+        assert!(
+            queue_flow
+                .propagation_edges
+                .iter()
+                .any(|(from, to)| from == "formatTimestamp" && to == "Queue.enqueue"),
+            "expected formatTimestamp → Queue.enqueue propagation edge"
+        );
+    }
+
+    #[test]
+    fn empty_artifact_produces_no_flows() {
+        let a = Artifact::new(PrRef {
+            repo: "r".into(),
+            base_sha: "b".into(),
+            head_sha: "h".into(),
+        });
+        assert!(cluster(&a).is_empty());
+    }
+
+    #[test]
+    fn call_hunk_without_resolvable_edges_still_assigned_to_top_level() {
+        let mut a = seeded_artifact();
+        // A call hunk whose edge IDs don't resolve to any edge in
+        // head/base (common when parse is partial). The entity list
+        // ends up empty — classify_bucket should fall through to
+        // "top-level" rather than skipping the hunk entirely.
+        a.hunks.push(call_hunk("hunk-orphan", &[999]));
+        let flows = cluster(&a);
+        let seen: Vec<&str> = flows
+            .iter()
+            .flat_map(|f| f.hunk_ids.iter().map(String::as_str))
+            .collect();
+        assert!(
+            seen.contains(&"hunk-orphan"),
+            "unresolved-edge hunk must still appear in some flow"
+        );
+    }
+}
