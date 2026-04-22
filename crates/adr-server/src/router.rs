@@ -636,10 +636,11 @@ async fn list_samples(State(state): State<AppState>) -> Json<Vec<SampleView>> {
 ///
 /// Mirrors `/analyze` semantics for dedupe + spawn + cache behaviour
 /// so a click on the gallery card behaves identically to a `POST
-/// /analyze` with the sample's paths. Intent + notes aren't
-/// supported on sample runs in v0 — samples are intended for
-/// "show me what the product does", not "match your PR's claims
-/// against my code".
+/// /analyze` with the sample's paths. When the sample dir includes
+/// an `intent.json` next to `base/`/`head/`, it's loaded and passed
+/// through — so intent-fit + proof passes actually run on demos
+/// instead of always skipping. Notes aren't supported on sample
+/// runs (they're reviewer side-channel input).
 async fn analyze_sample(
     State(state): State<AppState>,
     jar: SignedCookieJar,
@@ -659,8 +660,29 @@ async fn analyze_sample(
         .head
         .canonicalize()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("canonicalize sample head: {e}")))?;
+    // Optional intent.json alongside the sample — enables intent-fit
+    // + proof on demos. Malformed JSON fails the analyse request
+    // loudly (better than silently dropping intent).
+    let intent = match sample.intent.as_ref() {
+        None => None,
+        Some(p) => {
+            let bytes = std::fs::read(p).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("read sample intent {}: {e}", p.display()),
+                )
+            })?;
+            let parsed: adr_core::IntentInput = serde_json::from_slice(&bytes).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("parse sample intent {}: {e}", p.display()),
+                )
+            })?;
+            Some(parsed)
+        }
+    };
 
-    let dedupe_key = request_dedupe_key(&base_root, &head_root, None, "");
+    let dedupe_key = request_dedupe_key(&base_root, &head_root, intent.as_ref(), "");
     if let Some(entry) = state.inflight.get(&dedupe_key) {
         let existing = *entry.value();
         if let Some(job_ref) = state.jobs.get(&existing) {
@@ -692,7 +714,7 @@ async fn analyze_sample(
             head: head_root,
             cache,
             db,
-            intent: None,
+            intent,
             notes: String::new(),
             pr_ctx,
         })

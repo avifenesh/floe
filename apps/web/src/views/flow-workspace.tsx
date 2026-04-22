@@ -692,54 +692,41 @@ function FlowMorph({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
   const panels = [...claimPanels, ...fallbackProofPanels];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <header className="space-y-1">
         <h1 className="text-[15px] font-mono text-foreground">
           Morph
-          <span className="font-normal text-muted-foreground"> · intent vs result for {flow.name}</span>
+          <span className="font-normal text-muted-foreground"> · {flow.name}</span>
         </h1>
-        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
-          What the PR claimed, what this flow actually delivers, and
-          which symbols carry the claim. Refactor pairs surface below.
-        </p>
-        {intentSummary && (
-          <p className="text-[12px] text-foreground leading-relaxed pt-1 italic">
-            "{intentSummary}"
-          </p>
-        )}
       </header>
 
-      {/* Top-line per-flow verdicts */}
-      <section className="flex items-center gap-3 flex-wrap text-[10px] font-mono">
-        <span className="uppercase tracking-wide text-muted-foreground">flow verdict</span>
-        <span className={"px-2 py-0.5 rounded-full border " + intentFitPillClass(fit?.verdict)}>
-          fit · {fit?.verdict ?? "—"}
-        </span>
-        <span className={"px-2 py-0.5 rounded-full border " + proofPillClass(flow.proof?.verdict)}>
-          proof · {flow.proof?.verdict ?? "—"}
-        </span>
-        {fit?.reasoning && (
-          <span className="text-[11px] text-muted-foreground italic flex-1 min-w-0 truncate" title={fit.reasoning}>
-            {fit.reasoning}
-          </span>
-        )}
+      {/* Top-line verdict pills — subtle when empty, structured always. */}
+      <section className="flex items-baseline gap-2 flex-wrap">
+        <VerdictPillCompact
+          label="fit"
+          value={fit?.verdict ?? null}
+          className={intentFitPillClass(fit?.verdict)}
+        />
+        <VerdictPillCompact
+          label="proof"
+          value={flow.proof?.verdict ?? null}
+          className={proofPillClass(flow.proof?.verdict)}
+        />
       </section>
 
-      {/* Claim → entities mapping */}
-      {panels.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
-            Claim ↔ deliverers ({panels.length})
-          </h2>
-          <ul className="space-y-2">
+      {/* Intent vs Result — two columns, one row per claim. */}
+      {panels.length > 0 ? (
+        <section className="rounded border border-border/60 overflow-hidden">
+          <div className="grid grid-cols-2 text-[10px] font-mono uppercase tracking-wide text-muted-foreground bg-muted/20 border-b border-border/60">
+            <div className="px-3 py-1.5">Intent</div>
+            <div className="px-3 py-1.5 border-l border-border/60">Result</div>
+          </div>
+          <ul className="divide-y divide-border/60">
             {panels.map((p) => (
-              <li key={`claim-${p.idx}`}>
-                <ClaimPanel
-                  index={p.idx}
-                  text={p.text}
-                  evidenceType={p.evidenceType}
+              <li key={`claim-${p.idx}`} className="grid grid-cols-2">
+                <IntentCell text={p.text} evidenceType={p.evidenceType} />
+                <ResultCell
                   proof={p.proof}
-                  matched={p.matched}
                   flowEntities={flow.entities ?? []}
                   entityStatus={entityStatus}
                 />
@@ -747,18 +734,20 @@ function FlowMorph({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
             ))}
           </ul>
         </section>
-      )}
-
-      {!intent && (
-        <p className="text-[12px] text-muted-foreground">
-          No intent supplied — pass a PR description or structured intent to see the claim-match panel.
+      ) : !intent ? (
+        <p className="text-[12px] text-muted-foreground italic">
+          No intent supplied — pass a PR description to see Intent vs Result.
+        </p>
+      ) : (
+        <p className="text-[12px] text-muted-foreground italic">
+          Intent + proof passes still running…
         </p>
       )}
 
-      {/* Replacement pairs */}
+      {/* Replacement pairs — refactor detection, separate section. */}
       {replacements.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
+        <section className="space-y-1.5">
+          <h2 className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
             Replacements ({replacements.length})
           </h2>
           <ul className="space-y-1.5">
@@ -769,6 +758,130 @@ function FlowMorph({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
             ))}
           </ul>
         </section>
+      )}
+
+      {/* Pre-intent summary hides under a disclosure — keeps the top
+          clean but lets the curious reviewer see the PR's prose. */}
+      {intentSummary && (
+        <details className="text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer select-none hover:text-foreground">
+            PR intent summary
+          </summary>
+          <p className="pl-3 pt-1 italic leading-relaxed">"{intentSummary}"</p>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** One verdict pill with a stable label prefix. When `value` is null,
+ *  we still render the pill (subtle border + grayed '—') so the row
+ *  has structure even before the pass completes. */
+function VerdictPillCompact({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string | null;
+  className: string;
+}) {
+  const empty = value === null;
+  const body = empty ? "—" : value;
+  return (
+    <span
+      className={
+        "inline-flex items-baseline gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-mono " +
+        (empty
+          ? "border-border/50 bg-muted/20 text-muted-foreground/70"
+          : className)
+      }
+    >
+      <span className="uppercase tracking-wide opacity-70">{label}</span>
+      <span>·</span>
+      <span className={empty ? "italic" : "font-medium"}>{body}</span>
+    </span>
+  );
+}
+
+function IntentCell({
+  text,
+  evidenceType,
+}: {
+  text: string;
+  evidenceType: string;
+}) {
+  return (
+    <div className="px-3 py-2.5 space-y-1">
+      <p className="text-[12px] text-foreground leading-snug">{text}</p>
+      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+        {evidenceType}
+      </p>
+    </div>
+  );
+}
+
+function ResultCell({
+  proof,
+  flowEntities,
+  entityStatus,
+}: {
+  proof: import("@/types/artifact").ClaimProofStatus | null;
+  flowEntities: string[];
+  entityStatus: Map<string, MorphStatus>;
+}) {
+  const status = proof?.status ?? null;
+  const evidence = proof?.evidence ?? [];
+  const deliverers = flowEntities.filter((name) =>
+    evidence.some((e) => (e.detail ?? "").includes(name) || (e.path ?? "").includes(name)),
+  );
+  const tone =
+    status === "found" ? "border-emerald-500/50" :
+    status === "partial" ? "border-amber-500/50" :
+    status === "missing" ? "border-rose-500/50" :
+    "border-border/60";
+  const label =
+    status === "found" ? "delivered" :
+    status === "partial" ? "partial" :
+    status === "missing" ? "missing" :
+    "—";
+  const labelColor =
+    status === "found" ? "text-emerald-700 dark:text-emerald-300" :
+    status === "partial" ? "text-amber-700 dark:text-amber-300" :
+    status === "missing" ? "text-rose-700 dark:text-rose-300" :
+    "text-muted-foreground/70 italic";
+  return (
+    <div className={"px-3 py-2.5 border-l-[3px] " + tone + " space-y-1.5"}>
+      <div className="flex items-baseline gap-2">
+        <span className={"text-[11px] font-mono font-medium " + labelColor}>
+          {label}
+        </span>
+      </div>
+      {deliverers.length > 0 && (
+        <div className="flex items-baseline gap-1 flex-wrap">
+          {deliverers.map((name) => {
+            const s = entityStatus.get(name) ?? "unchanged";
+            return (
+              <span
+                key={name}
+                className="inline-flex items-center gap-1 text-[10px] font-mono text-foreground rounded px-1 py-[1px] bg-background/60 border border-border/60"
+                title={`${name} · ${s}`}
+              >
+                <span className={"w-1 h-1 rounded-full " + STATUS_DOT[s]} aria-hidden />
+                {name}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {evidence.length > 0 && (
+        <ul className="text-[10px] text-muted-foreground leading-snug space-y-0.5">
+          {evidence.slice(0, 2).map((e, i) => (
+            <li key={i} className="truncate" title={e.detail}>
+              · {e.detail}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -787,98 +900,6 @@ interface ClaimPanelData {
   evidenceType: string;
   proof: import("@/types/artifact").ClaimProofStatus | null;
   matched: boolean;
-}
-
-function ClaimPanel({
-  index,
-  text,
-  evidenceType,
-  proof,
-  matched,
-  flowEntities,
-  entityStatus,
-}: {
-  index: number;
-  text: string;
-  evidenceType: string;
-  proof: import("@/types/artifact").ClaimProofStatus | null;
-  matched: boolean;
-  flowEntities: string[];
-  entityStatus: Map<string, MorphStatus>;
-}) {
-  const status = proof?.status;
-  const tone =
-    status === "found" ? "good" : status === "partial" ? "partial" : status === "missing" ? "bad" : "neutral";
-  const evidence = proof?.evidence ?? [];
-  // Heuristic: any flow entity name that appears in any evidence
-  // detail / path is a "deliverer" of this claim.
-  const deliverers = flowEntities.filter((name) =>
-    evidence.some((e) => (e.detail ?? "").includes(name) || (e.path ?? "").includes(name)),
-  );
-  return (
-    <div className="rounded border border-border/60 border-l-[3px] bg-muted/10 px-3 py-2.5 space-y-2"
-         style={{ borderLeftColor: tone === "good" ? "rgb(16 185 129 / 0.7)" : tone === "partial" ? "rgb(245 158 11 / 0.7)" : tone === "bad" ? "rgb(244 63 94 / 0.7)" : undefined }}>
-      <div className="flex items-baseline gap-2">
-        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
-          claim #{index}
-        </span>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {evidenceType}
-        </span>
-        {matched && (
-          <span className="text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full border border-emerald-400/40 bg-emerald-50 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-200">
-            matched by fit
-          </span>
-        )}
-        {status && (
-          <span
-            className={
-              "ml-auto text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full border " +
-              (status === "found"
-                ? "border-emerald-400/40 bg-emerald-50 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-200"
-                : status === "partial"
-                  ? "border-amber-400/40 bg-amber-50 text-amber-800 dark:bg-amber-400/10 dark:text-amber-200"
-                  : "border-rose-400/40 bg-rose-50 text-rose-800 dark:bg-rose-400/10 dark:text-rose-200")
-            }
-          >
-            proof · {status}
-          </span>
-        )}
-      </div>
-      <p className="text-[12px] text-foreground leading-snug">{text}</p>
-      {deliverers.length > 0 && (
-        <div className="flex items-baseline gap-2 flex-wrap pt-1">
-          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
-            via
-          </span>
-          {deliverers.map((name) => {
-            const s = entityStatus.get(name) ?? "unchanged";
-            return (
-              <span
-                key={name}
-                className="inline-flex items-center gap-1.5 text-[11px] font-mono text-foreground rounded px-1.5 py-0.5 bg-background/60 border border-border/60"
-                title={`${name} · ${s}`}
-              >
-                <span className={"w-1.5 h-1.5 rounded-full " + STATUS_DOT[s]} aria-hidden />
-                {name}
-              </span>
-            );
-          })}
-        </div>
-      )}
-      {evidence.length > 0 && (
-        <ul className="text-[11px] text-muted-foreground leading-snug space-y-0.5 pt-1">
-          {evidence.slice(0, 3).map((e, i) => (
-            <li key={i} className="truncate" title={e.detail}>
-              <span className="text-muted-foreground/70 mr-1">·</span>
-              {e.detail}
-              {e.path && <span className="text-muted-foreground/70 ml-2 text-[10px] font-mono">{e.path}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 function ReplacementRow({ from, to, file }: { from: string; to: string; file: string }) {
@@ -1314,12 +1335,13 @@ function CfgFlowDiagram({
   }
 
   return (
-    <div className="overflow-x-auto rounded border border-border/60 bg-muted/10 p-2">
+    <div className="w-full max-w-full overflow-x-auto rounded border border-border/60 bg-muted/10 p-2">
       <svg
         width={totalW}
         height={totalH}
         viewBox={`0 0 ${totalW} ${totalH}`}
         className="block"
+        style={{ minWidth: totalW }}
       >
         <defs>
           <marker

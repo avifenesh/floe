@@ -42,6 +42,13 @@ pub struct Sample {
     /// Absolute path to the head-side snapshot.
     #[serde(skip)]
     pub head: PathBuf,
+    /// Absolute path to an `intent.json` sitting alongside the
+    /// sample dir, when present. Loaded by the sample-analyze
+    /// handler so intent-fit + proof passes actually run on
+    /// demos (otherwise they'd skip on every sample, hiding half
+    /// the product). `None` when the sample has no intent file.
+    #[serde(skip)]
+    pub intent: Option<PathBuf>,
 }
 
 /// Public view served by `GET /samples` — no paths, id + titles only.
@@ -118,7 +125,9 @@ impl Samples {
             let description = meta
                 .description
                 .unwrap_or_else(|| format!("Sample PR from {name}."));
-            out.push(Sample { id: name, title, description, base, head });
+            let intent_path = dir.join("intent.json");
+            let intent = intent_path.is_file().then_some(intent_path);
+            out.push(Sample { id: name, title, description, base, head, intent });
         }
         out.sort_by(|a, b| a.id.cmp(&b.id));
         tracing::info!(count = out.len(), "loaded demo samples");

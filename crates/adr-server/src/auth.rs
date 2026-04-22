@@ -383,14 +383,17 @@ pub async fn logout(jar: SignedCookieJar) -> (SignedCookieJar, Response) {
 
 /// Construct a cookie with our default security attributes. Dev
 /// friendly (no `Secure` because we're on http://127.0.0.1); when
-/// deploying behind HTTPS flip `secure(true)` on the builder or add
-/// a build flag. `SameSite::Lax` is the best balance for OAuth
-/// redirects — `Strict` breaks the callback (cookie isn't sent on
-/// top-level redirect from github.com).
+/// Session cookie: `SameSite=None; Secure; HttpOnly`. Browsers treat
+/// `localhost` and `127.0.0.1` as secure contexts, so `Secure` is
+/// accepted even over HTTP in dev. `None` (+ Secure) is required for
+/// credentialed cross-origin XHR from the vite dev server on :5173
+/// to the backend on :8787; otherwise the browser silently strips
+/// the cookie and `/me` keeps returning 401 after sign-in.
 fn build_cookie(name: &str, value: String, max_age: TimeDuration) -> Cookie<'static> {
     Cookie::build((name.to_string(), value))
         .http_only(true)
-        .same_site(SameSite::Lax)
+        .same_site(SameSite::None)
+        .secure(true)
         .path("/")
         .max_age(max_age)
         .build()
@@ -548,11 +551,15 @@ mod tests {
     }
 
     #[test]
-    fn build_cookie_sets_lax_samesite_and_http_only() {
+    fn build_cookie_is_none_samesite_secure_http_only() {
         let c = build_cookie("k", "v".into(), TimeDuration::minutes(5));
         assert_eq!(c.name(), "k");
         assert_eq!(c.value(), "v");
-        assert_eq!(c.same_site(), Some(SameSite::Lax));
+        // SameSite=None + Secure is required for credentialed
+        // cross-origin XHR (vite dev 5173 → backend 8787). Browsers
+        // accept Secure over HTTP on localhost/127.0.0.1.
+        assert_eq!(c.same_site(), Some(SameSite::None));
+        assert_eq!(c.secure(), Some(true));
         assert_eq!(c.http_only(), Some(true));
         assert_eq!(c.path(), Some("/"));
     }

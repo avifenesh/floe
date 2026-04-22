@@ -1,0 +1,11 @@
+{
+  "title": "Cosmetic comment-only change",
+  "summary": "A comment rewording with no behavioural impact. This is a noop control case — intent-fit should report delivers for the comment claim and nothing else, and the analyzer should emit zero architectural hunks.",
+  "claims": [
+    {
+      "statement": "Comments are rewritten; behaviour is unchanged.",
+      "evidence_type": "observation",
+      "detail": "Expected architectural delta: zero hunks."
+    }
+  ]
+}

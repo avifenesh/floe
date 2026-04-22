@@ -1,0 +1,16 @@
+{
+  "title": "Add retry to queue.enqueue",
+  "summary": "enqueue should transparently retry failed sends via retryWithBackoff so transient errors don't surface to callers.",
+  "claims": [
+    {
+      "statement": "enqueue now retries on failure instead of throwing on the first error.",
+      "evidence_type": "test",
+      "detail": "Expected: a test asserts that a send failing once then succeeding is observed as a single successful enqueue."
+    },
+    {
+      "statement": "retryWithBackoff is on the call path from enqueue to send.",
+      "evidence_type": "observation",
+      "detail": "Call graph should show enqueue → retryWithBackoff → send."
+    }
+  ]
+}

@@ -1,11 +1,10 @@
 import type { Artifact } from "./types/artifact";
 
-/** Dev-only: when the Vite dev server is on :5173, all API calls go
- *  to the backend on :8787 (different origin → credentialed requests
- *  need explicit origin). In production the FE is served from the
- *  same origin as the backend, so this is empty and requests are
- *  same-origin. Declared at the top so every fetch call below can
- *  use it without triggering the TDZ.
+/** Dev: vite on :5173 talks to the backend on :8787. Cross-origin,
+ *  but the session cookie is set with `SameSite=None; Secure` so it
+ *  travels on credentialed XHR (127.0.0.1 counts as a secure context
+ *  for browser cookie policy even over HTTP). Prod: same-origin, so
+ *  BACKEND_BASE is empty.
  */
 const BACKEND_BASE =
   typeof window !== "undefined" && window.location.port === "5173"

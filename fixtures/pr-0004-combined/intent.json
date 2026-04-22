@@ -1,0 +1,16 @@
+{
+  "title": "Combined call + state + API changes in worker",
+  "summary": "Three related changes in the worker: a new state variant, a new call edge to handle it, and an API signature that exposes the new state to callers.",
+  "claims": [
+    {
+      "statement": "A new worker state maps to a new call path.",
+      "evidence_type": "observation",
+      "detail": "Call + state hunks should reference the same entity."
+    },
+    {
+      "statement": "The worker's public API now reports the new state.",
+      "evidence_type": "observation",
+      "detail": "API hunk should surface alongside the state and call hunks."
+    }
+  ]
+}

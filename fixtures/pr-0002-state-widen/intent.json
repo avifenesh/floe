@@ -1,0 +1,11 @@
+{
+  "title": "Widen Machine state union",
+  "summary": "Add a new state variant to the state machine to cover a previously-missing lifecycle transition.",
+  "claims": [
+    {
+      "statement": "The state enum gains exactly one new variant.",
+      "evidence_type": "observation",
+      "detail": "State-type delta should report one added variant, zero removed."
+    }
+  ]
+}

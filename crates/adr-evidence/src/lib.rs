@@ -352,9 +352,12 @@ fn test_coverage_claim(artifact: &Artifact, flow: &Flow) -> Option<Claim> {
         }
     }
 
-    // Pick strength from whatever's strongest. A test-name match wins
-    // over an example-only match; both beat "tests exist in the repo
-    // but none name-match"; the truly bad case is "no tests at all".
+    // Only surface a claim when we have real signal. Name-match →
+    // High. Zero tests in the repo at all → Low (regression warning).
+    // Ambiguous middle ("repo has tests but none name-match") is
+    // skipped — it's worst-of-both-worlds: too weak to trust, but
+    // loud enough to clutter the evidence list. The reviewer can
+    // always check the test directory if they want to.
     let (strength, text) = if matching_tests > 0 {
         (
             Strength::High,
@@ -371,18 +374,15 @@ fn test_coverage_claim(artifact: &Artifact, flow: &Flow) -> Option<Claim> {
                 sample_examples.first().cloned().unwrap_or_default()
             ),
         )
-    } else if total_tests > 0 || total_examples > 0 {
-        (
-            Strength::Medium,
-            format!(
-                "Repo has {total_tests} test file(s) and {total_examples} example(s) but none name-match this flow — coverage may still be present via a different naming scheme."
-            ),
-        )
-    } else {
+    } else if total_tests == 0 && total_examples == 0 {
         (
             Strength::Low,
             "No test or example files found in the repo — regression risk is high.".into(),
         )
+    } else {
+        // Tests exist but don't name-match this flow; no reliable
+        // signal to surface.
+        return None;
     };
 
     Some(claim(

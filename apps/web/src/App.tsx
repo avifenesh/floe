@@ -99,7 +99,7 @@ export default function App() {
       />
       {job && anyStructural && <StructuralBannerStrip />}
       {job && <BackgroundWorkStrip artifact={job.artifact} />}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 pt-4 pb-10">
+      <main className="flex-1 w-full min-w-0 max-w-6xl mx-auto px-6 pt-4 pb-10">
         {me === undefined ? (
           // Auth fetch hasn't resolved yet — render nothing (avoids a
           // flash of the landing page on first paint for signed-in

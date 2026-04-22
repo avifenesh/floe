@@ -1,0 +1,11 @@
+{
+  "title": "Widen HTTP route signature",
+  "summary": "Add an optional field to the route's response without breaking existing clients.",
+  "claims": [
+    {
+      "statement": "The response shape gains an optional field; required fields are unchanged.",
+      "evidence_type": "observation",
+      "detail": "API-hunk signature diff should show an added optional field, no removals."
+    }
+  ]
+}

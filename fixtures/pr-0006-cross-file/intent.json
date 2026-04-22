@@ -1,0 +1,16 @@
+{
+  "title": "Worker now calls Queue",
+  "summary": "Adds a new call edge from worker.ts into queue.ts so the worker can push items itself. Queue itself is unchanged but now participates in the runtime trajectory.",
+  "claims": [
+    {
+      "statement": "worker.ts reaches Queue.enqueue via a new call.",
+      "evidence_type": "observation",
+      "detail": "A cross-file call hunk should appear linking worker → queue."
+    },
+    {
+      "statement": "Queue code is unchanged but surfaces as propagation context.",
+      "evidence_type": "observation",
+      "detail": "Queue entities should appear as extra_entities or propagation_edges on the flow."
+    }
+  ]
+}
