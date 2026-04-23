@@ -183,7 +183,7 @@ fn try_load(root: &Path) -> Result<PackageMap> {
     // Sort longest-prefix first so nested packages (e.g.
     // `packages/core/internal`) win over their parents
     // (`packages/core`) in `resolve`.
-    entries.sort_by(|a, b| b.root_rel.len().cmp(&a.root_rel.len()));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.root_rel.len()));
 
     Ok(PackageMap {
         entries,
