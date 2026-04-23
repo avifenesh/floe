@@ -199,11 +199,11 @@ fn probe_to_ollama_tool(t: ToolDef) -> OllamaToolDef {
 /// Pull qualified names out of a tool call + its result. What we can
 /// lift depends on the tool:
 ///
-/// - `adr.get_entity(id)` → the `id` argument is a qualified name.
-/// - `adr.neighbors(id, …)` → the arg's `id` plus every `name` field in
+/// - `floe.get_entity(id)` → the `id` argument is a qualified name.
+/// - `floe.neighbors(id, …)` → the arg's `id` plus every `name` field in
 ///   the returned `nodes[]` array.
 /// - `adr.list_entities(…)` → every `name` in the returned array.
-/// - `adr.list_hunks()` → every entry in each hunk's `entities[]`.
+/// - `floe.list_hunks()` → every entry in each hunk's `entities[]`.
 ///
 /// The result text is pretty-printed JSON (that's what the MCP server
 /// wraps tool results in); we parse it best-effort, swallowing parse

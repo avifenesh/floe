@@ -68,14 +68,11 @@ fn extract_nodes(
     graph: &mut Graph,
     next_id: &mut u32,
 ) {
-    let root = tree.root_node();
-    let mut cursor = root.walk();
-    walk_nodes(root, &mut cursor, source, file, graph, next_id);
+    walk_nodes(tree.root_node(), source, file, graph, next_id);
 }
 
 fn walk_nodes(
     node: tree_sitter::Node,
-    cursor: &mut tree_sitter::TreeCursor,
     source: &str,
     file: &str,
     graph: &mut Graph,
@@ -93,7 +90,7 @@ fn walk_nodes(
     // Descend — nested fns / types are real code worth indexing.
     let mut walker = node.walk();
     for child in node.children(&mut walker) {
-        walk_nodes(child, cursor, source, file, graph, next_id);
+        walk_nodes(child, source, file, graph, next_id);
     }
 }
 

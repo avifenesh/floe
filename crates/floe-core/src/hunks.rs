@@ -52,9 +52,11 @@ pub enum HunkKind {
     },
     /// Docstring drifted from the code it documents. `drift_kind`
     /// describes the shape of the drift:
+    ///
     ///   - `"param-count"`  doc lists N params, signature has M ≠ N
     ///   - `"param-names"`  doc lists wrong names (set mismatch)
     ///   - `"missing"`     signature exists but doc comment removed
+    ///
     /// `target` is the (file, function/method qualified name).
     Docs {
         file: String,

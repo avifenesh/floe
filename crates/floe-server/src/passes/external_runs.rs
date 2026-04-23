@@ -218,9 +218,12 @@ pub fn attach_claims(artifact: &mut Artifact) {
     // bucket claims per flow when possible. Falls back to PR-wide
     // attribution when parsing yields nothing.
     let failing_files: Vec<String> = if head.exit_code != 0 {
-        parse_failing_test_files(&head.stdout).into_iter().chain(
-            parse_failing_test_files(&head.stderr).into_iter()
-        ).collect::<std::collections::BTreeSet<_>>().into_iter().collect()
+        parse_failing_test_files(&head.stdout)
+            .into_iter()
+            .chain(parse_failing_test_files(&head.stderr))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
     } else {
         Vec::new()
     };
@@ -316,7 +319,7 @@ fn strip_ansi(s: &str) -> String {
 }
 
 fn extract_path(rest: &str) -> Option<String> {
-    let end = rest.find(|c: char| c == ' ' || c == '>' || c == '(').unwrap_or(rest.len());
+    let end = rest.find([' ', '>', '(']).unwrap_or(rest.len());
     let candidate = rest[..end].trim();
     if candidate.is_empty() {
         None

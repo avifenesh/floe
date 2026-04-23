@@ -1,8 +1,3 @@
-/* eslint-disable */
-// @ts-nocheck — @playwright/test is an optional dev dep; install
-// with `npm i -D @playwright/test` in apps/web when you want to run
-// the e2e suite. The import stays resolvable at runtime under
-// `npx playwright test` even when not present in tsc's program.
 import { expect, test } from "@playwright/test";
 
 /**

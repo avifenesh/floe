@@ -277,7 +277,7 @@ fn strip_jsonc_comments(src: &str) -> String {
         }
         if c == '/' && chars.peek() == Some(&'/') {
             // skip to newline
-            while let Some(n) = chars.next() {
+            for n in chars.by_ref() {
                 if n == '\n' {
                     out.push('\n');
                     break;

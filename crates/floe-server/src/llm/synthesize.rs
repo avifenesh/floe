@@ -1,5 +1,5 @@
 //! The agent loop — shuttles tool calls between Ollama and `floe-mcp`
-//! until the model calls `adr.finalize` (or we hit a hard bound).
+//! until the model calls `floe.finalize` (or we hit a hard bound).
 
 use std::path::Path;
 
@@ -31,7 +31,7 @@ pub enum SynthesisOutcome {
     Accepted(Vec<Flow>),
     /// The LLM finalized but the host rejected on invariants.
     Rejected { rule: String, detail: String },
-    /// The LLM ran out of turns without calling `adr.finalize`.
+    /// The LLM ran out of turns without calling `floe.finalize`.
     NoFinalize,
     /// Something below the loop failed (process spawn, HTTP, parsing).
     Errored(String),
@@ -145,8 +145,8 @@ async fn run(
     let initial_user = format!(
         "Hunks ({hunks}): {hunks_json}\n\n\
          Initial structural clusters ({clusters}): {clusters_json}\n\n\
-         Synthesize the flows. Emit adr.propose_flow / adr.remove_flow / \
-         adr.finalize tool calls only — do not describe the plan in prose.",
+         Synthesize the flows. Emit floe.propose_flow / floe.remove_flow / \
+         floe.finalize tool calls only — do not describe the plan in prose.",
         hunks = hunk_count,
         clusters = initial_cluster_count,
         hunks_json = hunks_json,
@@ -251,7 +251,7 @@ async fn run(
                 messages.push(resp.message.clone());
                 messages.push(ChatMessage {
                     role: "user".into(),
-                    content: "Good analysis. Now execute it: call adr.propose_flow for each flow in your plan above (name + rationale + hunk_ids), then adr.remove_flow on each structural cluster whose hunks are now covered, then adr.finalize. Do not respond with prose — only tool calls.".into(),
+                    content: "Good analysis. Now execute it: call floe.propose_flow for each flow in your plan above (name + rationale + hunk_ids), then floe.remove_flow on each structural cluster whose hunks are now covered, then floe.finalize. Do not respond with prose — only tool calls.".into(),
                     tool_calls: Vec::new(),
                     tool_name: None,
                 });
@@ -290,7 +290,7 @@ async fn run(
 }
 
 /// Run one tool call through the MCP child. Returns the `role: "tool"`
-/// message to feed back to Ollama, plus (for `adr.finalize`) the parsed
+/// message to feed back to Ollama, plus (for `floe.finalize`) the parsed
 /// outcome that terminates the loop.
 async fn dispatch_tool_call(
     mcp: &mut McpClient,

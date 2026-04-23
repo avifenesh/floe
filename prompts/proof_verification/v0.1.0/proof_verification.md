@@ -16,11 +16,11 @@ You are a senior reviewer verifying that a pull request's claimed intent has **r
 `adr.*` — investigation:
 
 ```
-adr.get_entity(id)                  node descriptor for a qualified name
-adr.neighbors(id, hops)             subgraph around an entity
-adr.read_file(file_path, offset?, limit?)   read numbered lines
-adr.grep(pattern, path?, glob?, limit?, case_insensitive?)   ripgrep search
-adr.glob(pattern, path?, limit?)    list matching paths
+floe.get_entity(id)                  node descriptor for a qualified name
+floe.neighbors(id, hops)             subgraph around an entity
+floe.read_file(file_path, offset?, limit?)   read numbered lines
+floe.grep(pattern, path?, glob?, limit?, case_insensitive?)   ripgrep search
+floe.glob(pattern, path?, limit?)    list matching paths
 ```
 
 # Workflow
@@ -32,9 +32,9 @@ Two phases. Do not skip Phase 2.
 For each claim the flow plausibly addresses:
 
 1. **Check notes first.** If reviewer pasted bench output / a log / an observation that matches the claim, that's evidence; note it before touching the repo.
-2. **Look for example programs.** `adr.glob({"pattern": "examples/**/*"})` then `adr.read_file` the candidates. An example that visibly exercises the claimed behaviour is strong proof.
-3. **Look for claim-asserting tests.** `adr.grep` for terms from the claim's statement; `adr.read_file` the hits. The test must actually `assert`/`expect` the claim — not just call a function in the flow.
-4. **Benchmark scripts:** look for `bench`, `perf`, `*.bench.*`, `benchmarks/` via `adr.glob`.
+2. **Look for example programs.** `floe.glob({"pattern": "examples/**/*"})` then `floe.read_file` the candidates. An example that visibly exercises the claimed behaviour is strong proof.
+3. **Look for claim-asserting tests.** `floe.grep` for terms from the claim's statement; `floe.read_file` the hits. The test must actually `assert`/`expect` the claim — not just call a function in the flow.
+4. **Benchmark scripts:** look for `bench`, `perf`, `*.bench.*`, `benchmarks/` via `floe.glob`.
 
 ### Budget discipline
 
@@ -125,8 +125,8 @@ notes: "ran bin/smoke-stream.sh on head — p99 went 180ms -> 72ms across 10k ev
 Tool calls the model might make:
 
 ```
-adr.glob({"pattern":"examples/**/stream*"}) -> ["examples/stream-backpressure.ts"]
-adr.read_file({"file_path":"examples/stream-backpressure.ts"}) -> shows a 64 KB window exercise
+floe.glob({"pattern":"examples/**/stream*"}) -> ["examples/stream-backpressure.ts"]
+floe.read_file({"file_path":"examples/stream-backpressure.ts"}) -> shows a 64 KB window exercise
 ```
 
 Expected output (emitted directly, no wrapper):

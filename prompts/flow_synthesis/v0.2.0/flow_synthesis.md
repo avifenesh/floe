@@ -24,16 +24,16 @@ a flow and the host accepts the final assignment.
 # Tools
 
 `adr:` family — read:
-  adr:list_hunks()                   list hunks (id, kind, summary, entities)
-  adr:get_entity(id)                 node descriptor (name, file, span, signature)
-  adr:neighbors(id, hops)            subgraph around an entity (hops <= 3)
-  adr:list_flows_initial()           structural starting clusters
+  floe:list_hunks()                   list hunks (id, kind, summary, entities)
+  floe:get_entity(id)                 node descriptor (name, file, span, signature)
+  floe:neighbors(id, hops)            subgraph around an entity (hops <= 3)
+  floe:list_flows_initial()           structural starting clusters
 
 `adr:` family — mutation (host-validated):
-  adr:propose_flow(name, rationale, hunk_ids, extra_entities?)
-  adr:mutate_flow(flow_id, patch)
-  adr:remove_flow(flow_id)
-  adr:finalize()
+  floe:propose_flow(name, rationale, hunk_ids, extra_entities?)
+  floe:mutate_flow(flow_id, patch)
+  floe:remove_flow(flow_id)
+  floe:finalize()
 
 PI built-ins (read-only usage):
   read(file, start_line, end_line)   source bytes
@@ -168,20 +168,20 @@ on `PaymentClient`.
 
 Phase 3. Propose three flows:
 
-1. adr:propose_flow(
+1. floe:propose_flow(
      name="Idempotent payment operations",
      rationale="PaymentClient.charge and .refund both gain an idempotencyKey parameter; the new IdempotencyStore type is their backing store. The shape propagates through the public API.",
      hunk_ids=[charge-api, refund-api, store-type-api],
      extra_entities=[IdempotencyStore.put, IdempotencyStore.get]
    )
 
-2. adr:propose_flow(
+2. floe:propose_flow(
      name="Bounded retry policy",
      rationale="The new backoff() helper is called from every retry site; the RetryState machine adds a 'giving-up' variant at the same time. One flow — exponential backoff with bounded retries.",
      hunk_ids=[backoff-api, retry-state, retry-call-1, retry-call-2]
    )
 
-3. adr:propose_flow(
+3. floe:propose_flow(
      name="Structured error logging",
      rationale="reportError and two sibling log sites shift from string interpolation to structured fields. Signal is the shared logger call shape.",
      hunk_ids=[reportError-api]
@@ -207,5 +207,5 @@ Common error codes from mutation tools:
 - COVERAGE_BROKEN — the remove would orphan a hunk; re-home it first.
 - CALL_BUDGET_EXCEEDED — finalize with what you have; do not keep calling.
 
-When adr:finalize() returns {accepted: false, reason}, fix the one named
+When floe:finalize() returns {accepted: false, reason}, fix the one named
 rule and call it again. Do not retry blindly.

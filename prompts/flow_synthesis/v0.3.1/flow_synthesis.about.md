@@ -16,9 +16,9 @@ type: reference
 
 ## Changes from v0.2.0 (carry-forward)
 
-1. **Dropped the Explore phase.** The hunk list and the starter clusters are now injected by the host in the initial user message instead of requiring the model to call `adr.list_hunks` + `adr.list_flows_initial` as its first two turns. Qwen 3.5 27B on glide-mq #181 was spending 3–5 turns on exploration before starting synthesis; for large PRs that exceeded the practical turn budget. Eliminates two guaranteed round-trips.
-2. **Renamed the reads namespace.** References to `adr.list_hunks` / `adr.list_flows_initial` are **absent** from the tool list section — they're not callable from this prompt's perspective. (The MCP server still registers them; v0.3.0 simply tells the model not to use them.)
-3. **Hard "tools only, no prose" rule.** The v0.2.0 behaviour on Qwen 3.5 was to write the classification plan in markdown prose ("Proposed Flows: 1. …") instead of calling `adr.propose_flow`. The v0.3.0 "Hard Rules" section tells the model explicitly that prose after Phase 1 is discarded and must be replaced with tool calls.
+1. **Dropped the Explore phase.** The hunk list and the starter clusters are now injected by the host in the initial user message instead of requiring the model to call `floe.list_hunks` + `floe.list_flows_initial` as its first two turns. Qwen 3.5 27B on glide-mq #181 was spending 3–5 turns on exploration before starting synthesis; for large PRs that exceeded the practical turn budget. Eliminates two guaranteed round-trips.
+2. **Renamed the reads namespace.** References to `floe.list_hunks` / `floe.list_flows_initial` are **absent** from the tool list section — they're not callable from this prompt's perspective. (The MCP server still registers them; v0.3.0 simply tells the model not to use them.)
+3. **Hard "tools only, no prose" rule.** The v0.2.0 behaviour on Qwen 3.5 was to write the classification plan in markdown prose ("Proposed Flows: 1. …") instead of calling `floe.propose_flow`. The v0.3.0 "Hard Rules" section tells the model explicitly that prose after Phase 1 is discarded and must be replaced with tool calls.
 4. **Parallel tool calls directive.** Qwen 3.5 batches by default; Gemma 4 does not. The prompt now encourages parallel `propose_flow` calls in a single assistant turn to reduce turn count.
 
 ## Placeholders (rendered at runtime)
@@ -43,7 +43,7 @@ Before the model sees this prompt, the host (floe-server) must:
 
 4. Send the system prompt (this file) + the composed user message as the first chat turn.
 
-The model should reach `adr.finalize()` within 6–10 turns on a 12-hunk PR. On a 100-hunk PR, 15–25 turns.
+The model should reach `floe.finalize()` within 6–10 turns on a 12-hunk PR. On a 100-hunk PR, 15–25 turns.
 
 ## Anti-patterns checklist (cairn-rs skill)
 

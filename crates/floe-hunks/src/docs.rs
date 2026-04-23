@@ -111,11 +111,7 @@ fn scan_ts(text: &str) -> Vec<(String, String)> {
 
 fn parse_ts_fn_header(s: &str) -> Option<(String, String)> {
     let s = s.trim_start();
-    let after = s
-        .strip_prefix("export ")
-        .or_else(|| Some(s))
-        .unwrap()
-        .trim_start();
+    let after = s.strip_prefix("export ").unwrap_or(s).trim_start();
     let after = after.strip_prefix("async ").unwrap_or(after).trim_start();
     let after = after.strip_prefix("function ")?;
     let after = after.trim_start();

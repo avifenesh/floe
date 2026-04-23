@@ -29,7 +29,7 @@ enum SpawnMode {
     /// Navigation-only probe toolbox with the flows-required check
     /// relaxed.
     Probe,
-    /// Probe tools + `adr.read_file` / `adr.grep` / `adr.glob` for the
+    /// Probe tools + `floe.read_file` / `floe.grep` / `floe.glob` for the
     /// intent + proof-verification passes.
     Proof,
 }
@@ -70,8 +70,8 @@ impl McpClient {
         Self::spawn_inner(artifact, model, runtime_version, SpawnMode::Probe, None).await
     }
 
-    /// Spawn `floe-mcp` in proof mode — adds `adr.read_file` / `adr.grep`
-    /// / `adr.glob` to the tool surface. `repo_root` is the filesystem
+    /// Spawn `floe-mcp` in proof mode — adds `floe.read_file` / `floe.grep`
+    /// / `floe.glob` to the tool surface. `repo_root` is the filesystem
     /// root those tools resolve paths against (typically the head
     /// snapshot). Also passes `--probe` so the probe-style side-only
     /// artifacts are accepted.

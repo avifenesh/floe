@@ -18,7 +18,7 @@
 //! The server is both the MCP client and the Ollama client; Ollama's
 //! tool-call responses get forwarded to `floe-mcp`, and results flow back
 //! through the server as role=tool messages to Ollama. Loop ends when the
-//! model calls `adr.finalize`.
+//! model calls `floe.finalize`.
 
 pub mod config;
 pub mod glm_client;

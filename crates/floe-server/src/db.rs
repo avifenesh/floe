@@ -115,7 +115,7 @@ impl DbStore {
             .context("build pg pool")?;
         {
             let conn = pool.get().await.context("acquire pg conn for migrate")?;
-            migrate_postgres(&*conn).await?;
+            migrate_postgres(&conn).await?;
         }
         Ok(Self {
             backend: Backend::Postgres { pool },

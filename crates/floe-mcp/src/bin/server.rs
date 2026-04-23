@@ -38,9 +38,9 @@ const SERVER_NAME: &str = "floe-mcp";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Parser, Debug)]
-#[command(name = "floe-mcp", version, about = "MCP server for adr flow synthesis")]
+#[command(name = "floe-mcp", version, about = "MCP server for floe flow synthesis")]
 struct Cli {
-    /// Path to the analyzed artifact JSON (from `adr diff ... --out`).
+    /// Path to the analyzed artifact JSON (from `floe diff ... --out`).
     #[arg(long)]
     artifact: PathBuf,
 
@@ -62,8 +62,8 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     probe: bool,
 
-    /// Enable proof-pass mode: exposes `adr.read_file` / `adr.grep` /
-    /// `adr.glob` in addition to the navigation tools. Requires
+    /// Enable proof-pass mode: exposes `floe.read_file` / `floe.grep` /
+    /// `floe.glob` in addition to the navigation tools. Requires
     /// `--repo-root` so the fs tools know where to resolve paths.
     /// Intent + proof-verification LLM sessions need these because
     /// proof is about semantic evidence in unstructured files
@@ -136,7 +136,7 @@ struct Server {
     session: Mutex<Session>,
     model: String,
     runtime_version: String,
-    /// Filesystem root for `adr.read_file` / `adr.grep` / `adr.glob`.
+    /// Filesystem root for `floe.read_file` / `floe.grep` / `floe.glob`.
     /// `None` when the server wasn't started with `--proof`.
     fs_root: Option<ToolsRoot>,
     /// Mirror of `--proof`; governs tool advertisement in `tools/list`
@@ -371,7 +371,7 @@ fn proof_tools() -> Vec<Value> {
             })),
         tool("floe.glob",
             "List files matching a glob pattern (e.g. `examples/**/*.ts`). \
-             Respects .gitignore. Use before `adr.read_file` when you don't \
+             Respects .gitignore. Use before `floe.read_file` when you don't \
              know the exact path of an example or benchmark file.",
             json!({
                 "type": "object",
@@ -410,12 +410,15 @@ async fn call_tool(server: Arc<Server>, params: Value) -> Result<Value, ToolCall
 }
 
 async fn dispatch(server: &Server, name: &str, args: Value) -> DispatchResult {
-    // Accept either `adr.X` (our MCP registration form) or `adr:X` (the
-    // form the contract doc + prompt use). Gemma flips between them
-    // depending on whether it's emulating the prompt text or the tool
-    // schema; we treat them as equivalent.
+    // Normalise tool-name forms. Our MCP registration uses `floe.X`
+    // (dot), the contract doc + prompt sometimes render `floe:X`
+    // (colon), and we still accept legacy `adr.X` / `adr:X` emitted
+    // by cached sessions that predate the rename. All collapse to
+    // the dotted `floe.` canonical form.
     let name = if let Some(rest) = name.strip_prefix("floe:") {
-        std::borrow::Cow::Owned(format!("adr.{rest}"))
+        std::borrow::Cow::Owned(format!("floe.{rest}"))
+    } else if let Some(rest) = name.strip_prefix("adr:").or_else(|| name.strip_prefix("adr.")) {
+        std::borrow::Cow::Owned(format!("floe.{rest}"))
     } else {
         std::borrow::Cow::Borrowed(name)
     };
@@ -573,7 +576,10 @@ enum DispatchResult {
     /// missing `--proof` flag.
     ProofOff(&'static str),
     /// A proof fs tool errored (path escape, missing file, bad glob).
-    /// Carries a reviewer-readable reason.
+    /// Carries a reviewer-readable reason. Reserved for the proof-side
+    /// fs tools that land with the mutation-tool expansion; unused on
+    /// the read-only dispatch path today.
+    #[allow(dead_code)]
     FsErr(String),
     Unknown(String),
 }
@@ -619,7 +625,7 @@ fn result_to_content(r: DispatchResult) -> Value {
             "isError": true,
         }),
         DispatchResult::Unknown(name) => json!({
-            "content": [{ "type": "text", "text": format!("ERROR: unknown tool `{name}`. Available tools are listed via tools/list; use adr.list_hunks / adr.propose_flow etc.") }],
+            "content": [{ "type": "text", "text": format!("ERROR: unknown tool `{name}`. Available tools are listed via tools/list; use floe.list_hunks / floe.propose_flow etc.") }],
             "isError": true,
         }),
     }

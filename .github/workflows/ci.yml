@@ -44,19 +44,79 @@ jobs:
   web:
     name: Web (typescript + build)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npm run build
+      # `artifact.ts` is generated from Rust and gitignored; regenerate
+      # before tsc so the imports resolve.
+      - run: cargo run -q -p floe-cli -- schema > schema.json
+      - name: Install web deps
+        working-directory: apps/web
+        run: npm ci
+      - name: Generate FE types
+        working-directory: apps/web
+        run: npm run gen:types
+      - name: tsc (app + e2e)
+        working-directory: apps/web
+        run: npx tsc --noEmit
+      - name: Vite build
+        working-directory: apps/web
+        run: npm run build
+
+  e2e:
+    name: Playwright (happy path)
+    runs-on: ubuntu-latest
+    needs: [rust, web]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FLOE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/adr
+      FLOE_DB: postgres
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: cargo run -q -p floe-cli -- schema > schema.json
+      - name: Install web deps
+        working-directory: apps/web
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+      - name: Generate FE types
+        working-directory: apps/web
+        run: npm run gen:types
+      - name: Build floe-server
+        run: cargo build -q -p floe-server
+      - name: Start floe-server
+        run: cargo run -q -p floe-server &
+      - name: Run e2e
+        working-directory: apps/web
+        run: npm run e2e
 
   schema-drift:
     name: Schema + FE types are in sync

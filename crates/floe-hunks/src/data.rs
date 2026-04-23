@@ -350,7 +350,7 @@ fn extract_rust_fields(body: &str) -> BTreeSet<String> {
 fn parse_field_name(frag: &str) -> Option<String> {
     // Strip comments + leading whitespace + attributes (`#[...]`) + pub.
     let mut line = frag.trim().to_string();
-    while line.starts_with("//") || line.starts_with("/*") || line.starts_with("#[") {
+    if line.starts_with("//") || line.starts_with("/*") || line.starts_with("#[") {
         return None;
     }
     if let Some(stripped) = line.strip_prefix("pub ") {
