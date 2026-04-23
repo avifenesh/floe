@@ -45,7 +45,12 @@ export default defineConfig({
       },
     },
     {
-      command: "npm run dev",
+      // `-- --host 127.0.0.1` forces Vite to bind to ipv4 explicitly.
+      // On Actions runners, the default `localhost` bind sometimes
+      // resolves to ::1 only, and Playwright's baseURL goes to
+      // 127.0.0.1 — the mismatch surfaces as ERR_CONNECTION_REFUSED
+      // even though Vite reports "ready".
+      command: "npm run dev -- --host 127.0.0.1",
       port: 5173,
       reuseExistingServer: true,
       timeout: 120_000,
