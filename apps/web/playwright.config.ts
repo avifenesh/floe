@@ -23,22 +23,21 @@ export default defineConfig({
   ],
   webServer: [
     {
-      // The server is expected to already be running in CI — we spawn
-      // it via the Rust binary here for local runs.
-      command:
-        process.env.CI === "true"
-          ? "echo 'server expected to be running'"
-          : "cargo run -q -p floe-server",
+      // Playwright manages both processes. `reuseExistingServer: true`
+      // means a dev running `just dev` in another shell doesn't force
+      // a second instance. In CI we let Playwright spawn the binary —
+      // upstream `cargo run` backgrounding was racey.
+      command: "cargo run -q -p floe-server",
       cwd: "../../",
       port: 8787,
       reuseExistingServer: true,
-      timeout: 180_000,
+      timeout: 240_000,
     },
     {
       command: "npm run dev",
       port: 5173,
       reuseExistingServer: true,
-      timeout: 60_000,
+      timeout: 120_000,
     },
   ],
 });

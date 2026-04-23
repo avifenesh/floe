@@ -110,10 +110,12 @@ jobs:
       - name: Generate FE types
         working-directory: apps/web
         run: npm run gen:types
-      - name: Build floe-server
+      # Playwright's webServer block spawns both floe-server and
+      # Vite, waits for their ports, then runs the spec. Pre-build
+      # the Rust binary so the test's server-start timeout only has
+      # to cover the startup, not the cargo compile.
+      - name: Pre-build floe-server
         run: cargo build -q -p floe-server
-      - name: Start floe-server
-        run: cargo run -q -p floe-server &
       - name: Run e2e
         working-directory: apps/web
         run: npm run e2e
