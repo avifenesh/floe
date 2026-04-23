@@ -41,55 +41,123 @@ pub fn cluster(artifact: &Artifact) -> Vec<Flow> {
 /// For each flow, scan head graph edges and keep the ones where one
 /// endpoint is a flow entity and the other isn't — those are 1-hop
 /// propagation boundaries.
+/// Max call-graph hops to walk outward from flow entities when
+/// computing propagation context. Reviewers want "entrance → flow →
+/// end" end-to-end, not just the immediate caller / callee; but
+/// unbounded BFS over a large repo floods the graph with unrelated
+/// code. Three hops covers the common component shape (request
+/// handler → service → helper → leaf) without runaway growth.
+const PROPAGATION_MAX_HOPS: u32 = 3;
+
 fn populate_propagation(flows: &mut [Flow], artifact: &Artifact) {
     use floe_core::graph::EdgeKind;
     let id_to_qname = node_qname_map(&artifact.head);
-    // Node kinds that represent real call-graph participants. File
-    // nodes are containment (`Defines` edges); including them would
-    // put `src/foo.ts → someFn` in the propagation strip as if the
-    // file itself called the function. Same logic for ApiEndpoint
-    // pseudo-nodes — they're routing metadata, not callers.
+    // Qualified name → node id map for upstream/downstream lookups.
+    let qname_to_id: std::collections::HashMap<String, floe_core::graph::NodeId> =
+        id_to_qname
+            .iter()
+            .map(|(id, name)| (name.clone(), *id))
+            .collect();
+    // Only Function/Type/State count as call-graph participants.
+    // File nodes are containment; ApiEndpoint nodes are routing
+    // metadata. Both would masquerade as callers otherwise.
     let is_callable = |id: floe_core::graph::NodeId| -> bool {
         artifact
             .head
             .nodes
             .iter()
             .find(|n| n.id == id)
-            .map(|n| matches!(
-                &n.kind,
-                NodeKind::Function { .. } | NodeKind::Type { .. } | NodeKind::State { .. }
-            ))
+            .map(|n| {
+                matches!(
+                    &n.kind,
+                    NodeKind::Function { .. }
+                        | NodeKind::Type { .. }
+                        | NodeKind::State { .. }
+                )
+            })
             .unwrap_or(false)
     };
+    // Index edges by endpoint for O(1) hop expansion. Only `Calls`
+    // edges carry "A reaches into B" semantics.
+    let mut out_edges: std::collections::HashMap<
+        floe_core::graph::NodeId,
+        Vec<floe_core::graph::NodeId>,
+    > = std::collections::HashMap::new();
+    let mut in_edges: std::collections::HashMap<
+        floe_core::graph::NodeId,
+        Vec<floe_core::graph::NodeId>,
+    > = std::collections::HashMap::new();
+    for e in &artifact.head.edges {
+        if !matches!(e.kind, EdgeKind::Calls) {
+            continue;
+        }
+        if !is_callable(e.from) || !is_callable(e.to) {
+            continue;
+        }
+        out_edges.entry(e.from).or_default().push(e.to);
+        in_edges.entry(e.to).or_default().push(e.from);
+    }
+
     for flow in flows.iter_mut() {
-        let entity_set: std::collections::HashSet<&str> =
-            flow.entities.iter().map(String::as_str).collect();
+        // Seed set: the flow's own entities, resolved to node ids.
+        let seed_ids: std::collections::HashSet<floe_core::graph::NodeId> = flow
+            .entities
+            .iter()
+            .filter_map(|q| qname_to_id.get(q).copied())
+            .collect();
+        // BFS outward — combined callers (in-edges) and callees
+        // (out-edges). Track the full reach so we can emit every
+        // edge along the chain, not just the hop-1 frontier.
+        let mut reach: std::collections::HashSet<floe_core::graph::NodeId> =
+            seed_ids.clone();
+        let mut frontier = seed_ids.clone();
+        for _hop in 0..PROPAGATION_MAX_HOPS {
+            let mut next: std::collections::HashSet<floe_core::graph::NodeId> =
+                std::collections::HashSet::new();
+            for &id in &frontier {
+                for &c in out_edges.get(&id).into_iter().flatten() {
+                    if !reach.contains(&c) {
+                        next.insert(c);
+                    }
+                }
+                for &c in in_edges.get(&id).into_iter().flatten() {
+                    if !reach.contains(&c) {
+                        next.insert(c);
+                    }
+                }
+            }
+            if next.is_empty() {
+                break;
+            }
+            reach.extend(next.iter().copied());
+            frontier = next;
+        }
+
+        // Emit every Calls edge whose endpoints both lie in the
+        // reach set, excluding edges where *both* endpoints are
+        // seed entities (those are the flow's own internal shape,
+        // already rendered by the graph itself).
         let mut seen: std::collections::HashSet<(String, String)> =
             std::collections::HashSet::new();
         for e in &artifact.head.edges {
-            // Only `Calls` edges carry "A reaches into B" semantics.
-            // Defines / Exports / Transitions are structural wiring
-            // that shouldn't surface as propagation.
             if !matches!(e.kind, EdgeKind::Calls) {
                 continue;
             }
-            if !is_callable(e.from) || !is_callable(e.to) {
+            if !reach.contains(&e.from) || !reach.contains(&e.to) {
                 continue;
             }
-            let (Some(from_name), Some(to_name)) = (
+            let from_is_seed = seed_ids.contains(&e.from);
+            let to_is_seed = seed_ids.contains(&e.to);
+            if from_is_seed && to_is_seed {
+                continue;
+            }
+            let (Some(f), Some(t)) = (
                 id_to_qname.get(&e.from).cloned(),
                 id_to_qname.get(&e.to).cloned(),
             ) else {
                 continue;
             };
-            let from_in = entity_set.contains(from_name.as_str());
-            let to_in = entity_set.contains(to_name.as_str());
-            // Internal edges (both in the flow) are the flow's own
-            // shape — Flow view already renders them. Skip.
-            if from_in == to_in {
-                continue;
-            }
-            let key = (from_name.clone(), to_name.clone());
+            let key = (f, t);
             if seen.insert(key.clone()) {
                 flow.propagation_edges.push(key);
             }
