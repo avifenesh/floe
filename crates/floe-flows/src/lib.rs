@@ -42,13 +42,40 @@ pub fn cluster(artifact: &Artifact) -> Vec<Flow> {
 /// endpoint is a flow entity and the other isn't — those are 1-hop
 /// propagation boundaries.
 fn populate_propagation(flows: &mut [Flow], artifact: &Artifact) {
+    use floe_core::graph::EdgeKind;
     let id_to_qname = node_qname_map(&artifact.head);
+    // Node kinds that represent real call-graph participants. File
+    // nodes are containment (`Defines` edges); including them would
+    // put `src/foo.ts → someFn` in the propagation strip as if the
+    // file itself called the function. Same logic for ApiEndpoint
+    // pseudo-nodes — they're routing metadata, not callers.
+    let is_callable = |id: floe_core::graph::NodeId| -> bool {
+        artifact
+            .head
+            .nodes
+            .iter()
+            .find(|n| n.id == id)
+            .map(|n| matches!(
+                &n.kind,
+                NodeKind::Function { .. } | NodeKind::Type { .. } | NodeKind::State { .. }
+            ))
+            .unwrap_or(false)
+    };
     for flow in flows.iter_mut() {
         let entity_set: std::collections::HashSet<&str> =
             flow.entities.iter().map(String::as_str).collect();
         let mut seen: std::collections::HashSet<(String, String)> =
             std::collections::HashSet::new();
         for e in &artifact.head.edges {
+            // Only `Calls` edges carry "A reaches into B" semantics.
+            // Defines / Exports / Transitions are structural wiring
+            // that shouldn't surface as propagation.
+            if !matches!(e.kind, EdgeKind::Calls) {
+                continue;
+            }
+            if !is_callable(e.from) || !is_callable(e.to) {
+                continue;
+            }
             let (Some(from_name), Some(to_name)) = (
                 id_to_qname.get(&e.from).cloned(),
                 id_to_qname.get(&e.to).cloned(),
