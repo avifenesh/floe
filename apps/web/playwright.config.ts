@@ -25,19 +25,32 @@ export default defineConfig({
     {
       // Playwright manages both processes. `reuseExistingServer: true`
       // means a dev running `just dev` in another shell doesn't force
-      // a second instance. In CI we let Playwright spawn the binary —
-      // upstream `cargo run` backgrounding was racey.
+      // a second instance. `stdout: "pipe"` + `stderr: "pipe"` surface
+      // startup output on failure — without them Playwright swallows
+      // it and "ERR_CONNECTION_REFUSED" is all you see.
       command: "cargo run -q -p floe-server",
       cwd: "../../",
       port: 8787,
       reuseExistingServer: true,
       timeout: 240_000,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        // In-memory DB → no Postgres dependency just to land the
+        // smoke test. Override locally if you want persistence.
+        FLOE_DB: ":memory:",
+        // Silence GLM/LLM path entirely — the smoke test never hits
+        // the pipeline, so no keys are needed.
+        FLOE_LLM: "skip",
+      },
     },
     {
       command: "npm run dev",
       port: 5173,
       reuseExistingServer: true,
       timeout: 120_000,
+      stdout: "pipe",
+      stderr: "pipe",
     },
   ],
 });
