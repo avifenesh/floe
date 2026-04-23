@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "adr command-line interface."
+description = "floe command-line interface."
 
 [[bin]]
-name = "adr"
+name = "floe"
 path = "src/main.rs"
 
 [dependencies]

@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "adr", version, about = "Architectural delta review CLI")]
+#[command(name = "floe", version, about = "Architectural PR review CLI")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -57,7 +57,7 @@ enum Cmd {
         json: bool,
     },
     /// Reveal the baseline pin on an artifact, or compare two pins to
-    /// check whether `adr calibrate` is apples-to-apples (RFC v0.3 §9).
+    /// check whether `floe calibrate` is apples-to-apples (RFC v0.3 §9).
     /// Exits non-zero on mismatch.
     Baseline {
         /// First artifact JSON. With `--against`, this is the reference
@@ -96,6 +96,13 @@ fn main() -> Result<()> {
             artifact.base_cfg = floe_cfg::build_for_graph(&artifact.base, &base)?;
             artifact.head_cfg = floe_cfg::build_for_graph(&artifact.head, &head)?;
             artifact.hunks = floe_hunks::extract_all(&artifact.base, &artifact.head);
+            artifact.hunks.extend(floe_hunks::extract_lock_hunks(&base, &head));
+            artifact.hunks.extend(floe_hunks::extract_data_hunks(&base, &head));
+            artifact.hunks.extend(floe_hunks::extract_docs_hunks(&head));
+            artifact.hunks.extend(floe_hunks::extract_deletion_hunks(
+                &artifact.base,
+                &artifact.head,
+            ));
             artifact.flows = floe_flows::cluster(&artifact);
             artifact.intent = intent_source::resolve(
                 intent_file.as_deref(),
