@@ -1,0 +1,14 @@
+{
+  "title": "Broaden JobPayload",
+  "summary": "Callers need a retry budget and an explicit deadline on every job. Rename `id` to `jobId` to disambiguate from worker ids that share the field name.",
+  "claims": [
+    {
+      "statement": "JobPayload gains `retries` and `deadline` fields.",
+      "evidence_type": "observation"
+    },
+    {
+      "statement": "JobPayload.id is renamed to jobId.",
+      "evidence_type": "observation"
+    }
+  ]
+}

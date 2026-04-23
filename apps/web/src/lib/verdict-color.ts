@@ -66,10 +66,20 @@ export function proofPillClass(v: ProofVerdict | undefined): string {
   return TONE_PILL[proofTone(v)];
 }
 
-/** Signed-cost color: positive = harder navigation (rose), negative =
- *  easier (emerald), zero/nullish = neutral. Mirrors the invariant
- *  that additive PRs cannot go negative (see cost_invariant_additive). */
+/** Signed-cost tone — MONOCHROME. The cost page reads as a single
+ *  accent so numbers scan cleanly; direction comes from the sign and
+ *  the arrow glyph from `signedCostArrow`, not from green-vs-red.
+ *  (User directive: cost page "one color … easy to read but still
+ *  appealing". Keeps red/emerald vocabulary for verdicts elsewhere.)
+ */
 export function signedCostTextClass(value: number | null | undefined): string {
   if (value === null || value === undefined || value === 0) return TONE_TEXT.neutral;
-  return value > 0 ? TONE_TEXT.bad : TONE_TEXT.good;
+  return "text-foreground";
+}
+
+/** Unicode arrow that conveys direction without colour. Positive = up
+ *  (harder navigation), negative = down (easier), zero = flat dash. */
+export function signedCostArrow(value: number | null | undefined): string {
+  if (value === null || value === undefined || value === 0) return "–";
+  return value > 0 ? "↑" : "↓";
 }

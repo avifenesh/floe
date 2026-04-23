@@ -1,0 +1,4 @@
+{
+  "title": "Broaden JobPayload schema",
+  "description": "Adds `retries` and `deadline` fields to JobPayload, renames `id` to `jobId`. Demonstrates the `data` hunk type."
+}

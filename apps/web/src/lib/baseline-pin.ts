@@ -55,19 +55,30 @@ export interface DriftAxis {
 export function detectBaselineDrift(
   baseline: ArtifactBaseline,
   cfg: LlmConfigView,
+  /** When set, axes where `was` is null are suppressed iff the
+   *  corresponding *ran* flag is true — we have no record of what
+   *  produced the numbers, so claiming drift would cry wolf. Older
+   *  cached artifacts pre-date the stamping fix and legitimately
+   *  carry `null` here; no honest answer except "unknown". */
+  ran?: { synthesis?: boolean; proof?: boolean; probe?: boolean },
 ): DriftAxis[] {
   const out: DriftAxis[] = [];
   const check = (
     axis: DriftAxis["axis"],
     was: string | null | undefined,
     now: string | null | undefined,
+    didRun: boolean | undefined,
   ): void => {
     const w = was ?? null;
     const n = now ?? null;
-    if (w !== n) out.push({ axis, was: w, now: n });
+    if (w === n) return;
+    // `was === null` with `didRun === true` means the pass ran but we
+    // didn't stamp the model — genuinely unknown, not drift.
+    if (w === null && didRun === true) return;
+    out.push({ axis, was: w, now: n });
   };
-  check("synthesis", baseline.synthesis_model, cfg.synthesis_model);
-  check("probe", baseline.probe_model, cfg.probe_model);
-  check("proof", baseline.proof_model, cfg.proof_model);
+  check("synthesis", baseline.synthesis_model, cfg.synthesis_model, ran?.synthesis);
+  check("probe", baseline.probe_model, cfg.probe_model, ran?.probe);
+  check("proof", baseline.proof_model, cfg.proof_model, ran?.proof);
   return out;
 }

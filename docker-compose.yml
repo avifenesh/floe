@@ -1,0 +1,31 @@
+# Local Postgres for the floe-server persistence layer.
+#
+# Usage:
+#   docker compose up -d db
+#   export FLOE_DATABASE_URL="postgres://adr:adr@localhost:5433/adr"
+#   cargo run -p floe-server
+#
+# Port 5433 (not the default 5432) so it doesn't collide with a
+# system Postgres. Volume is named so data survives `docker compose
+# down` — use `down -v` to wipe.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: adr
+      POSTGRES_PASSWORD: adr
+      POSTGRES_DB: adr
+    ports:
+      - "5433:5432"
+    volumes:
+      - floe_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adr -d adr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  floe_pgdata:

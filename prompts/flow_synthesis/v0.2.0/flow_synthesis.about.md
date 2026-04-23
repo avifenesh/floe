@@ -20,10 +20,10 @@ This file documents the prompt living next to it. The prompt file contains only 
 
 System prompt given to the local LLM (Gemma 4 primary, Qwen 3.5 backup) when it runs inside PI via the `@adr/pi-extension`. Drives the flow-classification loop:
 
-1. `adr:list_hunks()` + `adr:list_flows_initial()` to load context.
-2. `adr:get_entity` / `adr:neighbors` / `read` to inspect uncertain hunks.
-3. `adr:propose_flow` / `mutate_flow` / `remove_flow` to shape the flow set.
-4. `adr:finalize()` as the gated exit.
+1. `floe:list_hunks()` + `floe:list_flows_initial()` to load context.
+2. `floe:get_entity` / `floe:neighbors` / `read` to inspect uncertain hunks.
+3. `floe:propose_flow` / `mutate_flow` / `remove_flow` to shape the flow set.
+4. `floe:finalize()` as the gated exit.
 
 ## Template placeholders
 
@@ -32,7 +32,7 @@ Rendered by the Rust host at runtime. Do not commit the rendered output.
 | Token | Type | Source |
 |---|---|---|
 | `{{hunk_count}}` | int | `artifact.hunks.length` |
-| `{{initial_cluster_count}}` | int | `adr-flows` structural result |
+| `{{initial_cluster_count}}` | int | `floe-flows` structural result |
 | `{{max_tool_calls}}` | int | host config, default 200 |
 
 ## Design provenance
@@ -42,7 +42,7 @@ Written by applying the `system-prompt-curator` skill from cairn-rs (`docs/skill
 1. Identity matches task — "senior software architect reviewing a pull request" rather than a generic agent label.
 2. Autonomous completion — the prompt mandates working until every hunk has a flow and the host accepts.
 3. Structured workflow phases — Explore → Investigate → Classify → Verify → Deliver. Each phase has a concrete exit condition.
-4. Completion requires evidence — `adr:finalize()` is the gate; five completion criteria enumerated.
+4. Completion requires evidence — `floe:finalize()` is the gate; five completion criteria enumerated.
 5. Tools listed upfront — all `adr:` and PI built-ins in one block; write/edit/bash explicitly marked unused.
 6. Worked demonstration — full walkthrough on glide-mq PR #181 (real data from our analyzer).
 7. Think-before-act transitions — Phase 2's inspection triage is the "think before you classify" beat.
@@ -61,7 +61,7 @@ From the skill's table:
 - ✅ Tools listed upfront, not discovered.
 - ✅ One full worked trajectory with real data.
 - ✅ Error-recovery section with actual host error codes.
-- ✅ Completion requires concrete artifact (valid `adr:finalize()` accept).
+- ✅ Completion requires concrete artifact (valid `floe:finalize()` accept).
 
 ## Changelog
 
@@ -90,5 +90,5 @@ Prompt must survive (3) — if the floor model can't produce valid flows on 50% 
 
 - Doesn't instruct on coding style, formatting, or file structure — the model doesn't write code.
 - Doesn't describe flow-rendering semantics in the frontend. That's the host's concern.
-- Doesn't specify MCP/socket protocol. That lives in `docs/adr-pi-extension.md`.
+- Doesn't specify MCP/socket protocol. That lives in `docs/floe-pi-extension.md`.
 - Doesn't try to teach function-calling syntax. Gemma 4 and Qwen 3.5 both have it natively; PI handles the wrapper.

@@ -1,14 +1,33 @@
+# ─── Build outputs ───────────────────────────────────────────────
 /target
 **/*.rs.bk
 Cargo.lock.bak
-.adr/cache/
-.DS_Store
-node_modules/
-apps/web/src/types/artifact.ts
 dist/
+node_modules/
+
+# ─── OS ──────────────────────────────────────────────────────────
+.DS_Store
+*.log
+
+# ─── Secrets / local config ─────────────────────────────────────
 .env
 .env.local
-*.log
+
+# ─── Runtime state (artifact cache, DB, checkouts) ──────────────
+.adr/
+.floe/
+
+# ─── Agent / editor state ───────────────────────────────────────
+.claude/
 .remember/
-archticture_*
+
+# ─── Generated from schema ──────────────────────────────────────
+apps/web/src/types/artifact.ts
+
+# ─── Local-only planning & notes (never public) ─────────────────
 spike-plan.md
+architecture_delta_review_pre_rfc.md
+docs/scope-5-cost-model.md
+
+# ─── Generated smoke outputs ────────────────────────────────────
+fixtures/smoke-outputs/

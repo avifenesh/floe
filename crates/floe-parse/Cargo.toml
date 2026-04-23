@@ -1,0 +1,27 @@
+[package]
+name = "floe-parse"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "TypeScript parsing via tree-sitter into floe-core graph nodes."
+
+[dependencies]
+floe-core = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+walkdir = { workspace = true }
+anyhow = { workspace = true }
+# Workspace topology — pnpm uses YAML, npm/yarn use JSON inside
+# `package.json`, tsconfig references are JSON with comments (JSONC).
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+globset = { workspace = true }
+ignore = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = "3"
+tracing = { workspace = true }

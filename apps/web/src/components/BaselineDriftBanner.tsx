@@ -51,7 +51,11 @@ export function BaselineDriftBanner({
 
   const baseline: ArtifactBaseline | null | undefined = artifact.baseline;
   if (!baseline || !cfg) return null;
-  const drift = detectBaselineDrift(baseline, cfg);
+  const drift = detectBaselineDrift(baseline, cfg, {
+    synthesis: artifact.synth_status === "ready",
+    proof: artifact.proof_status === "ready",
+    probe: artifact.cost_status === "ready",
+  });
   if (drift.length === 0) return null;
 
   return (

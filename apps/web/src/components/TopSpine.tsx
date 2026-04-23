@@ -20,6 +20,7 @@ interface Props {
   onFlowSub: (s: FlowSubTab) => void;
   prSub: PrSubTab;
   onPrSub: (s: PrSubTab) => void;
+  onHome?: () => void;
 }
 
 /**
@@ -38,6 +39,7 @@ export function TopSpine({
   onFlowSub,
   prSub,
   onPrSub,
+  onHome,
 }: Props) {
   const [theme, setTheme] = useTheme();
   const loaded = prLabel !== null;
@@ -50,17 +52,28 @@ export function TopSpine({
   return (
     <header className="flex flex-col">
       <div className="h-10 flex items-center">
-        <div className="w-full max-w-6xl mx-auto px-6 flex items-center gap-4">
+        <div className="w-full max-w-7xl mx-auto px-6 flex items-center gap-4">
           {/* Identity sits on the LEFT now, truncates aggressively. The
               old right-side anchor competed with the flow tab row for
               horizontal space and clipped the 3rd+ tabs behind itself
               on typical viewports. */}
-          <div
-            className="text-[12px] font-mono text-muted-foreground shrink-0 truncate max-w-[160px]"
-            title={prLabel ?? "No PR loaded"}
-          >
-            {prLabel ?? "No PR loaded"}
-          </div>
+          {loaded && onHome ? (
+            <button
+              onClick={onHome}
+              title="Back to dashboard"
+              className="text-[12px] font-mono text-muted-foreground hover:text-foreground shrink-0 truncate max-w-[200px] inline-flex items-center gap-1.5"
+            >
+              <span aria-hidden className="text-[13px]">←</span>
+              <span className="truncate">{prLabel}</span>
+            </button>
+          ) : (
+            <div
+              className="text-[12px] font-mono text-muted-foreground shrink-0 truncate max-w-[160px]"
+              title={prLabel ?? "No PR loaded"}
+            >
+              {prLabel ?? "No PR loaded"}
+            </div>
+          )}
           {loaded && (
             <span
               aria-hidden
@@ -122,7 +135,7 @@ export function TopSpine({
               <span>{theme === "dark" ? "Dark" : "Light"}</span>
             </button>
             <button
-              onClick={() => window.dispatchEvent(new CustomEvent("adr:open-palette"))}
+              onClick={() => window.dispatchEvent(new CustomEvent("floe:open-palette"))}
               className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-foreground rounded-md border border-border/60 bg-background/60 hover:bg-muted/40 px-2 py-1 transition-colors"
               aria-label="Open command palette"
               title="Open command palette"
@@ -135,7 +148,7 @@ export function TopSpine({
       </div>
       {loaded && (
         <div className="h-8 flex items-center">
-          <div className="w-full max-w-6xl mx-auto px-6 flex items-center gap-4">
+          <div className="w-full max-w-7xl mx-auto px-6 flex items-center gap-4">
             {top.kind === "flow"
               ? FLOW_SUB_TABS.map((s) => (
                   <SubTabButton

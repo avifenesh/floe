@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Per-flow intent-fit verdict: does this flow deliver a claim the PR's stated intent makes? Input is the flow + the structured (or raw-text) intent + reviewer notes. Output is a single JSON object matching [`adr_core::intent::IntentFit`](../../../crates/adr-core/src/intent.rs).
+Per-flow intent-fit verdict: does this flow deliver a claim the PR's stated intent makes? Input is the flow + the structured (or raw-text) intent + reviewer notes. Output is a single JSON object matching [`floe_core::intent::IntentFit`](../../../crates/floe-core/src/intent.rs).
 
 ## Placeholders
 
@@ -36,4 +36,4 @@ Calibration pass deferred to scope 6. Expected signal: intent-fit verdicts shoul
 
 ## Model expectations
 
-- Primary: GLM-4.7 (cloud, `ADR_PROOF_LLM=glm:glm-4.7` or default). Per `feedback_proof_uses_glm.md`, intent-fit reads prose intent + semantic code; small local models hallucinate. If ever run locally, cap emitted `strength` at Medium.
+- Primary: GLM-4.7 (cloud, `FLOE_PROOF_LLM=glm:glm-4.7` or default). Per `feedback_proof_uses_glm.md`, intent-fit reads prose intent + semantic code; small local models hallucinate. If ever run locally, cap emitted `strength` at Medium.

@@ -9,6 +9,7 @@ import type { FlowSubTab, PrSubTab, TopTab } from "@/views/types";
 import type { Artifact } from "@/types/artifact";
 import { deriveSlug, isPathSha, shortSha } from "@/lib/artifact";
 import { fetchMe, getJob, logout, pollUntilDone, rebaselineJob, type Me } from "@/api";
+import { useToast } from "@/components/Toast";
 
 export interface LoadedJob {
   jobId: string;
@@ -16,6 +17,7 @@ export interface LoadedJob {
 }
 
 export default function App() {
+  const toast = useToast();
   const [job, setJob] = useState<LoadedJob | null>(null);
   const [top, setTop] = useState<TopTab>({ kind: "pr" });
   const [flowSub, setFlowSub] = useState<FlowSubTab>("overview");
@@ -96,10 +98,32 @@ export default function App() {
         setRebaselining(true);
         try {
           const id = await rebaselineJob(job.jobId);
-          const done = await pollUntilDone(id);
+          // READY fires as soon as structural+evidence land. Synth,
+          // probe, proof and summary keep running in the background;
+          // keep polling until all of them leave `analyzing` so the
+          // drift banner + cost/proof sections reflect the fresh run
+          // (otherwise "Re-run now" looks like a no-op because the
+          // pinned models haven't been stamped yet).
+          let done = await pollUntilDone(id);
           if (done.artifact) setJob({ jobId: id, artifact: done.artifact });
+          const stillRunning = (a: typeof done.artifact) =>
+            !!a && (
+              a.synth_status === "analyzing" ||
+              a.cost_status === "analyzing" ||
+              a.proof_status === "analyzing"
+            );
+          // Bounded wait — up to ~3 min at 1s intervals.
+          for (let i = 0; i < 180 && stillRunning(done.artifact); i++) {
+            await new Promise((r) => setTimeout(r, 1000));
+            done = await getJob(id);
+            if (done.artifact) setJob({ jobId: id, artifact: done.artifact });
+          }
         } catch (e) {
-          alert(`Re-baseline failed: ${String(e)}`);
+          toast.push({
+            title: "Re-baseline failed",
+            body: String(e),
+            tone: "error",
+          });
         } finally {
           setRebaselining(false);
         }
@@ -135,10 +159,16 @@ export default function App() {
         onFlowSub={setFlowSub}
         prSub={prSub}
         onPrSub={setPrSub}
+        onHome={() => {
+          setJob(null);
+          setTop({ kind: "pr" });
+          setPrSub("flows-map");
+          setFlowSub("overview");
+        }}
       />
       {job && anyStructural && <StructuralBannerStrip />}
       {job && <BackgroundWorkStrip artifact={job.artifact} />}
-      <main className="flex-1 w-full min-w-0 max-w-6xl mx-auto px-6 pt-4 pb-10">
+      <main className="flex-1 w-full min-w-0 max-w-7xl mx-auto px-6 pt-4 pb-10">
         {me === undefined ? (
           // Auth fetch hasn't resolved yet — render nothing (avoids a
           // flash of the landing page on first paint for signed-in
@@ -163,6 +193,28 @@ export default function App() {
             jobId={job.jobId}
             flow={selectedFlow}
             sub={flowSub}
+            onInlineNotesChange={(next) =>
+              setJob((prev) =>
+                prev
+                  ? { ...prev, artifact: { ...prev.artifact, inline_notes: next } }
+                  : prev,
+              )
+            }
+            onJumpToSource={(entity) => {
+              setFlowSub("source");
+              if (entity) {
+                // DiffView's FileSidebar scrolls the right file into view
+                // on selection. The NodeDetailPanel can also be spawned
+                // from here; for now just flip the sub-tab — the
+                // file list is already scoped to the flow's entities.
+                window.requestAnimationFrame(() => {
+                  const el = document.querySelector<HTMLElement>(
+                    `[data-entity-name="${CSS.escape(entity)}"]`,
+                  );
+                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                });
+              }
+            }}
           />
         ) : (
           <PrWorkspace
@@ -177,6 +229,16 @@ export default function App() {
             }}
             onRebaseline={onRebaseline}
             rebaselining={rebaselining}
+            onInlineNotesChange={(next) =>
+              setJob((prev) =>
+                prev
+                  ? { ...prev, artifact: { ...prev.artifact, inline_notes: next } }
+                  : prev,
+              )
+            }
+            onArtifactChange={(next) =>
+              setJob((prev) => (prev ? { ...prev, artifact: next } : prev))
+            }
           />
         )}
       </main>
@@ -202,49 +264,118 @@ export default function App() {
  *  Labels describe the WORK, not the model (see feedback memory).
  */
 function BackgroundWorkStrip({ artifact }: { artifact: Artifact }) {
-  const synth = artifact.synth_status ?? "not-run";
-  const cost = artifact.cost_status ?? "not-run";
-  const proof = artifact.proof_status ?? "not-run";
-  const active = [
-    synth === "analyzing" && { label: "Naming flows", hint: "Assigning a human name and rationale to each flow." },
-    cost === "analyzing" && { label: "Measuring nav cost", hint: "Probing base + head to score how hard the repo is to navigate." },
-    proof === "analyzing" && { label: "Matching flows to intent", hint: "Scoring intent-fit and hunting for proof per claim." },
-  ].filter(Boolean) as { label: string; hint: string }[];
+  type Status = "ready" | "analyzing" | "not-run" | "errored";
+  const stages: Array<{ key: string; label: string; status: Status; hint: string }> = [
+    {
+      key: "structural",
+      label: "Structural flows",
+      status: "ready",
+      hint: "Deterministic floor — always green once the artifact lands.",
+    },
+    {
+      key: "synth",
+      label: "LLM flow names",
+      status: (artifact.synth_status ?? "not-run") as Status,
+      hint: "Assigning a human name and rationale to each flow.",
+    },
+    {
+      key: "cost",
+      label: "Nav cost probe",
+      status: (artifact.cost_status ?? "not-run") as Status,
+      hint: "Probing base + head to score how hard the repo is to navigate.",
+    },
+    {
+      key: "proof",
+      label: "Intent & proof",
+      status: (artifact.proof_status ?? "not-run") as Status,
+      hint: "Scoring intent-fit and hunting for proof per claim.",
+    },
+  ];
 
-  if (active.length === 0) return null;
+  const anyActive = stages.some((s) => s.status === "analyzing");
+  const anyDone = stages.some((s) => s.status === "ready" && s.key !== "structural");
+  const anyError = stages.some((s) => s.status === "errored");
+  // Hide the strip if nothing interesting is running and there's
+  // nothing unusual to report — avoids a permanent chrome strip on a
+  // fully-static PR without LLM passes configured.
+  if (!anyActive && !anyDone && !anyError) return null;
 
   return (
     <div className="border-b border-border/60 bg-muted/20">
-      <div className="w-full max-w-6xl mx-auto px-6 py-1.5 flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
-        <span className="uppercase tracking-wide text-[10px]">Still working</span>
+      <div className="w-full max-w-7xl mx-auto px-6 py-1.5 flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
+        <span className="uppercase tracking-wide text-[10px]">Pipeline</span>
         <ul className="flex items-center gap-2 flex-wrap">
-          {active.map((a) => (
+          {stages.map((s, i) => (
             <li
-              key={a.label}
-              title={a.hint}
-              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-border/60 bg-background/60"
+              key={s.key}
+              title={s.hint}
+              className="inline-flex items-center gap-1.5"
             >
-              <span className="relative inline-flex" aria-hidden>
-                <span className="absolute inset-0 w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-ping" />
-                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/80" />
+              <span className={stageChipClass(s.status)}>
+                <StageGlyph status={s.status} />
+                <span>{s.label}</span>
               </span>
-              <span className="text-foreground/80">{a.label}</span>
-              <span className="text-muted-foreground/70">…</span>
+              {i < stages.length - 1 && (
+                <span aria-hidden className="text-muted-foreground/50">→</span>
+              )}
             </li>
           ))}
         </ul>
-        <span className="ml-auto text-muted-foreground/70">
-          results fill in automatically
-        </span>
       </div>
     </div>
   );
 }
 
+function stageChipClass(
+  status: "ready" | "analyzing" | "not-run" | "errored",
+): string {
+  const base =
+    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-colors ";
+  switch (status) {
+    case "ready":
+      return (
+        base +
+        "border-emerald-400/40 bg-emerald-50 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-200"
+      );
+    case "analyzing":
+      return base + "border-border/60 bg-background/60 text-foreground/80";
+    case "errored":
+      return (
+        base +
+        "border-rose-400/40 bg-rose-50 text-rose-800 dark:bg-rose-400/10 dark:text-rose-200"
+      );
+    case "not-run":
+    default:
+      return base + "border-border/40 bg-transparent text-muted-foreground/70";
+  }
+}
+
+function StageGlyph({
+  status,
+}: {
+  status: "ready" | "analyzing" | "not-run" | "errored";
+}) {
+  if (status === "analyzing") {
+    return (
+      <span className="relative inline-flex" aria-hidden>
+        <span className="absolute inset-0 w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-ping" />
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/80" />
+      </span>
+    );
+  }
+  if (status === "ready") {
+    return <span aria-hidden className="text-[10px] leading-none">✓</span>;
+  }
+  if (status === "errored") {
+    return <span aria-hidden className="text-[10px] leading-none">!</span>;
+  }
+  return <span aria-hidden className="w-1.5 h-1.5 rounded-full border border-current/60" />;
+}
+
 function StructuralBannerStrip() {
   return (
     <div className="border-y border-amber-300/40 dark:border-amber-400/20 bg-amber-100/70 dark:bg-amber-400/[0.07]">
-      <div className="w-full max-w-6xl mx-auto px-6 py-1.5 flex items-center gap-2 text-[11px] font-mono text-amber-900 dark:text-amber-200">
+      <div className="w-full max-w-7xl mx-auto px-6 py-1.5 flex items-center gap-2 text-[11px] font-mono text-amber-900 dark:text-amber-200">
         <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />
         Structural clustering — LLM synthesis not available. Flows reflect qualified-name prefix, not architectural intent.
       </div>
@@ -253,6 +384,11 @@ function StructuralBannerStrip() {
 }
 
 function spineLabel(a: Artifact): string {
+  // LLM-derived headline wins when present — reviewer sees what the PR
+  // IS, not just where it lives.
+  if (a.pr_summary?.headline) {
+    return a.pr_summary.headline;
+  }
   if (a.pr.repo !== "unknown" && !isPathSha(a.pr.head_sha)) {
     return `${a.pr.repo} · ${shortSha(a.pr.head_sha)}`;
   }

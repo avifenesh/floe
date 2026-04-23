@@ -21,9 +21,9 @@ export function FileSidebar({ files, selected, onSelect, hunkCounts, flowsByFile
   return (
     <aside
       aria-label="Changed files"
-      className="border border-border/60 rounded bg-muted/20 overflow-y-auto max-h-[calc(100vh-10rem)]"
+      className="min-w-0 overflow-y-auto max-h-[calc(100vh-10rem)] text-muted-foreground/90"
     >
-      <div className="px-3 py-2 border-b border-border/60 text-[10px] font-mono tracking-wide uppercase text-muted-foreground">
+      <div className="px-1 py-1 text-[9px] font-mono tracking-wide uppercase text-muted-foreground/70">
         {files.length} file{files.length === 1 ? "" : "s"}
       </div>
       <ul role="listbox">
@@ -40,28 +40,28 @@ export function FileSidebar({ files, selected, onSelect, hunkCounts, flowsByFile
                 aria-selected={active}
                 onClick={() => onSelect(f.path)}
                 className={cn(
-                  "w-full text-left px-3 py-1.5 text-[12px] font-mono flex items-center gap-2 min-w-0",
-                  "transition-colors border-l-2",
+                  "w-full text-left px-1.5 py-0.5 text-[11px] font-mono flex items-center gap-1.5 min-w-0",
+                  "transition-colors rounded-sm",
                   active
-                    ? "bg-muted/70 border-l-foreground text-foreground"
-                    : "border-l-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                    ? "bg-muted/50 text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
                 )}
               >
                 <StatusDot status={f.status} />
                 <span className="flex-1 min-w-0 truncate" title={f.path}>
-                  {dir && <span className="opacity-60">{dir}/</span>}
+                  {dir && <span className="opacity-50">{dir}/</span>}
                   <span>{short}</span>
                 </span>
                 {flows.length > 0 && (
                   <span
-                    className="shrink-0 text-[10px] tabular-nums text-muted-foreground"
+                    className="shrink-0 text-[9px] tabular-nums opacity-60"
                     title={`${flows.length} flow${flows.length === 1 ? "" : "s"} touch this file`}
                   >
                     {flows.length}f
                   </span>
                 )}
                 {hunks > 0 && (
-                  <span className="shrink-0 text-[10px] tabular-nums opacity-70">{hunks}</span>
+                  <span className="shrink-0 text-[9px] tabular-nums opacity-50">{hunks}</span>
                 )}
               </button>
             </li>

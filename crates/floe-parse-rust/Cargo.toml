@@ -1,0 +1,18 @@
+[package]
+name = "floe-parse-rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Rust parsing via tree-sitter into floe-core graph nodes."
+
+[dependencies]
+floe-core = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-rust = "0.21"
+walkdir = { workspace = true }
+anyhow = { workspace = true }
+ignore = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

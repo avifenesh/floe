@@ -4,6 +4,8 @@ import type { HunkClass } from "@/lib/artifact";
 import type { DiffEntry, DiffRow, Segment, SkipBlock } from "@/lib/diff";
 import { isSkip } from "@/lib/diff";
 import type { HighlightedLines, Token } from "@/lib/highlight";
+import type { InlineNote } from "@/types/artifact";
+import { InlineNotes } from "@/components/InlineNotes";
 
 export interface LineTouches {
   base: Map<number, Set<HunkClass>>;
@@ -15,6 +17,13 @@ interface Props {
   baseTokens: HighlightedLines | null;
   headTokens: HighlightedLines | null;
   touches?: LineTouches;
+  /** When present, each diff row gets a note affordance anchored to
+   *  `(file, side, line)`. Existing notes render inline below the
+   *  line; click "+ note" to compose a new one. */
+  jobId?: string;
+  file?: string;
+  inlineNotes?: InlineNote[];
+  onInlineNotesChange?: (next: InlineNote[]) => void;
 }
 
 /**
@@ -27,7 +36,17 @@ interface Props {
  *     layered *on top* so red/green strong tints win over the token
  *     colour for the changed spans.
  */
-export function DiffView({ entries, baseTokens, headTokens, touches }: Props) {
+export function DiffView({
+  entries,
+  baseTokens,
+  headTokens,
+  touches,
+  jobId,
+  file,
+  inlineNotes,
+  onInlineNotesChange,
+}: Props) {
+  const notesByLine = useLineNotesIndex(inlineNotes ?? [], file);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   return (
     <div className="text-[12.5px] font-mono rounded border overflow-hidden">
@@ -60,6 +79,11 @@ export function DiffView({ entries, baseTokens, headTokens, touches }: Props) {
             baseTokens={baseTokens}
             headTokens={headTokens}
             touches={touches}
+            jobId={jobId}
+            file={file}
+            allNotes={inlineNotes}
+            notesForRow={collectRowNotes(entry, notesByLine)}
+            onInlineNotesChange={onInlineNotesChange}
           />
         );
       })}
@@ -107,6 +131,8 @@ function Skip({
             touches={touches}
           />
         ))}
+        {/* Note affordance is intentionally skipped inside skip-blocks —
+            they're context fluff, not diff content worth annotating. */}
       </>
     );
   }
@@ -134,11 +160,21 @@ function Row({
   baseTokens,
   headTokens,
   touches,
+  jobId,
+  file,
+  allNotes,
+  notesForRow,
+  onInlineNotesChange,
 }: {
   row: DiffRow;
   baseTokens: HighlightedLines | null;
   headTokens: HighlightedLines | null;
   touches?: LineTouches;
+  jobId?: string;
+  file?: string;
+  allNotes?: InlineNote[];
+  notesForRow?: InlineNote[];
+  onInlineNotesChange?: (next: InlineNote[]) => void;
 }) {
   const isAdd = row.kind === "add";
   const isRem = row.kind === "remove";
@@ -154,30 +190,136 @@ function Row({
   const archKinds = rowArchKinds(row, touches);
 
   const flagged = archKinds.size > 0;
+  const noteCapable = !!(jobId && file && onInlineNotesChange);
+  // Prefer anchoring a new note on the head side (reviewer-facing
+  // "current state"); fall back to base when this row is a pure
+  // removal with no head line.
+  const anchorSide: "base" | "head" = isRem && row.baseLine !== null ? "base" : "head";
+  const anchorLine = anchorSide === "head" ? row.headLine : row.baseLine;
 
   return (
-    <div
-      className={cn(
-        "flex items-stretch relative",
-        isAdd &&
-          (hasSegments
-            ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
-            : "bg-emerald-100 dark:bg-emerald-400/35"),
-        isRem &&
-          (hasSegments
-            ? "bg-rose-50 dark:bg-rose-400/[0.06]"
-            : "bg-rose-100 dark:bg-rose-400/35"),
+    <>
+      <div
+        className={cn(
+          "flex items-stretch relative group",
+          isAdd &&
+            (hasSegments
+              ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
+              : "bg-emerald-100 dark:bg-emerald-400/35"),
+          isRem &&
+            (hasSegments
+              ? "bg-rose-50 dark:bg-rose-400/[0.06]"
+              : "bg-rose-100 dark:bg-rose-400/35"),
+        )}
+      >
+        <Gutter value={row.baseLine} mark={isRem ? "−" : null} tone={isRem ? "rem" : "equal"} />
+        <Gutter value={row.headLine} mark={isAdd ? "+" : null} tone={isAdd ? "add" : "equal"} />
+        <ArchStrip kinds={archKinds} />
+        <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
+          <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
+        </pre>
+        {flagged && <ArchChip kinds={archKinds} />}
+      </div>
+      {noteCapable && anchorLine !== null && (notesForRow?.length || true) && (
+        <LineNoteSlot
+          jobId={jobId!}
+          file={file!}
+          side={anchorSide}
+          line={anchorLine}
+          notes={allNotes ?? []}
+          rowNotes={notesForRow ?? []}
+          onChange={onInlineNotesChange!}
+        />
       )}
-    >
-      <Gutter value={row.baseLine} mark={isRem ? "−" : null} tone={isRem ? "rem" : "equal"} />
-      <Gutter value={row.headLine} mark={isAdd ? "+" : null} tone={isAdd ? "add" : "equal"} />
-      <ArchStrip kinds={archKinds} />
-      <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
-        <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
-      </pre>
-      {flagged && <ArchChip kinds={archKinds} />}
+    </>
+  );
+}
+
+/** Per-line note slot: shown below a diff row. Renders any existing
+ *  notes anchored to `(file, side, line)` and a hover-revealed
+ *  "+ note" affordance that expands the composer inline. */
+function LineNoteSlot({
+  jobId,
+  file,
+  side,
+  line,
+  notes,
+  rowNotes,
+  onChange,
+}: {
+  jobId: string;
+  file: string;
+  side: "base" | "head";
+  line: number;
+  notes: InlineNote[];
+  rowNotes: InlineNote[];
+  onChange: (next: InlineNote[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  // Reveal the composer only when either (a) a note already lives
+  // here, or (b) the reviewer clicked the "+ note" hover affordance.
+  if (rowNotes.length === 0 && !open) {
+    return (
+      <div className="flex items-center pl-[12rem] pr-3 py-0 leading-none h-0 group/slot relative">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="opacity-0 group-hover/slot:opacity-100 translate-y-[-10px] text-[10px] font-mono text-muted-foreground hover:text-foreground bg-background border border-border/60 rounded px-1.5 py-0.5 transition-opacity"
+          title={`Add note on ${side}:${line}`}
+        >
+          + note
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start border-y border-border/40 bg-muted/20 py-1">
+      <div className="w-[12rem] shrink-0 text-[10px] font-mono text-muted-foreground pt-2 pl-3">
+        {side}:{line}
+      </div>
+      <div className="flex-1 min-w-0 pr-3">
+        <InlineNotes
+          jobId={jobId}
+          anchor={{ kind: "file-line", file, line_side: side, line }}
+          notes={notes}
+          onChange={onChange}
+          label={`note on ${side}:${line}`}
+        />
+      </div>
     </div>
   );
+}
+
+/** Build a `${side}:${line}` → notes index for O(1) row lookup. */
+function useLineNotesIndex(
+  notes: InlineNote[],
+  file: string | undefined,
+): Map<string, InlineNote[]> {
+  const out = new Map<string, InlineNote[]>();
+  if (!file) return out;
+  for (const n of notes) {
+    if (n.anchor.kind !== "file-line") continue;
+    if (n.anchor.file !== file) continue;
+    const key = `${n.anchor.line_side}:${n.anchor.line}`;
+    const list = out.get(key) ?? [];
+    list.push(n);
+    out.set(key, list);
+  }
+  return out;
+}
+
+function collectRowNotes(
+  row: DiffRow,
+  byKey: Map<string, InlineNote[]>,
+): InlineNote[] {
+  const out: InlineNote[] = [];
+  if (row.baseLine !== null) {
+    out.push(...(byKey.get(`base:${row.baseLine}`) ?? []));
+  }
+  if (row.headLine !== null) {
+    out.push(...(byKey.get(`head:${row.headLine}`) ?? []));
+  }
+  return out;
 }
 
 function rowArchKinds(row: DiffRow, touches?: LineTouches): Set<HunkClass> {

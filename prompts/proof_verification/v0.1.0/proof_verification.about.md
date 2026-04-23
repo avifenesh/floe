@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Per-flow proof-verification verdict: is there real evidence for the PR's stated claims? Bench numbers in notes, `examples/*` files exercising the claimed behaviour, tests that assert the specific claim. Output is a single JSON object matching [`adr_core::intent::Proof`](../../../crates/adr-core/src/intent.rs).
+Per-flow proof-verification verdict: is there real evidence for the PR's stated claims? Bench numbers in notes, `examples/*` files exercising the claimed behaviour, tests that assert the specific claim. Output is a single JSON object matching [`floe_core::intent::Proof`](../../../crates/floe-core/src/intent.rs).
 
 This is the pass that determines the Proof section of the product. Per Avi (`feedback_proof_not_tests.md`), unit-test presence is explicitly *not* proof — only claim-asserting tests, examples, benchmarks, or corroborating observations count.
 

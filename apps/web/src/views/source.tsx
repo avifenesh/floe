@@ -12,7 +12,7 @@ import { clipContext, enrichWordLevel, lineDiff } from "@/lib/diff";
 import { highlight, langForPath, type HighlightedLines } from "@/lib/highlight";
 import { useTheme } from "@/lib/theme";
 
-import type { Artifact } from "@/types/artifact";
+import type { Artifact, InlineNote } from "@/types/artifact";
 import { DiffView, type LineTouches } from "./source/DiffView";
 import { FileSidebar } from "./source/FileSidebar";
 
@@ -22,6 +22,7 @@ interface Props {
   /** When set, restrict the sidebar to this file set. Used by the
    *  Flow workspace to scope Source to files the flow touches. */
   scope?: { files: Set<string> };
+  onInlineNotesChange?: (next: InlineNote[]) => void;
 }
 
 /**
@@ -30,7 +31,7 @@ interface Props {
  * workspace) — when scoped, the sidebar heading shifts from "N files" to
  * "N of M files".
  */
-export function SourceView({ artifact, jobId, scope }: Props) {
+export function SourceView({ artifact, jobId, scope, onInlineNotesChange }: Props) {
   const files = useMemo(() => changedFiles(artifact), [artifact]);
   const visible = files.filter((f) => f.status !== "unchanged");
   const base = visible.length > 0 ? visible : files;
@@ -51,21 +52,34 @@ export function SourceView({ artifact, jobId, scope }: Props) {
   const byFile = useMemo(() => flowsByFileFn(artifact), [artifact]);
 
   return (
-    <div className="grid grid-cols-[clamp(180px,22%,280px)_1fr] gap-4 items-start">
-      <FileSidebar
-        files={list}
-        selected={selected}
-        onSelect={setSelected}
-        hunkCounts={counts}
-        flowsByFile={byFile}
-      />
-      <div className="min-w-0">
+    // The workspace wraps us in max-w-6xl + px-6. On wide viewports
+    // the source diff gets cramped against that cap. We lean into the
+    // right padding with negative margins so the diff gets extra room,
+    // progressively larger at bigger breakpoints. Sidebar stays
+    // narrow + subtle so the gained space goes to the code.
+    //
+    // Flex here rather than grid — Tailwind's JIT can be fussy with
+    // arbitrary `grid-cols-[...]` that carry commas inside parens;
+    // flex with explicit widths is simpler and renders identically.
+    <div className="flex flex-col md:flex-row gap-3 items-start md:-mr-6 xl:-mr-16 2xl:-mr-32">
+      <div className="w-full md:w-[180px] md:shrink-0">
+        <FileSidebar
+          files={list}
+          selected={selected}
+          onSelect={setSelected}
+          hunkCounts={counts}
+          flowsByFile={byFile}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
         {selected ? (
           <FileDiff
             artifact={artifact}
             jobId={jobId}
             path={selected}
             status={files.find((f) => f.path === selected)?.status ?? "unchanged"}
+            inlineNotes={artifact.inline_notes ?? []}
+            onInlineNotesChange={onInlineNotesChange}
           />
         ) : (
           <div className="text-[12px] text-muted-foreground">No files.</div>
@@ -80,11 +94,15 @@ function FileDiff({
   jobId,
   path,
   status,
+  inlineNotes,
+  onInlineNotesChange,
 }: {
   artifact: Artifact;
   jobId: string;
   path: string;
   status: "added" | "removed" | "modified" | "unchanged";
+  inlineNotes: InlineNote[];
+  onInlineNotesChange?: (next: InlineNote[]) => void;
 }) {
   const [base, setBase] = useState<string | null>(null);
   const [head, setHead] = useState<string | null>(null);
@@ -164,6 +182,7 @@ function FileDiff({
     return acc;
   }, [artifact, path, base, head]);
 
+  const [search, setSearch] = useState("");
   if (err) {
     return (
       <div className="text-[12px] font-mono text-destructive border border-destructive/40 rounded px-3 py-2">
@@ -174,14 +193,52 @@ function FileDiff({
   if (base === null || head === null) {
     return <div className="text-[12px] text-muted-foreground">Loading…</div>;
   }
-  const entries = clipContext(enrichWordLevel(lineDiff(base, head)), 3);
+  const rawEntries = clipContext(enrichWordLevel(lineDiff(base, head)), 3);
+  // When the user is searching, drop skips and any row whose text
+  // doesn't contain the query. Case-insensitive substring match.
+  const q = search.trim().toLowerCase();
+  const entries = q
+    ? rawEntries.filter(
+        (e) => !("kind" in e && e.kind === "skip") && "text" in e && e.text.toLowerCase().includes(q),
+      )
+    : rawEntries;
+  const matchCount = q ? entries.length : 0;
   const lineTouches: LineTouches = touches;
   return (
-    <DiffView
-      entries={entries}
-      baseTokens={baseTokens}
-      headTokens={headTokens}
-      touches={lineTouches}
-    />
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="search in this diff…"
+          aria-label="Search in diff"
+          className="flex-1 max-w-sm text-[11px] font-mono rounded border border-border/60 bg-background px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        {q && (
+          <span className="text-[10px] font-mono text-muted-foreground">
+            {matchCount} match{matchCount === 1 ? "" : "es"}
+          </span>
+        )}
+        {q && (
+          <button
+            onClick={() => setSearch("")}
+            className="text-[10px] font-mono text-muted-foreground hover:text-foreground"
+          >
+            clear
+          </button>
+        )}
+      </div>
+      <DiffView
+        entries={entries}
+        baseTokens={baseTokens}
+        headTokens={headTokens}
+        touches={lineTouches}
+        jobId={jobId}
+        file={path}
+        inlineNotes={inlineNotes}
+        onInlineNotesChange={onInlineNotesChange}
+      />
+    </div>
   );
 }

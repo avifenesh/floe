@@ -21,6 +21,7 @@ import {
 } from "@/api";
 import type { LoadedJob } from "@/App";
 import { PipelineProgress } from "@/views/pipeline-progress";
+import { CompareView } from "@/views/compare-view";
 
 const PIPELINE_BACKEND =
   typeof window !== "undefined" && window.location.port === "5173"
@@ -34,9 +35,12 @@ interface Props {
 }
 
 export function Dashboard({ me, onSignOut, onJob }: Props) {
-  const [base, setBase] = useState(localStorage.getItem("adr.base") ?? "");
-  const [head, setHead] = useState(localStorage.getItem("adr.head") ?? "");
+  const [base, setBase] = useState(localStorage.getItem("floe.base") ?? "");
+  const [head, setHead] = useState(localStorage.getItem("floe.head") ?? "");
   const [prUrl, setPrUrl] = useState("");
+  const [intent, setIntent] = useState<unknown>(undefined);
+  const [intentLabel, setIntentLabel] = useState<string | null>(null);
+  const [intentErr, setIntentErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [history, setHistory] = useState<AnalysisRow[]>([]);
@@ -88,10 +92,10 @@ export function Dashboard({ me, onSignOut, onJob }: Props) {
   async function runLocal() {
     setBusy(true);
     setErr(null);
-    localStorage.setItem("adr.base", base);
-    localStorage.setItem("adr.head", head);
+    localStorage.setItem("floe.base", base);
+    localStorage.setItem("floe.head", head);
     try {
-      const id = await analyze(base, head);
+      const id = await analyze(base, head, intent);
       setPendingJobId(id);
       void refreshHistory();
       const done = await pollUntilDone(id);
@@ -145,21 +149,28 @@ export function Dashboard({ me, onSignOut, onJob }: Props) {
   }
 
   const hasPending = history.some((r) => r.status === "pending");
+  const [analyseOpen, setAnalyseOpen] = useState(false);
+  const readyRows = history.filter((r) => r.status === "ready");
+  const pendingRows = history.filter((r) => r.status === "pending");
+  const erroredRows = history.filter((r) => r.status === "errored");
+  const resume = readyRows[0] ?? null;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
-      <UserBar me={me} onSignOut={onSignOut} />
+    <div className="max-w-5xl mx-auto space-y-5">
+      <TopBar
+        me={me}
+        onSignOut={onSignOut}
+        analyseOpen={analyseOpen}
+        onToggleAnalyse={() => setAnalyseOpen((x) => !x)}
+        canToggleAnalyse={!pendingJobId}
+      />
 
-      {/* Insert-new card is TOP-LEVEL now — it's the primary CTA for
-          a returning reviewer and shouldn't live inside a side column.
-          History sidebar moves below it so the reviewer can glance at
-          recent runs without the form competing for attention. */}
       {pendingJobId ? (
         <PipelineProgress
           jobId={pendingJobId}
           backendBase={PIPELINE_BACKEND}
         />
-      ) : (
+      ) : analyseOpen ? (
         <AnalyseCard
           base={base}
           head={head}
@@ -170,13 +181,45 @@ export function Dashboard({ me, onSignOut, onJob }: Props) {
           onPrUrl={setPrUrl}
           onAnalyse={() => void runLocal()}
           onAnalyseUrl={() => void runUrl()}
+          intentLabel={intentLabel}
+          intentErr={intentErr}
+          onIntentFile={async (f) => {
+            setIntentErr(null);
+            if (!f) {
+              setIntent(undefined);
+              setIntentLabel(null);
+              return;
+            }
+            try {
+              const text = await f.text();
+              const parsed = JSON.parse(text);
+              setIntent(parsed);
+              setIntentLabel(f.name);
+            } catch (e) {
+              setIntentErr(`invalid intent.json — ${String(e)}`);
+              setIntent(undefined);
+              setIntentLabel(null);
+            }
+          }}
         />
-      )}
+      ) : null}
+
       {err && <ErrorCard raw={err} onDismiss={() => setErr(null)} />}
-      <Sidebar
-        history={history}
-        hasPending={hasPending}
+
+      <StatsStrip
+        ready={readyRows.length}
+        pending={pendingRows.length}
+        errored={erroredRows.length}
+        polling={hasPending}
         onRefresh={() => void refreshHistory()}
+      />
+
+      {resume && !analyseOpen && !pendingJobId && (
+        <ResumeChip row={resume} onOpen={() => void openHistory(resume)} />
+      )}
+
+      <Feed
+        history={history}
         onOpen={(r) => void openHistory(r)}
         onDismiss={(r) => void dismiss(r)}
         onRetry={(r) => void retry(r)}
@@ -185,105 +228,207 @@ export function Dashboard({ me, onSignOut, onJob }: Props) {
   );
 }
 
-function UserBar({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
+/**
+ * Compact top bar for the dashboard. Replaces the "Welcome back"
+ * hero — returning reviewers don't need a greeting; they need the
+ * primary action (+ Analyse) and a way out (sign out) without the
+ * page spending vertical space on it.
+ */
+function TopBar({
+  me,
+  onSignOut,
+  analyseOpen,
+  onToggleAnalyse,
+  canToggleAnalyse,
+}: {
+  me: Me;
+  onSignOut: () => void;
+  analyseOpen: boolean;
+  onToggleAnalyse: () => void;
+  canToggleAnalyse: boolean;
+}) {
   return (
-    <header className="relative flex items-start justify-between gap-3">
-      <div>
-        <h1 className="text-[18px] font-semibold text-foreground leading-tight">
-          Welcome back{me.display_name ? `, ${firstName(me.display_name)}` : ""}.
-        </h1>
-        <p className="text-[12px] text-muted-foreground">
-          Pick up a recent PR from the sidebar or start a new analysis.
-        </p>
-      </div>
+    <header className="flex items-center justify-between gap-3">
       <button
-        onClick={onSignOut}
-        title="Sign out"
-        className="group flex flex-col items-center gap-1 text-center"
+        onClick={onToggleAnalyse}
+        disabled={!canToggleAnalyse}
+        className="inline-flex items-center gap-2 text-[13px] font-medium rounded-md border border-foreground/80 bg-foreground text-background px-3.5 py-1.5 hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
+        <span aria-hidden className="text-[14px] leading-none">
+          {analyseOpen ? "×" : "+"}
+        </span>
+        <span>{analyseOpen ? "Close" : "Analyse PR"}</span>
+      </button>
+      <div className="flex items-center gap-2">
         {me.avatar_url && (
           <img
             src={me.avatar_url}
             alt=""
-            className="w-9 h-9 rounded-full border border-border/60 group-hover:opacity-80 transition-opacity"
+            className="w-7 h-7 rounded-full border border-border/60"
           />
         )}
         <span className="text-[12px] font-mono text-foreground">
           {me.display_name ?? me.provider_user_id}
         </span>
-        <span className="text-[10px] font-mono text-muted-foreground/70 group-hover:text-muted-foreground transition-colors">
+        <button
+          onClick={onSignOut}
+          className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+          title="Sign out"
+        >
           sign out
-        </span>
-      </button>
+        </button>
+      </div>
     </header>
   );
 }
 
-function firstName(full: string): string {
-  const trimmed = full.trim();
-  return trimmed.split(/\s+/)[0] ?? trimmed;
+function StatsStrip({
+  ready,
+  pending,
+  errored,
+  polling,
+  onRefresh,
+}: {
+  ready: number;
+  pending: number;
+  errored: number;
+  polling: boolean;
+  onRefresh: () => void;
+}) {
+  const Stat = ({ n, label }: { n: number; label: string }) => (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span className="text-[14px] font-semibold tabular-nums text-foreground">
+        {n}
+      </span>
+      <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+    </span>
+  );
+  return (
+    <div className="flex items-center justify-between gap-4 border-y border-border/50 py-2">
+      <div className="flex items-baseline gap-5">
+        <Stat n={ready} label="ready" />
+        <span aria-hidden className="text-muted-foreground/40">·</span>
+        <Stat n={pending} label="pending" />
+        <span aria-hidden className="text-muted-foreground/40">·</span>
+        <Stat n={errored} label="errored" />
+      </div>
+      <div className="flex items-center gap-3">
+        {polling && (
+          <span className="text-[10px] font-mono text-muted-foreground">
+            polling…
+          </span>
+        )}
+        <button
+          onClick={onRefresh}
+          className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+        >
+          refresh
+        </button>
+      </div>
+    </div>
+  );
 }
 
-function Sidebar({
+function ResumeChip({
+  row,
+  onOpen,
+}: {
+  row: AnalysisRow;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="w-full flex items-center gap-3 rounded-md border border-border/60 bg-muted/20 hover:bg-muted/40 px-3.5 py-2.5 transition-colors text-left"
+    >
+      <span aria-hidden className="text-[14px] leading-none">↻</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2">
+          <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wide">
+            Resume
+          </span>
+          <span className="text-[12px] font-mono text-foreground truncate">
+            {prettyRowLabel(row)}
+          </span>
+        </div>
+        <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+          last touched {formatRelativeTime(row.updated_at)}
+        </p>
+      </div>
+      <span className="text-[12px] text-muted-foreground" aria-hidden>
+        →
+      </span>
+    </button>
+  );
+}
+
+function Feed({
   history,
-  hasPending,
-  onRefresh,
   onOpen,
   onDismiss,
   onRetry,
 }: {
   history: AnalysisRow[];
-  hasPending: boolean;
-  onRefresh: () => void;
   onOpen: (row: AnalysisRow) => void;
   onDismiss: (row: AnalysisRow) => void;
   onRetry: (row: AnalysisRow) => void;
 }) {
-  // Errored rows stay out of the default list — they're noise for a
-  // reviewer scanning for work, and they accumulate fast when a
-  // GitHub URL is mistyped. The reviewer can reveal them via the
-  // "N errored" toggle; ready + pending always surface.
   const [showErrored, setShowErrored] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [pair, setPair] = useState<[AnalysisRow, AnalysisRow] | null>(null);
   const errored = history.filter((r) => r.status === "errored");
   const visible = showErrored
     ? history
     : history.filter((r) => r.status !== "errored");
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  };
+  const openCompare = () => {
+    if (selected.length !== 2) return;
+    const a = history.find((r) => r.id === selected[0]);
+    const b = history.find((r) => r.id === selected[1]);
+    if (a && b) setPair([a, b]);
+  };
 
   return (
-    <aside className="space-y-3">
+    <section className="space-y-2">
       <div className="flex items-baseline justify-between">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Recent PRs
         </h2>
-        <div className="flex items-baseline gap-2">
-          {hasPending && (
-            <span
-              className="text-[10px] font-mono text-muted-foreground"
-              title="Auto-refreshes every 5s while any run is pending"
-            >
-              polling…
-            </span>
-          )}
+        {selected.length === 2 ? (
           <button
-            onClick={onRefresh}
-            className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+            onClick={openCompare}
+            className="text-[10px] font-mono rounded border border-foreground/60 bg-foreground/90 text-background px-2 py-0.5 hover:bg-foreground"
           >
-            refresh
+            ⇄ compare 2
           </button>
-        </div>
+        ) : selected.length > 0 ? (
+          <span className="text-[10px] font-mono text-muted-foreground">
+            {selected.length}/2 picked for compare
+          </span>
+        ) : null}
       </div>
       {visible.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">
           {showErrored || errored.length === 0
             ? "Nothing yet. Start an analysis — results persist across restarts."
-            : "No ready runs yet. Start an analysis below."}
+            : "No ready runs yet."}
         </p>
       ) : (
-        <ol className="space-y-1.5">
+        <ol className="space-y-2">
           {visible.map((r) => (
             <li key={r.id}>
-              <HistoryRow
+              <FeedCard
                 row={r}
+                selected={selected.includes(r.id)}
+                onToggleSelect={() => toggleSelect(r.id)}
                 onOpen={() => onOpen(r)}
                 onDismiss={() => onDismiss(r)}
                 onRetry={() => onRetry(r)}
@@ -302,17 +447,36 @@ function Sidebar({
             : `show ${errored.length} errored`}
         </button>
       )}
-    </aside>
+      {pair && (
+        <CompareView
+          a={pair[0]}
+          b={pair[1]}
+          onClose={() => {
+            setPair(null);
+            setSelected([]);
+          }}
+        />
+      )}
+    </section>
   );
 }
 
-function HistoryRow({
+/**
+ * One feed card. Status dot on the left, repo label + sha + time on
+ * the main line, actions on hover. Clicking the card body opens the
+ * PR (when ready). Compare-select checkbox surfaces on hover too.
+ */
+function FeedCard({
   row,
+  selected,
+  onToggleSelect,
   onOpen,
   onDismiss,
   onRetry,
 }: {
   row: AnalysisRow;
+  selected: boolean;
+  onToggleSelect: () => void;
   onOpen: () => void;
   onDismiss: () => void;
   onRetry: () => void;
@@ -320,54 +484,85 @@ function HistoryRow({
   const canOpen = row.status === "ready";
   const canRetry = row.status === "errored";
   return (
-    <div className="group rounded border border-border/60 bg-muted/10 hover:bg-muted/30 transition-colors overflow-hidden">
-      <button
-        onClick={onOpen}
-        disabled={!canOpen}
-        className="w-full text-left px-3 pt-2 pb-1.5 disabled:cursor-not-allowed"
-      >
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[12px] font-mono text-foreground truncate">
-            {prettyRowLabel(row)}
-          </span>
-          <StatusChip status={row.status} />
-        </div>
-        <div className="flex items-baseline gap-2 mt-0.5 text-[10px] font-mono text-muted-foreground">
-          <span title={row.head_sha}>{row.head_sha.slice(0, 8)}</span>
-          <span className="ml-auto">{formatRelativeTime(row.updated_at)}</span>
-        </div>
-        {row.message && row.status === "errored" && (
-          <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 text-left">
-            {row.message}
-          </p>
-        )}
-      </button>
-      <div className="flex items-center gap-1 px-2 pb-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        {canOpen && (
-          <button
-            onClick={onOpen}
-            className="text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50"
-          >
-            open
-          </button>
-        )}
-        {canRetry && (
-          <button
-            onClick={onRetry}
-            className="text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50"
-          >
-            retry
-          </button>
-        )}
+    <article
+      className={
+        "group rounded-lg border transition-colors " +
+        (selected
+          ? "border-foreground/60 bg-muted/40"
+          : "border-border/60 bg-background hover:border-border hover:bg-muted/20")
+      }
+    >
+      <div className="flex items-center gap-3 px-3.5 py-3">
+        <StatusDot status={row.status} />
         <button
-          onClick={onDismiss}
-          className="ml-auto text-[10px] font-mono text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-muted/50"
-          title="Archive this analysis — removes it from the list, doesn't delete the cached artifact."
+          onClick={onOpen}
+          disabled={!canOpen}
+          className="flex-1 min-w-0 text-left disabled:cursor-not-allowed"
         >
-          archive
+          <div className="flex items-baseline gap-2">
+            <span className="text-[13px] font-mono font-medium text-foreground truncate">
+              {prettyRowLabel(row)}
+            </span>
+            <StatusChip status={row.status} />
+          </div>
+          <div className="flex items-baseline gap-3 mt-0.5 text-[10px] font-mono text-muted-foreground">
+            <span title={row.head_sha}>{row.head_sha.slice(0, 8)}</span>
+            <span>{formatRelativeTime(row.updated_at)}</span>
+            {row.status === "errored" && row.message && (
+              <span className="truncate text-muted-foreground/80">
+                · {row.message}
+              </span>
+            )}
+          </div>
         </button>
+        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          {canOpen && (
+            <label
+              className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50 cursor-pointer"
+              title="Pick two ready rows to compare"
+            >
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={onToggleSelect}
+                aria-label={`pick ${prettyRowLabel(row)} for compare`}
+              />
+              <span>compare</span>
+            </label>
+          )}
+          {canRetry && (
+            <button
+              onClick={onRetry}
+              className="text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50"
+            >
+              retry
+            </button>
+          )}
+          <button
+            onClick={onDismiss}
+            className="text-[10px] font-mono text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-muted/50"
+            title="Archive — removes from the list; cached artifact stays."
+          >
+            archive
+          </button>
+        </div>
       </div>
-    </div>
+    </article>
+  );
+}
+
+function StatusDot({ status }: { status: AnalysisRow["status"] }) {
+  const cls =
+    status === "ready"
+      ? "bg-emerald-500/70"
+      : status === "pending"
+        ? "bg-amber-400/80 animate-pulse"
+        : "bg-rose-500/70";
+  return (
+    <span
+      aria-hidden
+      className={"inline-block w-2 h-2 rounded-full shrink-0 " + cls}
+    />
   );
 }
 
@@ -413,6 +608,9 @@ function AnalyseCard({
   onPrUrl,
   onAnalyse,
   onAnalyseUrl,
+  intentLabel,
+  intentErr,
+  onIntentFile,
 }: {
   base: string;
   head: string;
@@ -423,6 +621,9 @@ function AnalyseCard({
   onPrUrl: (v: string) => void;
   onAnalyse: () => void;
   onAnalyseUrl: () => void;
+  intentLabel: string | null;
+  intentErr: string | null;
+  onIntentFile: (f: File | null) => void;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const urlValid = /^https:\/\/(www\.)?github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(
@@ -430,24 +631,18 @@ function AnalyseCard({
   );
 
   return (
-    <section className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
-      <header className="px-5 pt-4 pb-3 border-b border-border/60 flex items-baseline justify-between">
-        <h2 className="text-[14px] font-semibold text-foreground">
+    <section className="rounded-lg border border-border/60 bg-muted/10 overflow-hidden max-w-3xl">
+      <header className="px-4 pt-2.5 pb-2 border-b border-border/60 flex items-baseline justify-between">
+        <h2 className="text-[12px] font-semibold text-foreground">
           Analyse a PR
         </h2>
         <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
-          intent + proof + cost
+          intent · proof · cost
         </p>
       </header>
 
-      <div className="p-5 space-y-4">
-        <div className="space-y-1.5">
-          <label
-            htmlFor="pr-url"
-            className="text-[11px] font-medium text-foreground"
-          >
-            GitHub PR URL
-          </label>
+      <div className="p-3 space-y-3">
+        <div className="space-y-1">
           <div className="flex gap-2">
             <input
               id="pr-url"
@@ -457,21 +652,26 @@ function AnalyseCard({
                 if (e.key === "Enter" && urlValid && !busy) onAnalyseUrl();
               }}
               placeholder="https://github.com/owner/repo/pull/123"
-              className="flex-1 text-[13px] font-mono border rounded-md px-3 py-2 bg-background placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
+              className="flex-1 text-[12px] font-mono border rounded px-2 py-1.5 bg-background placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <button
               onClick={onAnalyseUrl}
               disabled={busy || !urlValid}
-              className="text-[13px] font-medium rounded-md border border-foreground/80 bg-foreground text-background px-4 py-2 hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="text-[12px] font-medium rounded border border-foreground/80 bg-foreground text-background px-3 py-1.5 hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {busy ? "Analysing…" : "Analyse"}
             </button>
           </div>
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            Paste any public GitHub PR URL — the server pulls the PR
-            body as intent and clones base + head at the resolved SHAs.
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            Any public GitHub PR URL — body becomes intent; base + head clone at resolved SHAs.
           </p>
         </div>
+
+        <IntentDropZone
+          label={intentLabel}
+          error={intentErr}
+          onFile={onIntentFile}
+        />
 
         <details
           open={advancedOpen}
@@ -615,7 +815,7 @@ function interpretError(raw: string): { title: string; hint?: string } {
   if (s.includes("networkerror") || s.includes("failed to fetch")) {
     return {
       title: "Can't reach the backend",
-      hint: "The adr-server isn't responding on :8787. Check it's running.",
+      hint: "The floe-server isn't responding on :8787. Check it's running.",
     };
   }
   return { title: "Something went wrong" };
@@ -647,4 +847,70 @@ function formatRelativeTime(iso: string): string {
   if (hours < 48) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   return `${days}d ago`;
+}
+
+function IntentDropZone({
+  label,
+  error,
+  onFile,
+}: {
+  label: string | null;
+  error: string | null;
+  onFile: (f: File | null) => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setHover(true);
+      }}
+      onDragLeave={() => setHover(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setHover(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f) onFile(f);
+      }}
+      className={
+        "rounded-md border border-dashed px-4 py-3 transition-colors " +
+        (hover ? "border-foreground/60 bg-muted/30" : "border-border/60 bg-background/40")
+      }
+    >
+      <div className="flex items-baseline gap-3">
+        <label className="text-[12px] font-medium text-foreground cursor-pointer">
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+          />
+          <span className="underline underline-offset-2 decoration-dotted">
+            Choose intent.json
+          </span>
+        </label>
+        <span className="text-[11px] text-muted-foreground">or drop a file here</span>
+        {label && (
+          <span className="ml-auto text-[11px] font-mono text-foreground">
+            · {label}
+            <button
+              type="button"
+              onClick={() => onFile(null)}
+              className="ml-2 text-muted-foreground hover:text-destructive"
+              aria-label="clear intent file"
+            >
+              ×
+            </button>
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+        Optional — structured claims or raw text. Falls back to the PR body
+        when analysing from a GitHub URL.
+      </p>
+      {error && (
+        <p className="text-[11px] text-destructive font-mono mt-1">{error}</p>
+      )}
+    </div>
+  );
 }

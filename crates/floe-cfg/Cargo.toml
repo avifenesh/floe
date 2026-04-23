@@ -1,0 +1,18 @@
+[package]
+name = "floe-cfg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Per-function control-flow graphs over tree-sitter-typescript ASTs."
+
+[dependencies]
+floe-core = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+walkdir = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+floe-parse = { workspace = true }
+insta = { workspace = true }

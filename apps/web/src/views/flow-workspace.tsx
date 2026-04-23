@@ -13,12 +13,18 @@ import { SlideSwitch } from "@/components/SlideSwitch";
 import { LoadingDots } from "@/components/LoadingDots";
 import { FLOW_SUB_TABS } from "./types";
 import { SourceView } from "./source";
+import { InlineNotes } from "@/components/InlineNotes";
 
 interface Props {
   artifact: Artifact;
   jobId: string;
   flow: Flow;
   sub: FlowSubTab;
+  onInlineNotesChange?: (next: import("@/types/artifact").InlineNote[]) => void;
+  /** Called when a reviewer clicks "→ source" on a driver row. Lets
+   *  the parent flip the flow sub-tab to `source` and optionally
+   *  scroll to a specific entity. */
+  onJumpToSource?: (entity?: string) => void;
 }
 
 /**
@@ -29,24 +35,53 @@ interface Props {
  * ordered by impact), Evidence (claim list), Source (flow-scoped diff),
  * Cost (axes + drivers + proof peer), Intent & Proof (verdict cards).
  */
-export function FlowWorkspace({ artifact, jobId, flow, sub }: Props) {
+export function FlowWorkspace({
+  artifact,
+  jobId,
+  flow,
+  sub,
+  onInlineNotesChange,
+  onJumpToSource,
+}: Props) {
   const order = FLOW_SUB_TABS.findIndex((t) => t.key === sub);
   const body = (() => {
     switch (sub) {
       case "overview":
         return <FlowOverview artifact={artifact} flow={flow} />;
       case "flow":
-        return <FlowGraph artifact={artifact} flow={flow} jobId={jobId} />;
+        return (
+          <FlowGraph
+            artifact={artifact}
+            flow={flow}
+            jobId={jobId}
+            onInlineNotesChange={onInlineNotesChange}
+          />
+        );
       case "morph":
         return <FlowMorph artifact={artifact} flow={flow} />;
       case "delta":
         return <FlowDelta artifact={artifact} flow={flow} />;
       case "source":
-        return <FlowSource artifact={artifact} jobId={jobId} flow={flow} />;
+        return (
+          <FlowSource
+            artifact={artifact}
+            jobId={jobId}
+            flow={flow}
+            onInlineNotesChange={onInlineNotesChange}
+          />
+        );
       case "cost":
-        return <FlowCost artifact={artifact} flow={flow} />;
+        return <FlowCost artifact={artifact} flow={flow} onJumpToSource={onJumpToSource} />;
       case "proof":
-        return <FlowProof artifact={artifact} flow={flow} />;
+        return (
+          <FlowProof
+            artifact={artifact}
+            flow={flow}
+            jobId={jobId}
+            onInlineNotesChange={onInlineNotesChange}
+            onJumpToSource={onJumpToSource}
+          />
+        );
     }
   })();
   return (
@@ -99,10 +134,12 @@ function FlowSource({
   artifact,
   jobId,
   flow,
+  onInlineNotesChange,
 }: {
   artifact: Artifact;
   jobId: string;
   flow: Flow;
+  onInlineNotesChange?: (next: import("@/types/artifact").InlineNote[]) => void;
 }) {
   // Collect the set of files this flow's hunks touch on either side of
   // the diff. The sidebar inside SourceView filters its list to just
@@ -125,7 +162,14 @@ function FlowSource({
       </div>
     );
   }
-  return <SourceView artifact={artifact} jobId={jobId} scope={scope} />;
+  return (
+    <SourceView
+      artifact={artifact}
+      jobId={jobId}
+      scope={scope}
+      onInlineNotesChange={onInlineNotesChange}
+    />
+  );
 }
 
 // FlowEvidence was merged into FlowProof per user request — one
@@ -133,8 +177,15 @@ function FlowSource({
 // per-claim breakdown) and "cheap structural context" (Evidence
 // section below). ClaimRow stays for reuse inside FlowProof.
 
-function ClaimRow({ claim }: { claim: import("@/types/artifact").Claim }) {
+function ClaimRow({
+  claim,
+  onJumpToSource,
+}: {
+  claim: import("@/types/artifact").Claim;
+  onJumpToSource?: (ref: import("@/types/artifact").SourceRef) => void;
+}) {
   const kindLabel = kindToLabel(claim.kind);
+  const refs = claim.source_refs ?? [];
   return (
     <div className="rounded border border-border/60 bg-muted/20 px-3 py-2.5 space-y-1.5">
       <div className="flex items-baseline gap-2">
@@ -142,6 +193,23 @@ function ClaimRow({ claim }: { claim: import("@/types/artifact").Claim }) {
         <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
           {kindLabel}
         </span>
+        {refs.length > 0 && onJumpToSource && (
+          <button
+            type="button"
+            onClick={() => onJumpToSource(refs[0])}
+            title={
+              refs.length === 1
+                ? `Jump to ${refs[0].file}:${refs[0].line}`
+                : `${refs.length} source ranges — jump to first`
+            }
+            className="ml-auto text-[10px] font-mono text-muted-foreground hover:text-foreground underline underline-offset-2 decoration-dotted hover:decoration-solid"
+          >
+            → source
+            {refs.length > 1 && (
+              <span className="ml-1 opacity-70">·{refs.length}</span>
+            )}
+          </button>
+        )}
       </div>
       <p className="text-[12px] text-foreground leading-relaxed">{claim.text}</p>
       {claim.entities && claim.entities.length > 0 && (
@@ -206,15 +274,19 @@ function kindToLabel(k: import("@/types/artifact").ClaimKind): string {
       return "proof";
     case "observation":
       return "note";
+    case "coverage-drop":
+      return "coverage";
   }
 }
 
 function FlowCost({
   artifact,
   flow,
+  onJumpToSource,
 }: {
   artifact: Artifact;
   flow: Flow;
+  onJumpToSource?: (entity?: string) => void;
 }) {
   const status = artifact.cost_status ?? "not-run";
   const cost = flow.cost;
@@ -357,7 +429,12 @@ function FlowCost({
         <ol className="space-y-2">
           {drivers.map((d, i) => (
             <li key={i}>
-              <CostDriverRow driver={d} baseline={baseline} />
+              <CostDriverRow
+                driver={d}
+                baseline={baseline}
+                onJumpToSource={onJumpToSource}
+                flow={flow}
+              />
             </li>
           ))}
         </ol>
@@ -385,7 +462,7 @@ function TokensRow({ delta, pct }: { delta: number; pct: number | null }) {
     pct === null ? "no baseline" : `${sign}${Math.abs(pct).toFixed(1)}%`;
   return (
     <div
-      className="rounded border border-border/60 bg-muted/10 px-3 py-2 space-y-1"
+      className="rounded-md border border-border/60 bg-muted/60 px-3 py-2 space-y-1 shadow-sm"
       title="Token-usage delta on the flow's entities, as % of the base probe run's total token usage. Direct proxy for per-user API billing impact."
     >
       <div className="flex items-baseline justify-between">
@@ -437,7 +514,7 @@ function AxisRow({
         return (
           <div
             key={it.key}
-            className="rounded border border-border/60 bg-muted/10 px-3 py-2 space-y-1"
+            className="rounded-md border border-border/60 bg-muted/60 px-3 py-2.5 space-y-1.5 shadow-sm"
             title={
               denom && denom > 0
                 ? `${it.key}: ${formatSigned(it.value)} of ${denom} baseline cost (${pctLabel})`
@@ -445,23 +522,24 @@ function AxisRow({
             }
           >
             <div className="flex items-baseline justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
                 {it.key}
               </span>
-              <span className="text-[12px] font-mono tabular-nums text-foreground">
+              <span className="text-[13px] font-mono font-semibold tabular-nums text-foreground">
                 {formatSigned(it.value)}
-                <span className="ml-2 text-muted-foreground text-[10px]">
+                <span className="ml-2 font-normal text-muted-foreground text-[10px]">
                   {pctLabel}
                 </span>
               </span>
             </div>
-            <div className="h-[2px] rounded-full bg-muted overflow-hidden relative">
-              {/* Centered zero axis: negative fills left, positive fills right.
-                  Width is % of the per-repo baseline on this axis, capped 100.
-                  Bars read as "how much did nav cost move relative to the
-                  repo's existing nav cost" — not relative-rank. */}
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden relative mt-0.5">
               <div
-                className="absolute top-0 h-full bg-muted-foreground/40 rounded-full"
+                aria-hidden
+                className="absolute top-0 bottom-0 w-px bg-border/60"
+                style={{ left: "50%" }}
+              />
+              <div
+                className="absolute top-0 h-full bg-foreground/55 rounded-full"
                 style={{
                   left: it.value < 0 ? `${50 - width / 2}%` : "50%",
                   width: `${width / 2}%`,
@@ -478,10 +556,23 @@ function AxisRow({
 function CostDriverRow({
   driver,
   baseline,
+  onJumpToSource,
+  flow,
 }: {
   driver: import("@/types/artifact").CostDriver;
   baseline: import("@/types/artifact").ArtifactBaseline | null;
+  onJumpToSource?: (entity?: string) => void;
+  flow?: Flow;
 }) {
+  // Best-effort: pick an entity from the flow's roster that the
+  // driver's `detail` mentions, and hand it to the Source view so the
+  // reviewer lands near the movement. Falls back to a plain
+  // sub-tab flip when no entity match is found.
+  const jumpTarget = (() => {
+    if (!flow) return undefined;
+    const haystack = (driver.detail ?? "").toLowerCase();
+    return (flow.entities ?? []).find((e) => haystack.includes(e.toLowerCase()));
+  })();
   const denom = driverDenominator(driver, baseline);
   const width = pctOfBaseline(driver.value, denom);
   const pctLabel =
@@ -492,9 +583,23 @@ function CostDriverRow({
         ).toFixed(1)}%`
       : null;
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5">
+    <div className="rounded-md border border-border/60 bg-muted/60 px-3 py-2 space-y-1.5 shadow-sm">
       <div className="flex items-baseline gap-3">
         <span className="text-[12px] text-foreground">{driver.label}</span>
+        {onJumpToSource && (
+          <button
+            type="button"
+            onClick={() => onJumpToSource(jumpTarget)}
+            className="text-[10px] font-mono rounded border border-border/60 bg-background px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+            title={
+              jumpTarget
+                ? `Jump to source for ${jumpTarget}`
+                : "Jump to the flow's source view"
+            }
+          >
+            → source
+          </button>
+        )}
         <span className="ml-auto text-[11px] font-mono tabular-nums text-foreground">
           {formatSigned(driver.value)}
           {pctLabel && (
@@ -521,7 +626,7 @@ function CostDriverRow({
 }
 
 /**
- * Driver labels come from `adr-cost` — "API-surface navigation",
+ * Driver labels come from `floe-cost` — "API-surface navigation",
  * "external-boundary reach", "type call-site tracing" — each corresponds
  * to one probe and therefore one axis. Map label → baseline denominator
  * so the per-driver bar scales the same way the aggregate axis does.
@@ -900,21 +1005,56 @@ function ReplacementRow({ from, to, file }: { from: string; to: string; file: st
  *  at a glance — per-entity summaries read immediately. CFG data
  *  still lives in the artifact; NodeDetailPanel surfaces it on
  *  click for a reviewer who wants that depth. */
-function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; jobId: string }) {
+function FlowGraph({
+  artifact,
+  flow,
+  jobId,
+  onInlineNotesChange,
+}: {
+  artifact: Artifact;
+  flow: Flow;
+  jobId: string;
+  onInlineNotesChange?: (next: import("@/types/artifact").InlineNote[]) => void;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
   // Reviewer-managed reorder of entity cards. Starts at the flow's
   // natural entity order; drag-and-drop shuffles in-place. Resets
   // when the flow id changes so opening a different flow doesn't
   // inherit a stale layout.
-  const [order, setOrder] = useState<string[]>(flow.entities ?? []);
+  // Combined entity set: hunk-touched + LLM-supplied extras + any
+  // propagation-edge endpoint. The flow graph should show the
+  // whole component that carries this story end-to-end, not just
+  // the delta — otherwise the reviewer can't see the surrounding
+  // context that makes the change readable.
+  //
+  // Filter out File-kind entries: the analyzer sometimes emits a
+  // File node as an "entity" (the module-scope container), but File
+  // nodes aren't reviewer-facing call-graph participants — they'd
+  // render as a standalone file path in the SVG which looks broken.
+  const isRealEntity = (name: string): boolean => {
+    const n = findNodeByName(artifact.head.nodes, name) ?? findNodeByName(artifact.base.nodes, name);
+    if (!n) return true; // unresolved names (from propagation_edges) stay — they represent real entities we just don't have graph nodes for.
+    const kind = (n.kind as { type?: string }).type;
+    return kind !== "file";
+  };
+  const fullEntities: string[] = [];
+  const pushEntity = (n: string) => {
+    if (n && !fullEntities.includes(n) && isRealEntity(n)) fullEntities.push(n);
+  };
+  (flow.entities ?? []).forEach(pushEntity);
+  (flow.extra_entities ?? []).forEach(pushEntity);
+  for (const [from, to] of flow.propagation_edges ?? []) {
+    pushEntity(from);
+    pushEntity(to);
+  }
+  const [order, setOrder] = useState<string[]>(fullEntities);
   useEffect(() => {
-    setOrder(flow.entities ?? []);
-  }, [flow.id, flow.entities]);
+    setOrder(fullEntities);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow.id]);
   const [dragName, setDragName] = useState<string | null>(null);
-  const entities: string[] = order.filter((n) => (flow.entities ?? []).includes(n));
-  // Drop any reordered names that aren't in the flow any more (
-  // e.g. after a re-run); append any new names at the end.
-  for (const n of flow.entities ?? []) {
+  const entities: string[] = order.filter((n) => fullEntities.includes(n));
+  for (const n of fullEntities) {
     if (!entities.includes(n)) entities.push(n);
   }
   const items = entities.map((name) => {
@@ -964,39 +1104,46 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
     });
     return { name, base, head, status, file, hunks };
   });
-  // Inter-entity call edges from the flow's call hunks only — so
-  // we draw arrows that actually belong to this story.
+  // Call edges between flow entities on each side. We collect the
+  // full graph on base and head independently so the side-by-side
+  // panels can each render their own snapshot — not just the
+  // hunk-touched delta. `verb` is determined by which panel the
+  // edge belongs to (base = may-be-removed, head = may-be-added).
   const entitySet = new Set(entities);
-  const idToName = new Map<number, string>();
-  for (const it of items) {
-    if (it.head) idToName.set(it.head.id, it.name);
-    if (it.base) idToName.set(it.base.id, it.name);
-  }
+  const nameFor = (graph: Artifact["base"], id: number): string | null => {
+    const n = graph.nodes.find((x) => x.id === id);
+    if (!n) return null;
+    const kind = n.kind as { type?: string; name?: string };
+    return (kind.name as string | undefined) ?? null;
+  };
+  const collectPairs = (graph: Artifact["base"]): Array<{ from: string; to: string }> => {
+    const out: Array<{ from: string; to: string }> = [];
+    const seen = new Set<string>();
+    for (const e of graph.edges ?? []) {
+      if (e.kind !== "calls") continue;
+      const f = nameFor(graph, e.from);
+      const t = nameFor(graph, e.to);
+      if (!f || !t || f === t) continue;
+      if (!entitySet.has(f) || !entitySet.has(t)) continue;
+      const k = `${f}|${t}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ from: f, to: t });
+    }
+    return out;
+  };
+  const basePairs = collectPairs(artifact.base);
+  const headPairs = collectPairs(artifact.head);
+  // For legacy EntityGraph (2nd-tier consumers of callPairs below),
+  // keep the added/removed diff list so nothing else breaks.
+  const baseKeySet = new Set(basePairs.map((p) => `${p.from}|${p.to}`));
+  const headKeySet = new Set(headPairs.map((p) => `${p.from}|${p.to}`));
   const callPairs: { from: string; to: string; verb: "added" | "removed" }[] = [];
-  const seenPair = new Set<string>();
-  for (const h of artifact.hunks ?? []) {
-    if (!flow.hunk_ids.includes(h.id)) continue;
-    const k = h.kind as {
-      kind: string;
-      added_edges?: number[];
-      removed_edges?: number[];
-    };
-    if (k.kind !== "call") continue;
-    const pushFor = (ids: number[], edges: typeof artifact.head.edges, verb: "added" | "removed") => {
-      for (const eid of ids) {
-        const e = edges.find((x) => x.id === eid);
-        if (!e) continue;
-        const f = idToName.get(e.from);
-        const t = idToName.get(e.to);
-        if (!f || !t || f === t || !entitySet.has(f) || !entitySet.has(t)) continue;
-        const key = `${verb}|${f}|${t}`;
-        if (seenPair.has(key)) continue;
-        seenPair.add(key);
-        callPairs.push({ from: f, to: t, verb });
-      }
-    };
-    pushFor(k.added_edges ?? [], artifact.head.edges ?? [], "added");
-    pushFor(k.removed_edges ?? [], artifact.base.edges ?? [], "removed");
+  for (const p of headPairs) {
+    if (!baseKeySet.has(`${p.from}|${p.to}`)) callPairs.push({ ...p, verb: "added" });
+  }
+  for (const p of basePairs) {
+    if (!headKeySet.has(`${p.from}|${p.to}`)) callPairs.push({ ...p, verb: "removed" });
   }
   const counts = items.reduce(
     (acc, r) => ({ ...acc, [r.status]: (acc[r.status] ?? 0) + 1 }),
@@ -1011,10 +1158,13 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
           <span className="font-normal text-muted-foreground"> · {flow.name}</span>
         </h1>
         <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
-          Entities as nodes, call edges as arrows — caller on the left,
-          callee on the right. Node border color marks morph status;
-          edge color marks added (green) vs removed (rose). Click any
-          node to open its source + cost contribution.
+          Base on the left, head on the right — each panel renders the
+          full call graph for this flow in that snapshot. Entities the
+          story touches <em>and</em> their unchanged neighbours appear,
+          so you see the whole component end-to-end. Border color marks
+          the entity's morph status between snapshots; added edges
+          tint emerald on head, removed edges tint rose on base.
+          Click any node to open its source.
         </p>
         <div className="flex items-baseline gap-3 text-[10px] font-mono text-muted-foreground pt-0.5">
           <MorphLegend status="added" count={counts.added} />
@@ -1033,7 +1183,8 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
           <PropagationStrip flow={flow} />
           <EntityGraph
             items={items}
-            callPairs={callPairs}
+            basePairs={basePairs}
+            headPairs={headPairs}
             onSelect={(n) => setSelected(n)}
           />
           {/* Cards below the graph keep the per-entity hunk detail
@@ -1080,6 +1231,17 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
                   item={it}
                   onClick={() => setSelected(it.name)}
                 />
+                {onInlineNotesChange && (
+                  <div className="mt-1 px-1">
+                    <InlineNotes
+                      jobId={jobId}
+                      anchor={{ kind: "entity", entity_name: it.name }}
+                      notes={artifact.inline_notes ?? []}
+                      onChange={onInlineNotesChange}
+                      label="note"
+                    />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -1108,7 +1270,8 @@ function FlowGraph({ artifact, flow, jobId }: { artifact: Artifact; flow: Flow; 
  *  are still drag-to-reorder for the reviewer's own reading order. */
 function EntityGraph({
   items,
-  callPairs,
+  basePairs,
+  headPairs,
   onSelect,
 }: {
   items: {
@@ -1116,18 +1279,33 @@ function EntityGraph({
     status: MorphStatus;
     file: string;
     hunks: import("@/types/artifact").Hunk[];
+    base?: import("@/types/artifact").Node | null;
+    head?: import("@/types/artifact").Node | null;
   }[];
-  callPairs: { from: string; to: string; verb: "added" | "removed" }[];
+  basePairs: { from: string; to: string }[];
+  headPairs: { from: string; to: string }[];
   onSelect: (entity: string) => void;
 }) {
-  // Level = longest caller-chain from a root (no incoming caller
-  // in this flow). Used as the x-column index. Cycles are clamped
-  // by tracking visited entities in the recursive walk.
-  const byName = new Map(items.map((it) => [it.name, it]));
+  // Layout: entities are listed top-to-bottom (one row per entity),
+  // BASE column on the left, HEAD column on the right. Eye scans
+  // down the list of entities and for each one sees base vs head at
+  // a glance. Call edges within each column are drawn vertically —
+  // a caller's row sits above its callee's (topological sort).
+  //
+  // Union of base + head edges drives the topological row order so
+  // unchanged scaffolding sits in the right place regardless of
+  // which snapshot carries the edge.
+  const allPairs: { from: string; to: string }[] = [];
+  const seenPair = new Set<string>();
+  for (const p of [...basePairs, ...headPairs]) {
+    const k = `${p.from}|${p.to}`;
+    if (seenPair.has(k)) continue;
+    seenPair.add(k);
+    allPairs.push(p);
+  }
   const incomingByName = new Map<string, string[]>();
   for (const it of items) incomingByName.set(it.name, []);
-  for (const p of callPairs) {
-    if (p.verb === "removed") continue; // removed edges don't shape layout
+  for (const p of allPairs) {
     const inc = incomingByName.get(p.to);
     if (inc && !inc.includes(p.from) && p.from !== p.to) inc.push(p.from);
   }
@@ -1141,163 +1319,262 @@ function EntityGraph({
     levelCache.set(name, lv);
     return lv;
   };
-  const levels = items.map((it) => ({ name: it.name, level: levelOf(it.name) }));
-  const byLevel = new Map<number, string[]>();
-  for (const { name, level } of levels) {
-    const col = byLevel.get(level) ?? [];
-    col.push(name);
-    byLevel.set(level, col);
-  }
-  const columnKeys = [...byLevel.keys()].sort((a, b) => a - b);
-
-  // Layout constants.
-  const NODE_W = 180;
-  const NODE_H = 56;
-  const COL_GAP = 72;
-  const ROW_GAP = 20;
-  const PAD = 16;
-
-  // Compute positions.
-  const pos = new Map<string, { x: number; y: number }>();
-  let maxRows = 0;
-  columnKeys.forEach((lv, ci) => {
-    const col = byLevel.get(lv) ?? [];
-    maxRows = Math.max(maxRows, col.length);
-    col.forEach((name, ri) => {
-      pos.set(name, {
-        x: PAD + ci * (NODE_W + COL_GAP),
-        y: PAD + ri * (NODE_H + ROW_GAP),
-      });
-    });
+  // Stable row order: primary key = level (callers above callees);
+  // tie-break = entity name for determinism.
+  const sortedItems = [...items].sort((a, b) => {
+    const la = levelOf(a.name);
+    const lb = levelOf(b.name);
+    if (la !== lb) return la - lb;
+    return a.name.localeCompare(b.name);
   });
-  const totalW = PAD * 2 + columnKeys.length * NODE_W + Math.max(0, columnKeys.length - 1) * COL_GAP;
-  const totalH = PAD * 2 + maxRows * NODE_H + Math.max(0, maxRows - 1) * ROW_GAP;
+  const rowOf = new Map<string, number>();
+  sortedItems.forEach((it, i) => rowOf.set(it.name, i));
 
-  // Edge list — straight line from right-center of caller to
-  // left-center of callee, plus a tiny bezier bend so crossings
-  // read cleanly.
-  const edges = callPairs
-    .filter((p) => pos.has(p.from) && pos.has(p.to))
-    .map((p) => {
-      const a = pos.get(p.from)!;
-      const b = pos.get(p.to)!;
-      const x1 = a.x + NODE_W;
-      const y1 = a.y + NODE_H / 2;
-      const x2 = b.x;
-      const y2 = b.y + NODE_H / 2;
-      const midX = (x1 + x2) / 2;
-      return { p, d: `M ${x1},${y1} C ${midX},${y1} ${midX},${y2} ${x2},${y2}` };
-    });
+  // Graph canvas tuned for desktop viewports. NODE_W is deliberately
+  // generous so each box breathes; COL_GAP runs wide so the base/head
+  // columns sit distinct rather than crowding at centre. Combined
+  // natural width ~840px — scales cleanly up/down via SVG viewBox.
+  const NODE_W = 320;
+  const NODE_H = 60;
+  const ROW_GAP = 16;
+  const COL_GAP = 120;
+  const PAD = 24;
+  const HEADER_H = 26;
+  const totalW = PAD * 2 + NODE_W * 2 + COL_GAP;
+  const totalH = PAD + HEADER_H + sortedItems.length * (NODE_H + ROW_GAP) + PAD;
+
+  const baseX = PAD;
+  const headX = PAD + NODE_W + COL_GAP;
+  const rowY = (row: number) => PAD + HEADER_H + row * (NODE_H + ROW_GAP);
+
+  const renderNode = (
+    it: (typeof items)[number],
+    side: "base" | "head",
+  ) => {
+    const x = side === "base" ? baseX : headX;
+    const y = rowY(rowOf.get(it.name)!);
+    const present = side === "base" ? !!it.base : !!it.head;
+    const nodeStatus: MorphStatus = !present ? "unchanged" : it.status;
+    // 0.55 passes WCAG AA against both the light (#FCFBF8) and the
+    // dark (0 0% 9%) backgrounds for the mono text + muted-foreground
+    // pairing we use here. 0.35 was failing contrast on faded nodes.
+    const opacity = present ? 1 : 0.55;
+    const short = it.name.length > 30 ? it.name.slice(0, 29) + "\u2026" : it.name;
+    const file = (it.file.split("/").pop() ?? it.file) || "";
+    const badge =
+      !present && it.status === "added" && side === "base"
+        ? "+"
+        : !present && it.status === "removed" && side === "head"
+          ? "−"
+          : it.status === "changed" && present
+            ? "~"
+            : null;
+    return (
+      <g
+        key={`${side}-${it.name}`}
+        onClick={() => onSelect(it.name)}
+        className="cursor-pointer"
+        style={{ opacity }}
+      >
+        <title>{`${it.name}\n${it.file}\nmorph: ${it.status}\npresent on ${side}: ${present}`}</title>
+        <rect
+          x={x}
+          y={y}
+          width={NODE_W}
+          height={NODE_H}
+          rx={6}
+          className={"fill-background stroke-[1.3] " + ENTITY_GRAPH_BORDER[nodeStatus]}
+          strokeDasharray={!present ? "4 3" : undefined}
+        />
+        <circle cx={x + 10} cy={y + 12} r={3} className={ENTITY_GRAPH_DOT[nodeStatus]} />
+        <text
+          x={x + 20}
+          y={y + 16}
+          className="fill-foreground"
+          style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 500 }}
+        >
+          {short}
+        </text>
+        <text
+          x={x + 12}
+          y={y + 32}
+          className="fill-muted-foreground"
+          style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+        >
+          {present ? it.status : side === "base" ? "not in base" : "not in head"}
+          {file ? " · " + file : ""}
+        </text>
+        <text
+          x={x + 12}
+          y={y + 47}
+          className="fill-muted-foreground"
+          style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+        >
+          {present ? `${it.hunks.length} hunk${it.hunks.length === 1 ? "" : "s"}` : "—"}
+        </text>
+        {badge && (
+          <text
+            x={x + NODE_W - 14}
+            y={y + 18}
+            textAnchor="middle"
+            className={
+              badge === "+"
+                ? "fill-emerald-500"
+                : badge === "−"
+                  ? "fill-rose-500"
+                  : "fill-amber-500"
+            }
+            style={{ fontFamily: "ui-monospace, monospace", fontSize: 14, fontWeight: 600 }}
+          >
+            {badge}
+          </text>
+        )}
+      </g>
+    );
+  };
+
+  // Vertical call edges within a column. Use curved bezier from
+  // bottom-centre of the caller node to top-centre of the callee.
+  const renderEdges = (
+    side: "base" | "head",
+    pairs: { from: string; to: string }[],
+  ) => {
+    const x = side === "base" ? baseX : headX;
+    const cx = x + NODE_W / 2;
+    const otherKeys = new Set(
+      (side === "base" ? headPairs : basePairs).map((p) => `${p.from}|${p.to}`),
+    );
+    return pairs
+      .filter((p) => rowOf.has(p.from) && rowOf.has(p.to))
+      .map((p, i) => {
+        const rFrom = rowOf.get(p.from)!;
+        const rTo = rowOf.get(p.to)!;
+        const y1 = rowY(rFrom) + NODE_H;
+        const y2 = rowY(rTo);
+        const midY = (y1 + y2) / 2;
+        const delta = !otherKeys.has(`${p.from}|${p.to}`);
+        const stroke = delta
+          ? side === "head"
+            ? "stroke-emerald-500/75"
+            : "stroke-rose-500/75"
+          : "stroke-muted-foreground/40";
+        const arrow = `url(#eg-arrow-${side}-${delta ? "delta" : "neutral"})`;
+        return (
+          <path
+            key={`${side}-e-${i}`}
+            d={`M ${cx},${y1} C ${cx},${midY} ${cx},${midY} ${cx},${y2}`}
+            fill="none"
+            strokeWidth={delta ? 1.4 : 1}
+            className={stroke}
+            strokeDasharray={delta && side === "base" ? "5 3" : undefined}
+            markerEnd={arrow}
+          />
+        );
+      });
+  };
 
   return (
-    <div className="relative w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded border border-border/60 bg-muted/10 shadow-sm">
+    <div className="relative w-full min-w-0 max-w-full overflow-y-auto rounded border border-border/60 bg-muted/10 shadow-sm">
+      {/* Mobile fallback: below md the SVG scales down so far that
+          entity names become unreadable. Render a stacked list
+          (one row per entity, base/head status chips inline) —
+          same data, fit for narrow viewports. */}
+      <ul className="md:hidden divide-y divide-border/40">
+        {sortedItems.map((it) => (
+          <li
+            key={it.name}
+            className="flex items-baseline gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30"
+            onClick={() => onSelect(it.name)}
+          >
+            <span className="text-[12px] font-mono font-medium text-foreground truncate flex-1 min-w-0">
+              {it.name}
+            </span>
+            <SideStatusChip present={!!it.base} label="base" status={it.status} />
+            <SideStatusChip present={!!it.head} label="head" status={it.status} />
+          </li>
+        ))}
+      </ul>
       <svg
-        width={totalW}
-        height={totalH}
         viewBox={`0 0 ${totalW} ${totalH}`}
-        className="block"
-        style={{ minWidth: totalW }}
+        className="hidden md:block w-full"
+        preserveAspectRatio="xMidYMin meet"
+        style={{ maxHeight: `${totalH * 1.5}px` }}
       >
         <defs>
           <marker
-            id="eg-arrow-added"
+            id="eg-arrow-base-delta"
             viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
+            refX="5"
+            refY="9"
             markerWidth="7"
             markerHeight="7"
             orient="auto"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-emerald-500/80" />
+            <path d="M 0 0 L 10 0 L 5 10 z" className="fill-rose-500/80" />
           </marker>
           <marker
-            id="eg-arrow-removed"
+            id="eg-arrow-base-neutral"
             viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
+            refX="5"
+            refY="9"
             markerWidth="7"
             markerHeight="7"
             orient="auto"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-rose-500/80" />
+            <path d="M 0 0 L 10 0 L 5 10 z" className="fill-muted-foreground/50" />
+          </marker>
+          <marker
+            id="eg-arrow-head-delta"
+            viewBox="0 0 10 10"
+            refX="5"
+            refY="9"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto"
+          >
+            <path d="M 0 0 L 10 0 L 5 10 z" className="fill-emerald-500/80" />
+          </marker>
+          <marker
+            id="eg-arrow-head-neutral"
+            viewBox="0 0 10 10"
+            refX="5"
+            refY="9"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto"
+          >
+            <path d="M 0 0 L 10 0 L 5 10 z" className="fill-muted-foreground/50" />
           </marker>
         </defs>
-
-        {/* Edges first — behind nodes */}
-        {edges.map((e, i) => (
-          <path
-            key={`e-${i}`}
-            d={e.d}
-            fill="none"
-            strokeWidth={1.3}
-            className={
-              e.p.verb === "added"
-                ? "stroke-emerald-500/70"
-                : "stroke-rose-500/70"
-            }
-            strokeDasharray={e.p.verb === "removed" ? "5 3" : undefined}
-            markerEnd={`url(#eg-arrow-${e.p.verb})`}
-          />
+        {/* column headers */}
+        <text
+          x={baseX + NODE_W / 2}
+          y={PAD + 14}
+          textAnchor="middle"
+          className="fill-muted-foreground"
+          style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, letterSpacing: 1 }}
+        >
+          BASE
+        </text>
+        <text
+          x={headX + NODE_W / 2}
+          y={PAD + 14}
+          textAnchor="middle"
+          className="fill-muted-foreground"
+          style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, letterSpacing: 1 }}
+        >
+          HEAD
+        </text>
+        {/* edges behind nodes */}
+        {renderEdges("base", basePairs)}
+        {renderEdges("head", headPairs)}
+        {/* node rows */}
+        {sortedItems.map((it) => (
+          <g key={it.name}>
+            {renderNode(it, "base")}
+            {renderNode(it, "head")}
+          </g>
         ))}
-
-        {/* Nodes on top */}
-        {items.map((it) => {
-          const p = pos.get(it.name);
-          if (!p) return null;
-          const file = it.file.split("/").pop() ?? it.file;
-          const short = it.name.length > 22 ? it.name.slice(0, 21) + "\u2026" : it.name;
-          return (
-            <g
-              key={it.name}
-              onClick={() => onSelect(it.name)}
-              className="cursor-pointer"
-            >
-              <title>{`${it.name}\n${it.file}\nstatus: ${it.status}\nclick to open source`}</title>
-              <rect
-                x={p.x}
-                y={p.y}
-                width={NODE_W}
-                height={NODE_H}
-                rx={6}
-                className={
-                  "fill-background stroke-[1.3] " +
-                  ENTITY_GRAPH_BORDER[it.status]
-                }
-              />
-              <circle
-                cx={p.x + 10}
-                cy={p.y + 12}
-                r={3}
-                className={ENTITY_GRAPH_DOT[it.status]}
-              />
-              <text
-                x={p.x + 20}
-                y={p.y + 16}
-                className="fill-foreground"
-                style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 500 }}
-              >
-                {short}
-              </text>
-              <text
-                x={p.x + 12}
-                y={p.y + 32}
-                className="fill-muted-foreground"
-                style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
-              >
-                {it.status} · {file}
-              </text>
-              <text
-                x={p.x + 12}
-                y={p.y + 47}
-                className="fill-muted-foreground"
-                style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
-              >
-                {it.hunks.length} hunk{it.hunks.length === 1 ? "" : "s"}
-                {byName.get(it.name) && ""}
-              </text>
-            </g>
-          );
-        })}
       </svg>
     </div>
   );
@@ -1373,6 +1650,45 @@ function EntityCard({
   );
 }
 
+/** Compact side-status chip for the mobile flow-graph fallback.
+ *  Shows whether an entity is present on this snapshot and, when
+ *  present, hints the morph status (added/removed/changed) via the
+ *  same tone tokens the SVG nodes use. Not rendered on ≥md. */
+function SideStatusChip({
+  present,
+  label,
+  status,
+}: {
+  present: boolean;
+  label: "base" | "head";
+  status: MorphStatus;
+}) {
+  const relevant =
+    (label === "base" && status === "removed") ||
+    (label === "head" && status === "added") ||
+    status === "changed";
+  const tone = !present
+    ? "border-border/40 bg-background/60 text-muted-foreground/70"
+    : relevant
+      ? status === "added"
+        ? "border-emerald-400/50 bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
+        : status === "removed"
+          ? "border-rose-400/50 bg-rose-50 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300"
+          : "border-amber-400/50 bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300"
+      : "border-border/60 bg-background/60 text-muted-foreground";
+  return (
+    <span
+      className={
+        "text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border " +
+        tone
+      }
+    >
+      {label}
+      {present ? "" : " ·"}
+    </span>
+  );
+}
+
 const MORPH_BORDER_LEFT: Record<MorphStatus, string> = {
   added: "border-l-emerald-500/60",
   removed: "border-l-rose-500/60",
@@ -1386,9 +1702,12 @@ const MORPH_TEXT: Record<MorphStatus, string> = {
   unchanged: "text-muted-foreground",
 };
 
+/** Per-hunk chip row inside an EntityCard. Prose ("call: +2 -1 edges
+ *  touching X") was hard to scan alongside the morph legend; chips
+ *  match the visual vocabulary of the flow graph and let the eye
+ *  pattern-match what changed. */
 function HunkLine({
   hunk,
-  entity,
 }: {
   hunk: import("@/types/artifact").Hunk;
   entity: string;
@@ -1405,47 +1724,76 @@ function HunkLine({
   if (k.kind === "api") {
     if (k.before_signature && k.after_signature) {
       return (
-        <span className="text-muted-foreground">
-          <span className="text-rose-700 dark:text-rose-300">−</span>{" "}
-          <code className="text-[10px]">{k.before_signature}</code>
-          <br />
-          <span className="text-emerald-700 dark:text-emerald-300">+</span>{" "}
-          <code className="text-[10px]">{k.after_signature}</code>
-        </span>
+        <div className="flex flex-wrap gap-1">
+          <Chip tone="rem">{"−" + k.before_signature}</Chip>
+          <Chip tone="add">{"+" + k.after_signature}</Chip>
+        </div>
       );
     }
-    return <span className="text-muted-foreground">api: signature change</span>;
+    return (
+      <div className="flex flex-wrap gap-1">
+        <Chip tone="neutral">api · signature change</Chip>
+      </div>
+    );
   }
   if (k.kind === "state") {
     const adds = k.added_variants ?? [];
     const rems = k.removed_variants ?? [];
     return (
-      <span className="text-muted-foreground">
-        state:{" "}
-        {adds.length > 0 && (
-          <span className="text-emerald-700 dark:text-emerald-300">+{adds.join(" +")}</span>
-        )}
-        {adds.length > 0 && rems.length > 0 && " "}
-        {rems.length > 0 && (
-          <span className="text-rose-700 dark:text-rose-300">−{rems.join(" −")}</span>
-        )}
-      </span>
+      <div className="flex flex-wrap gap-1">
+        {adds.map((v) => (
+          <Chip key={`a-${v}`} tone="add">{"+" + v}</Chip>
+        ))}
+        {rems.map((v) => (
+          <Chip key={`r-${v}`} tone="rem">{"−" + v}</Chip>
+        ))}
+      </div>
     );
   }
   if (k.kind === "call") {
     const added = (k.added_edges ?? []).length;
     const removed = (k.removed_edges ?? []).length;
     return (
-      <span className="text-muted-foreground">
-        call:{" "}
-        {added > 0 && <span className="text-emerald-700 dark:text-emerald-300">+{added}</span>}
-        {added > 0 && removed > 0 && " "}
-        {removed > 0 && <span className="text-rose-700 dark:text-rose-300">−{removed}</span>}
-        {" "}edge{added + removed === 1 ? "" : "s"} touching {entity}
-      </span>
+      <div className="flex flex-wrap gap-1">
+        {added > 0 && (
+          <Chip tone="add">{`+${added} call${added === 1 ? "" : "s"}`}</Chip>
+        )}
+        {removed > 0 && (
+          <Chip tone="rem">{`−${removed} call${removed === 1 ? "" : "s"}`}</Chip>
+        )}
+      </div>
     );
   }
-  return <span className="text-muted-foreground">hunk</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      <Chip tone="neutral">hunk</Chip>
+    </div>
+  );
+}
+
+function Chip({
+  tone,
+  children,
+}: {
+  tone: "add" | "rem" | "neutral";
+  children: import("react").ReactNode;
+}) {
+  const cls =
+    tone === "add"
+      ? "border-emerald-400/40 bg-emerald-50 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-200"
+      : tone === "rem"
+        ? "border-rose-400/40 bg-rose-50 text-rose-800 dark:bg-rose-400/10 dark:text-rose-200"
+        : "border-border/60 bg-background/60 text-muted-foreground";
+  return (
+    <span
+      className={
+        "inline-flex items-center text-[10px] font-mono px-1.5 py-0.5 rounded-full border " +
+        cls
+      }
+    >
+      {children}
+    </span>
+  );
 }
 
 // FlowCallSummary removed — EntityGraph renders the call pairs as
@@ -1728,7 +2076,19 @@ function strengthRank(s: string | undefined): number {
  * which intent claim is verified vs. missing — per the RFC and
  * `feedback_proof_not_tests.md`, this is what proof actually means.
  */
-function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
+function FlowProof({
+  artifact,
+  flow,
+  jobId,
+  onInlineNotesChange,
+  onJumpToSource,
+}: {
+  artifact: Artifact;
+  flow: Flow;
+  jobId?: string;
+  onInlineNotesChange?: (next: import("@/types/artifact").InlineNote[]) => void;
+  onJumpToSource?: (entity?: string) => void;
+}) {
   const status = artifact.proof_status ?? "not-run";
   const hasIntent = artifact.intent != null;
 
@@ -1790,7 +2150,14 @@ function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
 
   return (
     <section className="space-y-5">
-      {artifact.intent && <IntentCard intent={artifact.intent} />}
+      {artifact.intent && (
+        <IntentCard
+          intent={artifact.intent}
+          jobId={jobId}
+          notes={artifact.inline_notes ?? []}
+          onInlineNotesChange={onInlineNotesChange}
+        />
+      )}
       {status === "errored" && (
         <div className="rounded border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground">
           Proof pass reported errors on at least one flow — partial claims may
@@ -1801,6 +2168,20 @@ function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
         <IntentFitCard fit={fit} />
         <ProofCard proof={proof} />
       </div>
+      {jobId && onInlineNotesChange && (
+        <section className="space-y-1">
+          <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
+            Reviewer notes on this flow
+          </h2>
+          <InlineNotes
+            jobId={jobId}
+            anchor={{ kind: "flow", flow_id: flow.id }}
+            notes={artifact.inline_notes ?? []}
+            onChange={onInlineNotesChange}
+            label="note on this flow"
+          />
+        </section>
+      )}
       {proof && proof.claims && proof.claims.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
@@ -1834,7 +2215,29 @@ function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
           <ol className="space-y-2">
             {(flow.evidence ?? []).map((c) => (
               <li key={c.id}>
-                <ClaimRow claim={c} />
+                <ClaimRow
+                  claim={c}
+                  onJumpToSource={
+                    onJumpToSource
+                      ? (ref) => {
+                          // Jump carries the entity name so the Source
+                          // tab can scroll to the same name via the
+                          // `data-entity-name` attribute wired in
+                          // App.tsx. SourceRef's `file` is secondary;
+                          // using the first entity keeps it consistent
+                          // with the cost-driver jump path.
+                          const entity =
+                            c.entities && c.entities.length > 0
+                              ? c.entities[0]
+                              : undefined;
+                          onJumpToSource(entity);
+                          // SourceRef file is noted in the button tooltip;
+                          // future refinement scrolls to (line, col).
+                          void ref;
+                        }
+                      : undefined
+                  }
+                />
               </li>
             ))}
           </ol>
@@ -1846,8 +2249,14 @@ function FlowProof({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
 
 function IntentCard({
   intent,
+  jobId,
+  notes,
+  onInlineNotesChange,
 }: {
   intent: import("@/types/artifact").IntentInput;
+  jobId?: string;
+  notes?: import("@/types/artifact").InlineNote[];
+  onInlineNotesChange?: (next: import("@/types/artifact").InlineNote[]) => void;
 }) {
   // IntentInput is Intent | string.
   const isStructured = typeof intent !== "string";
@@ -1874,17 +2283,26 @@ function IntentCard({
           {intent.claims && intent.claims.length > 0 && (
             <ol className="mt-2 space-y-1.5">
               {intent.claims.map((c, i) => (
-                <li
-                  key={i}
-                  className="flex items-baseline gap-2 text-[12px]"
-                >
-                  <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-5">
-                    {i}.
-                  </span>
-                  <span className="text-[10px] font-mono uppercase text-muted-foreground w-[4.5rem]">
-                    {c.evidence_type}
-                  </span>
-                  <span className="text-foreground">{c.statement}</span>
+                <li key={i} className="space-y-0.5">
+                  <div className="flex items-baseline gap-2 text-[12px]">
+                    <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-5">
+                      {i}.
+                    </span>
+                    <span className="text-[10px] font-mono uppercase text-muted-foreground w-[4.5rem]">
+                      {c.evidence_type}
+                    </span>
+                    <span className="text-foreground">{c.statement}</span>
+                  </div>
+                  {jobId && onInlineNotesChange && (
+                    <div className="pl-[5.75rem]">
+                      <InlineNotes
+                        jobId={jobId}
+                        anchor={{ kind: "intent-claim", claim_index: i }}
+                        notes={notes ?? []}
+                        onChange={onInlineNotesChange}
+                      />
+                    </div>
+                  )}
                 </li>
               ))}
             </ol>

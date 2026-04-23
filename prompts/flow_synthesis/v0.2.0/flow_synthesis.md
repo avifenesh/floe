@@ -41,7 +41,7 @@ PI built-ins (read-only usage):
   glob(pattern)                      file path search
 
 Note: PI also exposes write/edit/bash. Do not use them. The artifact only
-accepts mutations through `adr:propose_flow` / `mutate_flow` / `remove_flow`.
+accepts mutations through `floe:propose_flow` / `mutate_flow` / `remove_flow`.
 
 # Workflow
 
@@ -49,7 +49,7 @@ Follow these phases in order. Do not skip phases.
 
 ## Phase 1: Explore
 
-Call `adr:list_hunks()` and `adr:list_flows_initial()`. Read what is there.
+Call `floe:list_hunks()` and `floe:list_flows_initial()`. Read what is there.
 Form an initial picture of how many distinct flows this PR actually contains.
 Most real PRs will have 2–5 flows. A single-flow PR is rare; a ten-flow PR
 is almost always over-clustering.
@@ -62,7 +62,7 @@ the smallest inspection that answers the question.
 - If the hunk's entities are familiar enough from their names and signatures,
   you do not need to read source. Move on.
 - If the hunk touches a call chain you need to understand, call
-  `adr:neighbors(entity_id, 1)` and read the subgraph.
+  `floe:neighbors(entity_id, 1)` and read the subgraph.
 - If the hunk's intent is still unclear, `read` the relevant file lines.
 - Spend inspection budget on the hunks that affect flow boundaries, not on
   hunks whose placement is obvious.
@@ -72,10 +72,10 @@ the smallest inspection that answers the question.
 Decide for each starting cluster whether to keep, rename, split, or merge
 with another. Then materialise the decisions:
 
-- `adr:propose_flow` for every flow you want to keep, whether derived from a
+- `floe:propose_flow` for every flow you want to keep, whether derived from a
   starting cluster or newly formed.
-- `adr:mutate_flow` to adjust hunks or entities inside an existing flow.
-- `adr:remove_flow` only after the hunks in it have a home in another flow.
+- `floe:mutate_flow` to adjust hunks or entities inside an existing flow.
+- `floe:remove_flow` only after the hunks in it have a home in another flow.
 
 Naming rule: the name expresses *what the flow does*, not *where the code
 lives*. "Multi-metric budget support" beats "Queue methods". "Streaming
@@ -89,24 +89,24 @@ the shape of the data, the call chain, the state — that ties the hunks.
 
 Before finalizing, check:
 
-- Every hunk from `adr:list_hunks()` appears in at least one flow.
+- Every hunk from `floe:list_hunks()` appears in at least one flow.
 - A hunk in two flows is there because both flows architecturally touch it,
   not because you were unsure where to put it.
 - No flow name matches a reserved label: "misc", "various", "other",
   "unknown", "cluster", "group". (The host rejects these.)
 - Every entity id referenced in a flow exists. You only reference ids that
-  came back from `adr:get_entity()` or `adr:list_hunks()`.
+  came back from `floe:get_entity()` or `floe:list_hunks()`.
 
 ## Phase 5: Deliver
 
-Call `adr:finalize()`. If the host accepts, the run is complete. If the
+Call `floe:finalize()`. If the host accepts, the run is complete. If the
 host rejects, the response names the broken rule. Fix it and call
-`adr:finalize()` one more time. If the second call is also rejected, stop
+`floe:finalize()` one more time. If the second call is also rejected, stop
 — the host will fall back to structural clustering.
 
 # Completion Criteria
 
-Before calling `adr:finalize()`, verify all of these:
+Before calling `floe:finalize()`, verify all of these:
 
 1. Every hunk is in at least one flow.
 2. Every flow has an intent-shaped name of 3..48 characters.
@@ -121,7 +121,7 @@ Before calling `adr:finalize()`, verify all of these:
   components, shared type shapes). They are a draft, not a target. Expect
   to split some and merge others.
 - When two clusters look related, check whether their entities share a
-  call chain: `adr:neighbors` on one end-point usually resolves the
+  call chain: `floe:neighbors` on one end-point usually resolves the
   question.
 - A hunk that sits alone after classification is either (a) its own small
   flow, or (b) a noise change like formatting. Both are fine. Name the
@@ -130,7 +130,7 @@ Before calling `adr:finalize()`, verify all of these:
   code and retry with the correction. The same bad call twice will fail
   the same way.
 - Reading large files wastes budget. Prefer `read(file, start, end)` with
-  the span you already know from `adr:get_entity`.
+  the span you already know from `floe:get_entity`.
 
 # What Not To Do
 
@@ -142,7 +142,7 @@ Before calling `adr:finalize()`, verify all of these:
 - Do not leave hunks unassigned. The host rejects the whole run.
 - Do not call `write`, `edit`, or `bash`. They have no effect on the
   artifact.
-- Do not call `adr:finalize()` more than twice. If the second attempt
+- Do not call `floe:finalize()` more than twice. If the second attempt
   fails, structural fallback is the correct outcome.
 
 # Worked Example
@@ -154,8 +154,8 @@ Input context:
 - initial_cluster_count = 3
 - Starting clusters: PaymentClient-methods (5), retry-helpers (2), logging (1)
 
-Phase 1. `adr:list_hunks()` returns 8 hunks (3 api, 4 call, 1 state).
-`adr:list_flows_initial()` returns three clusters whose names are location-shaped.
+Phase 1. `floe:list_hunks()` returns 8 hunks (3 api, 4 call, 1 state).
+`floe:list_flows_initial()` returns three clusters whose names are location-shaped.
 
 Phase 2. Inspect. PaymentClient-methods contains a new idempotency
 key parameter on `charge()` and `refund()`, plus a log-format change on
@@ -187,7 +187,7 @@ Phase 3. Propose three flows:
      hunk_ids=[reportError-api]
    )
 
-`adr:remove_flow` on the three structural starter clusters once every
+`floe:remove_flow` on the three structural starter clusters once every
 original hunk is covered by the new flows.
 
 Phase 4. Recount: 3 + 4 + 1 = 8. Matches hunk_count. Names are intent-shaped.
@@ -195,7 +195,7 @@ Rationales name a data shape (idempotencyKey / IdempotencyStore),
 a call chain (retry → backoff), and a shared signature pattern (logger
 call shape). No reserved names.
 
-Phase 5. `adr:finalize()`. Host accepts.
+Phase 5. `floe:finalize()`. Host accepts.
 
 # Error Recovery
 

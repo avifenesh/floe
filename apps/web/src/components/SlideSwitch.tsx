@@ -40,10 +40,10 @@ export function SlideSwitch({ viewKey, order, children }: Props) {
 
   const startClass =
     state.dir === "right"
-      ? "adr-slide-from-right"
+      ? "floe-slide-from-right"
       : state.dir === "left"
-        ? "adr-slide-from-left"
-        : "adr-slide-fade";
+        ? "floe-slide-from-left"
+        : "floe-slide-fade";
 
   return (
     <div

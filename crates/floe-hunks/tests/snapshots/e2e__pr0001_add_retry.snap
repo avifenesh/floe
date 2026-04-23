@@ -1,0 +1,25 @@
+---
+source: crates/adr-hunks/tests/e2e.rs
+expression: hunks
+---
+[
+  {
+    "id": "[id]",
+    "kind": {
+      "kind": "call",
+      "added_edges": [
+        6,
+        7
+      ],
+      "removed_edges": [
+        5
+      ]
+    },
+    "provenance": {
+      "source": "floe-hunks/call",
+      "version": "0.1.0",
+      "pass_id": "hunks",
+      "hash": "[hash]"
+    }
+  }
+]

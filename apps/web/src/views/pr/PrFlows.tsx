@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import type { Artifact, Flow } from "@/types/artifact";
 import { cn } from "@/lib/cn";
 import { filesTouched, flowHunks, hunkTypeCounts } from "@/lib/artifact";
@@ -15,32 +16,69 @@ interface Props {
  */
 export function PrFlows({ artifact, onPick }: Props) {
   const flows = artifact.flows ?? [];
-  if (flows.length === 0) {
-    return null;
-  }
-  const ranked = [...flows].sort((a, b) => weight(b) - weight(a));
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const ranked = useMemo(
+    () => [...flows].sort((a, b) => weight(b) - weight(a)),
+    [flows],
+  );
+  const filtered = useMemo(() => {
+    if (!q) return ranked;
+    return ranked.filter((f) => {
+      if (flowLabel(f).toLowerCase().includes(q)) return true;
+      for (const e of f.entities) if (e.toLowerCase().includes(q)) return true;
+      for (const e of f.extra_entities ?? [])
+        if (e.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [ranked, q]);
   const maxWeight = Math.max(...ranked.map(weight), 1);
+  if (flows.length === 0) return null;
 
   return (
     <section className="space-y-4">
       <ScaleStrip artifact={artifact} />
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
-          Flows ({flows.length}) · ranked by weight
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[12px] font-semibold text-foreground shrink-0">
+          Flows{" "}
+          <span className="text-muted-foreground font-normal">
+            ({filtered.length}
+            {filtered.length !== flows.length ? `/${flows.length}` : ""})
+          </span>
         </h2>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="filter flows by name or entity…"
+          aria-label="Filter flows"
+          className="flex-1 max-w-xs text-[11px] font-mono rounded border border-border/60 bg-background px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <span
+          className="text-[10px] font-mono text-muted-foreground/70 shrink-0 hidden sm:inline"
+          title="Flows are ordered by their weight score — largest architectural story first."
+        >
+          sorted by weight
+        </span>
       </div>
-      <ol className="space-y-2">
-        {ranked.map((f) => (
-          <li key={f.id}>
-            <FlowCard
-              artifact={artifact}
-              flow={f}
-              onPick={onPick}
-              maxWeight={maxWeight}
-            />
-          </li>
-        ))}
-      </ol>
+      {filtered.length === 0 ? (
+        <p className="text-[12px] text-muted-foreground">
+          No flows match &ldquo;{query}&rdquo;.
+        </p>
+      ) : (
+        <ol className="space-y-2">
+          {filtered.map((f) => (
+            <li key={f.id}>
+              <FlowCard
+                artifact={artifact}
+                flow={f}
+                onPick={onPick}
+                maxWeight={maxWeight}
+              />
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }

@@ -112,6 +112,13 @@ export function filesOfHunk(a: Artifact, hunkId: string): string[] {
       const n = e && nodeById(a.base, e.from);
       if (n) files.add(n.file);
     }
+  } else if (
+    k.kind === "lock" ||
+    k.kind === "data" ||
+    k.kind === "docs" ||
+    k.kind === "deletion"
+  ) {
+    files.add(k.file);
   } else {
     const hn = nodeById(a.head, k.node);
     if (hn) files.add(hn.file);

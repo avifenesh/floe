@@ -22,10 +22,32 @@
       }
     },
     "baseline": {
-      "description": "Repo-wide baseline summary from the probe pass. Populated by `adr-cost` alongside per-flow `Cost`; carries the denominators the frontend needs to render bars as *percent-of-baseline* rather than *relative rank*. `None` until the probe pass lands.",
+      "description": "Repo-wide baseline summary from the probe pass. Populated by `floe-cost` alongside per-flow `Cost`; carries the denominators the frontend needs to render bars as *percent-of-baseline* rather than *relative rank*. `None` until the probe pass lands.",
       "anyOf": [
         {
           "$ref": "#/definitions/ArtifactBaseline"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bench_run": {
+      "description": "Bench-run delta — `FLOE_BENCH_CMD`. Structure mirrors test_run.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExternalRunDelta"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "compile_diagnostics": {
+      "description": "Compile-unit delta from the Phase B `tsc --noEmit` pass — a type-checker-authoritative read on \"did this PR break or fix anything?\". `None` when the pass is disabled or couldn't run (no tsc on PATH, no tsconfig at root).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/CompileDelta"
         },
         {
           "type": "null"
@@ -41,8 +63,19 @@
         }
       ]
     },
+    "coverage_delta": {
+      "description": "Per-file line-coverage delta derived from an lcov/json-summary file scanned at base and head around the `FLOE_TEST_CMD` run. `None` when no coverage file was found.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/CoverageDelta"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "flows": {
-      "description": "Flows — groups of hunks that belong to one architectural story. The primary unit of review in v0.2. Deterministic structural clustering always produces this list; the LLM-synthesis pass (via `adr-mcp`) may replace it with LLM-validated flows.",
+      "description": "Flows — groups of hunks that belong to one architectural story. The primary unit of review in v0.2. Deterministic structural clustering always produces this list; the LLM-synthesis pass (via `floe-mcp`) may replace it with LLM-validated flows.",
       "type": "array",
       "items": {
         "$ref": "#/definitions/Flow"
@@ -62,6 +95,13 @@
       "type": "array",
       "items": {
         "$ref": "#/definitions/Hunk"
+      }
+    },
+    "inline_notes": {
+      "description": "Reviewer notes anchored to specific objects (hunks, flows, entities, intent claims, or file lines). Written via `/analyze/:id/notes` and bundled with their object's context by `/analyze/:id/notes/export` for downstream coding-agent use.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/InlineNote"
       }
     },
     "intent": {
@@ -86,8 +126,26 @@
       "description": "Side-channel notes from the reviewer — pasted benchmark output, staging logs, corroborating screenshots turned into text. The proof-verification pass reads this alongside the code when deciding whether a claim has evidence.",
       "type": "string"
     },
+    "notices": {
+      "description": "Reviewer-facing notices — short, one-line status hints surfaced as toasts in the UI. Emitted by passes that degrade gracefully (e.g. intent extraction when ollama is unreachable) so the reviewer understands *why* a downstream axis is empty.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "pr": {
       "$ref": "#/definitions/PrRef"
+    },
+    "pr_summary": {
+      "description": "LLM-derived reviewer-facing title + optional short description for the PR itself — replaces `repo#N` as the scannable heading in the UI. Populated by the summary pass (GLM-4.6 by default).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PrSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "proof_status": {
       "description": "Status of the intent-fit + proof-verification LLM passes. See [`ProofStatus`]. Independent of `cost_status` — probe runs local, proof runs cloud (GLM), they spawn in parallel.",
@@ -95,6 +153,17 @@
       "allOf": [
         {
           "$ref": "#/definitions/ProofStatus"
+        }
+      ]
+    },
+    "review_verdict": {
+      "description": "Reviewer's explicit verdict on this PR — \"approve\", \"request changes\", or \"comment\" (neutral leave-a-note stance). Distinct from inline notes (annotations) and from ship-readiness (an algorithmic rollup). Persisted with the artifact so a reviewer sees their own stance on repeat visits and a second reviewer sees the first's.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ReviewVerdictRecord"
+        },
+        {
+          "type": "null"
         }
       ]
     },
@@ -107,6 +176,17 @@
       "allOf": [
         {
           "$ref": "#/definitions/SynthStatus"
+        }
+      ]
+    },
+    "test_run": {
+      "description": "Test-run delta — captured outcome of `FLOE_TEST_CMD` on base and head. `None` when unconfigured or skipped. See RFC Appendix F upgrade #4.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExternalRunDelta"
+        },
+        {
+          "type": "null"
         }
       ]
     }
@@ -427,6 +507,13 @@
             }
           ]
         },
+        "source_refs": {
+          "description": "Source ranges this claim cites. Compile diagnostics carry the exact `(file, line, col)` from `tsc`; LSP-backed claims resolve reference positions via `textDocument/references`. The UI uses these to render \"jump to source\" affordances inline. Empty is valid — older claims and flow-global observations won't have anchors. See RFC Appendix F upgrade #6.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceRef"
+          }
+        },
         "strength": {
           "$ref": "#/definitions/Strength"
         },
@@ -494,6 +581,13 @@
           "enum": [
             "observation"
           ]
+        },
+        {
+          "description": "A file this flow touches lost line-coverage between base and head (derived from lcov / vitest json-summary). Strength reflects the drop size. Produced by `floe-server` coverage pass.",
+          "type": "string",
+          "enum": [
+            "coverage-drop"
+          ]
         }
       ]
     },
@@ -543,8 +637,81 @@
         }
       }
     },
+    "CompileDelta": {
+      "description": "Compile-unit delta — what the type checker says about base vs head.\n\nProduced by the Phase B compile pass (`tsc --noEmit` run at each side). The diff classifies every diagnostic:\n\n- **new_on_head** — present on head, absent on base. High-strength architectural claim; reviewer sees \"this PR introduced a type error\". - **resolved_on_head** — present on base, absent on head. Positive signal; the PR fixed a pre-existing error. - **persistent** — on both sides. Observation, not a claim against this PR; useful for reviewers who want to know the repo was already in a broken state.\n\nEmitted as `Some(...)` when the pass ran, `None` when `FLOE_COMPILE_PASS=0` disables it or the repo has no runnable TypeScript compiler.",
+      "type": "object",
+      "required": [
+        "both_ran",
+        "new_on_head",
+        "persistent",
+        "resolved_on_head"
+      ],
+      "properties": {
+        "both_ran": {
+          "description": "True when `tsc` finished cleanly on both sides; false when the pass hit an infrastructural failure (missing tsconfig, timeout) and the diff is unreliable. UI surfaces a caveat when false.",
+          "type": "boolean"
+        },
+        "compiler_version": {
+          "description": "TypeScript compiler version reported on the head side.",
+          "type": "string"
+        },
+        "new_on_head": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CompileDiagnostic"
+          }
+        },
+        "persistent": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CompileDiagnostic"
+          }
+        },
+        "resolved_on_head": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CompileDiagnostic"
+          }
+        }
+      }
+    },
+    "CompileDiagnostic": {
+      "type": "object",
+      "required": [
+        "code",
+        "column",
+        "file",
+        "line",
+        "message",
+        "severity"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "column": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/definitions/DiagnosticSeverity"
+        }
+      }
+    },
     "Cost": {
-      "description": "Per-flow review-effort estimate, emitted by the `adr-cost` pass from the probe baselines (see `docs/scope-5-cost-model.md`).\n\n`net` is **signed**: negative means the PR made the affected flow cheaper for the next LLM session to navigate (a refactor that dropped complexity), positive means harder. Scale is \"arbitrary cost units\" from the probe — comparable across flows of one PR and across PRs on the same repo, not across repos.",
+      "description": "Per-flow review-effort estimate, emitted by the `floe-cost` pass from the probe baselines (see `docs/scope-5-cost-model.md`).\n\n`net` is **signed**: negative means the PR made the affected flow cheaper for the next LLM session to navigate (a refactor that dropped complexity), positive means harder. Scale is \"arbitrary cost units\" from the probe — comparable across flows of one PR and across PRs on the same repo, not across repos.",
       "type": "object",
       "required": [
         "axes",
@@ -634,6 +801,67 @@
             "errored"
           ]
         }
+      ]
+    },
+    "CoverageDelta": {
+      "description": "Coverage delta derived from an `lcov.info` (or vitest `json-summary.json`) file scanned at base and head after the tests run. Per-file line-coverage percentages — the reviewer sees which files *lost* coverage in this PR.\n\n`files` contains only files with a non-zero delta OR a head entry; purely-unchanged files are elided to keep the artifact compact.",
+      "type": "object",
+      "required": [
+        "files",
+        "source"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CoverageFile"
+          }
+        },
+        "source": {
+          "description": "Absolute path (or artifact-relative path) to the lcov / summary file that produced this delta. Surfaced in the UI caveat.",
+          "type": "string"
+        }
+      }
+    },
+    "CoverageFile": {
+      "description": "Per-file line-coverage values encoded as **permille** (0–1000) so the struct can keep `Eq` (needed to derive Eq on Artifact). Convert to percent by dividing by 10 in UI code.",
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "base_permille": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "delta_permille": {
+          "description": "`head - base` in permille. `None` when either side absent.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "file": {
+          "type": "string"
+        },
+        "head_permille": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        }
+      }
+    },
+    "DiagnosticSeverity": {
+      "type": "string",
+      "enum": [
+        "error",
+        "warning"
       ]
     },
     "Edge": {
@@ -738,8 +966,86 @@
         }
       ]
     },
+    "ExternalRunDelta": {
+      "description": "Result of running an external tests/bench command on both sides.\n\n`both_ran` is true when each side returned cleanly (even with a non-zero exit — the command ran, it just said \"tests failed\"). It becomes false only when we couldn't execute the command at all (binary missing, timeout).",
+      "type": "object",
+      "required": [
+        "both_ran",
+        "command"
+      ],
+      "properties": {
+        "base": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExternalRunOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "both_ran": {
+          "type": "boolean"
+        },
+        "command": {
+          "description": "Human-readable command that was run; used in the UI caveat.",
+          "type": "string"
+        },
+        "head": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExternalRunOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ExternalRunOutcome": {
+      "description": "Captured outcome of an external runner (`FLOE_TEST_CMD`, `FLOE_BENCH_CMD`) invoked at one side of the PR.\n\nThe command is whatever the user configures — `vitest run`, `cargo test`, `bun test`, `tinybench`, etc. We keep the raw output around (truncated to a bounded size) so the proof pass can mine it and the reviewer can click to inspect it. Exit status + timing are the key deterministic signals the evidence layer reasons on.",
+      "type": "object",
+      "required": [
+        "duration_ms",
+        "exit_code",
+        "stderr",
+        "stdout",
+        "truncated"
+      ],
+      "properties": {
+        "duration_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "exit_code": {
+          "description": "0 = success. Non-zero surfaces as a failing build/run.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "stdout": {
+          "description": "Truncated stdout (bounded at ~64 KB so large bench runs don't bloat the artifact).",
+          "type": "string"
+        },
+        "truncated": {
+          "description": "True when the captured bytes were truncated — UI shows a caveat.",
+          "type": "boolean"
+        }
+      }
+    },
+    "FileLineSide": {
+      "type": "string",
+      "enum": [
+        "base",
+        "head"
+      ]
+    },
     "Flow": {
-      "description": "A flow — the primary unit of review in v0.3.\n\nThe structural floor produces flows with `FlowSource::Structural`. The LLM-synthesis pass (driven by `adr-server` over the `adr-mcp` stdio tool contract, GLM-4.7 cloud by default or Qwen 3.5 27B local as the offline fallback) replaces the list with LLM-validated flows tagged `FlowSource::Llm`. If the LLM run is rejected, we ship the structural list unchanged and the UI surfaces a \"structural only\" banner.",
+      "description": "A flow — the primary unit of review in v0.3.\n\nThe structural floor produces flows with `FlowSource::Structural`. The LLM-synthesis pass (driven by `floe-server` over the `floe-mcp` stdio tool contract, GLM-4.7 cloud by default or Qwen 3.5 27B local as the offline fallback) replaces the list with LLM-validated flows tagged `FlowSource::Llm`. If the LLM run is rejected, we ship the structural list unchanged and the UI surfaces a \"structural only\" banner.",
       "type": "object",
       "required": [
         "entities",
@@ -753,7 +1059,7 @@
       ],
       "properties": {
         "cost": {
-          "description": "Per-flow review-effort estimate. Populated by the `adr-cost` pass; `None` when the pass hasn't run or errored.",
+          "description": "Per-flow review-effort estimate. Populated by the `floe-cost` pass; `None` when the pass hasn't run or errored.",
           "anyOf": [
             {
               "$ref": "#/definitions/Cost"
@@ -771,7 +1077,7 @@
           }
         },
         "evidence": {
-          "description": "Per-flow evidence — claims that back or caution about the flow's rationale. Populated by the `adr-evidence` pass after flows are finalised; may be empty for a flow with no extractable claims.",
+          "description": "Per-flow evidence — claims that back or caution about the flow's rationale. Populated by the `floe-evidence` pass after flows are finalised; may be empty for a flow with no extractable claims.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Claim"
@@ -1036,6 +1342,293 @@
               "$ref": "#/definitions/NodeId"
             }
           }
+        },
+        {
+          "description": "Data-shape change on a serde-serializable struct, Zod schema, or event-payload interface. `added` / `removed` / `renamed` describe field-level deltas so reviewers see schema drift at a glance. `type_name` is the (file-local) identifier of the struct / `z.object(...)` / interface.",
+          "type": "object",
+          "required": [
+            "added_fields",
+            "file",
+            "kind",
+            "removed_fields",
+            "renamed_fields",
+            "type_name"
+          ],
+          "properties": {
+            "added_fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "file": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "data"
+              ]
+            },
+            "removed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "renamed_fields": {
+              "description": "Pairs of `(before, after)` names for a rename heuristic — same field count, same type, different name.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "type_name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "Entity (Function / Type / State) present in base but absent in head, with no remaining references in head — dead-code removal. `was_exported` is true if the base declaration carried an `export` / `pub` marker; exported deletions are higher-weight.",
+          "type": "object",
+          "required": [
+            "entity_name",
+            "file",
+            "kind",
+            "was_exported"
+          ],
+          "properties": {
+            "entity_name": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "deletion"
+              ]
+            },
+            "was_exported": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "description": "Docstring drifted from the code it documents. `drift_kind` describes the shape of the drift: - `\"param-count\"`  doc lists N params, signature has M ≠ N - `\"param-names\"`  doc lists wrong names (set mismatch) - `\"missing\"`     signature exists but doc comment removed `target` is the (file, function/method qualified name).",
+          "type": "object",
+          "required": [
+            "drift_kind",
+            "file",
+            "kind",
+            "target"
+          ],
+          "properties": {
+            "drift_kind": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "docs"
+              ]
+            },
+            "target": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "Synchronization primitive appeared, disappeared, or changed class. Detected by source-scan — TS: `async-mutex`, `p-limit`, `p-queue`, `async-lock`, `Atomics`; Rust: `Mutex`, `RwLock`, `Atomic*`, `OnceCell`. `before`/`after` are primitive class names; `None` means the primitive wasn't present on that side.",
+          "type": "object",
+          "required": [
+            "file",
+            "kind",
+            "primitive"
+          ],
+          "properties": {
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "before": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "file": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "lock"
+              ]
+            },
+            "primitive": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "InlineNote": {
+      "description": "A reviewer note attached to one object in the artifact.",
+      "type": "object",
+      "required": [
+        "anchor",
+        "author",
+        "created_at",
+        "id",
+        "text"
+      ],
+      "properties": {
+        "anchor": {
+          "$ref": "#/definitions/InlineNoteAnchor"
+        },
+        "author": {
+          "description": "Opaque user identifier — GitHub login when OAuth is on, or `\"local\"` in dev. Not validated against the current session.",
+          "type": "string"
+        },
+        "created_at": {
+          "description": "RFC3339 timestamp, stamped by the server on insert.",
+          "type": "string"
+        },
+        "id": {
+          "description": "`note-<blake3>` — stable across requests, derived from `(anchor, text, created_at)`.",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "InlineNoteAnchor": {
+      "description": "Which object an inline note sticks to. The enum variants carry just the identifiers needed to locate the object inside the artifact; the export pass rehydrates surrounding context (code snippet, flow name, claim text) on read.",
+      "oneOf": [
+        {
+          "description": "Anchored to a hunk by id.",
+          "type": "object",
+          "required": [
+            "hunk_id",
+            "kind"
+          ],
+          "properties": {
+            "hunk_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "hunk"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Anchored to a flow by id.",
+          "type": "object",
+          "required": [
+            "flow_id",
+            "kind"
+          ],
+          "properties": {
+            "flow_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "flow"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Anchored to an entity by its qualified name (as seen in the graph — `ClassName.methodName` for class methods, bare name for free functions).",
+          "type": "object",
+          "required": [
+            "entity_name",
+            "kind"
+          ],
+          "properties": {
+            "entity_name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "entity"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Anchored to a single claim inside `artifact.intent.claims`.",
+          "type": "object",
+          "required": [
+            "claim_index",
+            "kind"
+          ],
+          "properties": {
+            "claim_index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "intent-claim"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Anchored to a line in a source file, either side of the diff.",
+          "type": "object",
+          "required": [
+            "file",
+            "kind",
+            "line",
+            "line_side"
+          ],
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "file-line"
+              ]
+            },
+            "line": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "line_side": {
+              "$ref": "#/definitions/FileLineSide"
+            }
+          }
         }
       ]
     },
@@ -1181,6 +1774,13 @@
         },
         "kind": {
           "$ref": "#/definitions/NodeKind"
+        },
+        "package": {
+          "description": "Owning workspace package, when the root contained a pnpm/npm/ yarn workspace or a `tsconfig.json` with `references`. `None` for single-package repos and for files outside any declared workspace glob. `floe-lsp` / `floe-hunks` use this to distinguish \"intra-package\" from \"cross-package\" call edges.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "provenance": {
           "$ref": "#/definitions/Provenance"
@@ -1328,6 +1928,31 @@
         }
       }
     },
+    "PrSummary": {
+      "description": "LLM-derived reviewer-facing title (+ optional short description) for the PR. Shown in the top spine and sidebar in place of the raw `repo#N` identifier. `description` is only set when the LLM judges it adds signal beyond the headline — clean surface wins.",
+      "type": "object",
+      "required": [
+        "headline",
+        "model"
+      ],
+      "properties": {
+        "description": {
+          "description": "Optional 1–2 sentence description. Omitted when the headline already tells the whole story.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headline": {
+          "description": "One-line reviewer-facing title (≤60 chars).",
+          "type": "string"
+        },
+        "model": {
+          "description": "Model tag that produced this summary (e.g. `\"glm-4.6\"`).",
+          "type": "string"
+        }
+      }
+    },
     "Proof": {
       "description": "Per-flow proof-verification result.",
       "type": "object",
@@ -1455,7 +2080,7 @@
       ]
     },
     "Provenance": {
-      "description": "Every node, edge, and hunk carries provenance so the UI can answer \"where did this fact come from?\" without guessing.\n\n`source` names the pass that produced the fact (e.g. `tree-sitter-typescript`, `scip-typescript`, `adr-hunks/call`). `version` is the tool version at the time of the run. `pass_id` is stable across a single analysis; `hash` is a blake3 of the raw input bytes the pass consumed — used to detect stale cached facts.",
+      "description": "Every node, edge, and hunk carries provenance so the UI can answer \"where did this fact come from?\" without guessing.\n\n`source` names the pass that produced the fact (e.g. `tree-sitter-typescript`, `scip-typescript`, `floe-hunks/call`). `version` is the tool version at the time of the run. `pass_id` is stable across a single analysis; `hash` is a blake3 of the raw input bytes the pass consumed — used to detect stale cached facts.",
       "type": "object",
       "required": [
         "hash",
@@ -1477,6 +2102,78 @@
           "type": "string"
         }
       }
+    },
+    "ReviewVerdict": {
+      "description": "Reviewer verdict — one of three stances. `Comment` means \"I looked and I want to leave a note but not gate the PR\"; distinct from no record at all.",
+      "type": "string",
+      "enum": [
+        "approve",
+        "request-changes",
+        "comment"
+      ]
+    },
+    "ReviewVerdictRecord": {
+      "description": "Persisted verdict — who set it and when. Opaque `author` (GitHub login when OAuth is on, `\"local\"` otherwise), RFC3339 timestamp.",
+      "type": "object",
+      "required": [
+        "author",
+        "set_at",
+        "verdict"
+      ],
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "set_at": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/definitions/ReviewVerdict"
+        }
+      }
+    },
+    "SourceRef": {
+      "description": "Source range a claim points at — lifted from LSP responses (Phase D) or from diagnostic coordinates (compile pass). Gives the UI enough to jump straight to the exact token the claim cites.\n\n`side` is `base` or `head`; `line`/`column` are 1-indexed to match TypeScript compiler output and the conventional editor UX (LSP is 0-indexed but we normalise here). `length` is optional — when absent, UI highlights the whole line.",
+      "type": "object",
+      "required": [
+        "column",
+        "file",
+        "line",
+        "side"
+      ],
+      "properties": {
+        "column": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "file": {
+          "type": "string"
+        },
+        "length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "side": {
+          "$ref": "#/definitions/SourceSide"
+        }
+      }
+    },
+    "SourceSide": {
+      "type": "string",
+      "enum": [
+        "base",
+        "head"
+      ]
     },
     "Span": {
       "description": "Byte-range span in the indicated file. Line/column are derived on demand by the renderer; the artifact stays source-of-truth in bytes.",

@@ -1,9 +1,18 @@
-import type { Artifact, Hunk } from "@/types/artifact";
+import type { Artifact, Hunk, InlineNote } from "@/types/artifact";
 import { edgeById, nameOf, nodeById } from "@/lib/artifact";
 import { pairSegments, type Segment } from "@/lib/diff";
 import { cn } from "@/lib/cn";
+import { InlineNotes } from "@/components/InlineNotes";
 
-export function PrHunks({ artifact }: { artifact: Artifact }) {
+export function PrHunks({
+  artifact,
+  jobId,
+  onInlineNotesChange,
+}: {
+  artifact: Artifact;
+  jobId?: string;
+  onInlineNotesChange?: (next: InlineNote[]) => void;
+}) {
   if (artifact.hunks.length === 0) {
     return (
       <div className="text-[12px] text-muted-foreground">
@@ -14,8 +23,18 @@ export function PrHunks({ artifact }: { artifact: Artifact }) {
   return (
     <ol className="space-y-4">
       {artifact.hunks.map((h, i) => (
-        <li key={i}>
+        <li key={i} className="space-y-1">
           <HunkRow artifact={artifact} hunk={h} />
+          {jobId && onInlineNotesChange && (
+            <div className="pl-[80px]">
+              <InlineNotes
+                jobId={jobId}
+                anchor={{ kind: "hunk", hunk_id: h.id }}
+                notes={artifact.inline_notes ?? []}
+                onChange={onInlineNotesChange}
+              />
+            </div>
+          )}
         </li>
       ))}
     </ol>
@@ -35,9 +54,25 @@ function HunkRow({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {
   );
 }
 
-function TypeBadge({ kind }: { kind: "call" | "state" | "api" }) {
+function TypeBadge({
+  kind,
+}: {
+  kind: "call" | "state" | "api" | "lock" | "data" | "docs" | "deletion";
+}) {
   const dot =
-    kind === "call" ? "bg-sky-500/50" : kind === "state" ? "bg-violet-500/50" : "bg-emerald-500/50";
+    kind === "call"
+      ? "bg-sky-500/50"
+      : kind === "state"
+        ? "bg-violet-500/50"
+        : kind === "lock"
+          ? "bg-amber-500/50"
+          : kind === "data"
+            ? "bg-rose-500/50"
+            : kind === "docs"
+              ? "bg-slate-500/50"
+              : kind === "deletion"
+                ? "bg-zinc-500/50"
+                : "bg-emerald-500/50";
   return (
     <span className="inline-flex items-center gap-1.5 text-[10px] font-mono tracking-wide uppercase text-muted-foreground">
       <span aria-hidden className={cn("inline-block w-1.5 h-1.5 rounded-full", dot)} />
@@ -69,7 +104,96 @@ function HunkBody({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {
           after={k.after_signature ?? null}
         />
       );
+    case "lock":
+      return <LockBody file={k.file} primitive={k.primitive} before={k.before ?? null} after={k.after ?? null} />;
+    case "data":
+      return (
+        <DataBody
+          file={k.file}
+          typeName={k.type_name}
+          added={k.added_fields}
+          removed={k.removed_fields}
+          renamed={k.renamed_fields}
+        />
+      );
+    case "docs":
+      return (
+        <div className="text-[12px]">
+          <div className="font-mono text-foreground">{k.target}</div>
+          <div className="text-muted-foreground mt-0.5">
+            docs drift ({k.drift_kind}) in <span className="font-mono">{k.file}</span>
+          </div>
+        </div>
+      );
+    case "deletion":
+      return (
+        <div className="text-[12px]">
+          <div className="font-mono text-foreground">
+            <span className="text-rose-500">−</span> {k.entity_name}
+          </div>
+          <div className="text-muted-foreground mt-0.5">
+            {k.was_exported ? "exported " : ""}removed from{" "}
+            <span className="font-mono">{k.file}</span>
+          </div>
+        </div>
+      );
   }
+}
+
+function DataBody({
+  file,
+  typeName,
+  added,
+  removed,
+  renamed,
+}: {
+  file: string;
+  typeName: string;
+  added: string[];
+  removed: string[];
+  renamed: [string, string][];
+}) {
+  return (
+    <div className="text-[12px]">
+      <div className="font-mono text-foreground">{typeName}</div>
+      <div className="text-muted-foreground mt-0.5">
+        in <span className="font-mono">{file}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {added.map((f) => (
+          <span key={`a-${f}`} className="text-[10px] font-mono text-emerald-500">+{f}</span>
+        ))}
+        {removed.map((f) => (
+          <span key={`r-${f}`} className="text-[10px] font-mono text-rose-500">−{f}</span>
+        ))}
+        {renamed.map(([b, a]) => (
+          <span key={`n-${b}-${a}`} className="text-[10px] font-mono text-amber-500">{b}→{a}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LockBody({
+  file,
+  primitive,
+  before,
+  after,
+}: {
+  file: string;
+  primitive: string;
+  before: string | null;
+  after: string | null;
+}) {
+  const side = after && !before ? "added" : before && !after ? "removed" : "changed";
+  return (
+    <div className="text-[12px]">
+      <div className="font-mono text-foreground">{primitive}</div>
+      <div className="text-muted-foreground mt-0.5">
+        {side} in <span className="font-mono">{file}</span>
+      </div>
+    </div>
+  );
 }
 
 /* -------------------------------------------------------------------------- */

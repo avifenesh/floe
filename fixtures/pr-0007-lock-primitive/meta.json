@@ -1,0 +1,4 @@
+{
+  "title": "Serialize queue flushes behind an async Mutex",
+  "description": "Adds an `async-mutex` lock around the queue flush path so concurrent flushes no longer interleave. Demonstrates the `lock` hunk type."
+}

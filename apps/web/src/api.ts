@@ -44,11 +44,17 @@ export async function analyzeUrl(url: string): Promise<AnalyzeUrlResult> {
   return (await r.json()) as AnalyzeUrlResult;
 }
 
-export async function analyze(basePath: string, headPath: string): Promise<string> {
+export async function analyze(
+  basePath: string,
+  headPath: string,
+  intent?: unknown,
+): Promise<string> {
+  const body: Record<string, unknown> = { base_path: basePath, head_path: headPath };
+  if (intent !== undefined) body.intent = intent;
   const r = await fetch(`${BACKEND_BASE}/analyze`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ base_path: basePath, head_path: headPath }),
+    body: JSON.stringify(body),
     credentials: "include",
   });
   if (!r.ok) throw new Error(`analyze failed: ${r.status} ${await r.text()}`);
@@ -56,7 +62,7 @@ export async function analyze(basePath: string, headPath: string): Promise<strin
   return j.job_id;
 }
 
-/** One demo PR the landing gallery offers. See `crates/adr-server/src/samples.rs`. */
+/** One demo PR the landing gallery offers. See `crates/floe-server/src/samples.rs`. */
 export interface SampleView {
   id: string;
   title: string;
@@ -177,7 +183,7 @@ export async function fetchMe(): Promise<Me | null> {
 
 /** Dev-only: hit POST /auth/dev/login to fake a session under the
  *  `dev` provider. The server gates this route behind
- *  `ADR_ALLOW_DEV_LOGIN=1`; if disabled, this returns a 404 we
+ *  `FLOE_ALLOW_DEV_LOGIN=1`; if disabled, this returns a 404 we
  *  surface as a friendly error. */
 export async function devLogin(handle: string): Promise<Me> {
   const r = await fetch(`${BACKEND_BASE}/auth/dev/login`, {
@@ -187,7 +193,7 @@ export async function devLogin(handle: string): Promise<Me> {
     credentials: "include",
   });
   if (r.status === 404) {
-    throw new Error("dev login disabled — set ADR_ALLOW_DEV_LOGIN=1 on the server");
+    throw new Error("dev login disabled — set FLOE_ALLOW_DEV_LOGIN=1 on the server");
   }
   if (!r.ok) throw new Error(`devLogin failed: ${r.status} ${await r.text()}`);
   return (await r.json()) as Me;
@@ -217,6 +223,145 @@ export async function fetchFile(
   });
   if (!r.ok) throw new Error(`fetchFile(${side}, ${path}): ${r.status} ${await r.text()}`);
   return r.text();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Inline notes — reviewer annotations anchored to artifact objects.
+// Mirrors `floe_core::inline_notes`.
+// ─────────────────────────────────────────────────────────────────────
+
+export type InlineNoteAnchor =
+  | { kind: "hunk"; hunk_id: string }
+  | { kind: "flow"; flow_id: string }
+  | { kind: "entity"; entity_name: string }
+  | { kind: "intent-claim"; claim_index: number }
+  | { kind: "file-line"; file: string; line_side: "base" | "head"; line: number };
+
+export interface InlineNote {
+  id: string;
+  anchor: InlineNoteAnchor;
+  text: string;
+  author: string;
+  created_at: string;
+}
+
+export async function addInlineNote(
+  jobId: string,
+  anchor: InlineNoteAnchor,
+  text: string,
+): Promise<InlineNote> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}/notes`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ anchor, text }),
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`addInlineNote: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+export async function deleteInlineNote(jobId: string, noteId: string): Promise<void> {
+  const r = await fetch(
+    `${BACKEND_BASE}/analyze/${jobId}/notes/${encodeURIComponent(noteId)}`,
+    { method: "DELETE", credentials: "include" },
+  );
+  if (!r.ok) throw new Error(`deleteInlineNote: ${r.status}`);
+}
+
+/** Returns the export bundle suitable for pasting into a coding agent. */
+// ─────────────────────────────────────────────────────────────────────
+// Review verdict — server-persisted reviewer stance (approve /
+// request-changes / comment). Mirrors floe_core::ReviewVerdictRecord.
+// ─────────────────────────────────────────────────────────────────────
+
+export type ReviewVerdict = "approve" | "request-changes" | "comment";
+
+export interface ReviewVerdictRecord {
+  verdict: ReviewVerdict;
+  author: string;
+  set_at: string;
+}
+
+export async function setReviewVerdict(
+  jobId: string,
+  verdict: ReviewVerdict,
+): Promise<ReviewVerdictRecord> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}/verdict`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ verdict }),
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`setReviewVerdict: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+export interface CompareResponse {
+  a: CompareSide;
+  b: CompareSide;
+  pin_matches: boolean;
+  aggregate_delta: {
+    continuation: number;
+    runtime: number;
+    operational: number;
+    tokens: number;
+  } | null;
+  flows: CompareFlow[];
+}
+
+export interface CompareSide {
+  id: string;
+  repo: string;
+  head_sha: string;
+  headline: string | null;
+  synth_status: string;
+  proof_status: string;
+  cost_status: string;
+  flow_count: number;
+  hunk_count: number;
+  baseline: unknown | null;
+  verdict: ReviewVerdictRecord | null;
+}
+
+export interface CompareFlow {
+  name: string;
+  presence: "both" | "only-a" | "only-b";
+  a: CompareFlowSide | null;
+  b: CompareFlowSide | null;
+}
+
+export interface CompareFlowSide {
+  intent_fit: string | null;
+  proof: string | null;
+  cost_net: number | null;
+}
+
+export async function compareAnalyses(
+  aId: string,
+  bId: string,
+): Promise<CompareResponse> {
+  const r = await fetch(
+    `${BACKEND_BASE}/compare/${encodeURIComponent(aId)}/${encodeURIComponent(bId)}`,
+    { credentials: "include" },
+  );
+  if (!r.ok) throw new Error(`compareAnalyses: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+export async function clearReviewVerdict(jobId: string): Promise<void> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}/verdict`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`clearReviewVerdict: ${r.status}`);
+}
+
+export async function exportInlineNotes(jobId: string): Promise<unknown> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}/notes/export`, {
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`exportInlineNotes: ${r.status}`);
+  return r.json();
 }
 
 /** What the server's env currently resolves to for the three LLM

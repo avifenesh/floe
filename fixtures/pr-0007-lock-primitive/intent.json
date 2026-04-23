@@ -1,0 +1,11 @@
+{
+  "title": "Serialize queue flushes",
+  "summary": "Two concurrent callers of flush() could interleave their writes. Wrap the flush path in an async-mutex Mutex so flushes run one-at-a-time.",
+  "claims": [
+    {
+      "statement": "flush() is serialized via an async-mutex Mutex.",
+      "evidence_type": "observation",
+      "detail": "Expect a `new Mutex()` construction and an `acquire()` call before the flush body."
+    }
+  ]
+}

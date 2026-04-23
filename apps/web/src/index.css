@@ -31,10 +31,17 @@
  */
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    /* Near-white per RFC §6 — warm, not clinical pure white.
+       #FCFBF8 ≈ hsl(45 40% 98%). Makes mono type read as "document"
+       rather than "spreadsheet". */
+    --background: 45 40% 98%;
     --foreground: 0 0% 12%;
 
-    --muted: 0 0% 96%;
+    /* Light-mode muted sits at 92% (was 95%) so card surfaces using
+       `bg-muted/60` register against the 98% page background. Earlier
+       95% gave only a 3% gap — invisible. 92% keeps the warm document
+       feel but lifts cards clearly. */
+    --muted: 45 25% 92%;
     --muted-foreground: 0 0% 45%;
 
     --primary: 0 0% 12%;
@@ -76,6 +83,14 @@
 
   * {
     border-color: hsl(var(--border));
+  }
+
+  /* Accessibility: consistent focus ring for keyboard users. `:focus-
+     visible` only — keeps mouse clicks from getting a ring. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 3px;
   }
 
   html,
@@ -129,29 +144,29 @@
    wrapping <SlideSwitch> remounts the child — the animation plays
    from scratch each time. */
 @layer utilities {
-  @keyframes adr-slide-from-right {
+  @keyframes floe-slide-from-right {
     from { transform: translateX(24px); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
   }
-  @keyframes adr-slide-from-left {
+  @keyframes floe-slide-from-left {
     from { transform: translateX(-24px); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
   }
-  @keyframes adr-slide-fade {
+  @keyframes floe-slide-fade {
     from { opacity: 0; }
     to { opacity: 1; }
   }
-  @keyframes adrLoadingDot {
+  @keyframes floeLoadingDot {
     0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
     40% { opacity: 1; transform: translateY(-1px); }
   }
-  .adr-slide-from-right { animation: adr-slide-from-right 260ms ease-out; }
-  .adr-slide-from-left { animation: adr-slide-from-left 260ms ease-out; }
-  .adr-slide-fade { animation: adr-slide-fade 220ms ease-out; }
+  .floe-slide-from-right { animation: floe-slide-from-right 260ms ease-out; }
+  .floe-slide-from-left { animation: floe-slide-from-left 260ms ease-out; }
+  .floe-slide-fade { animation: floe-slide-fade 220ms ease-out; }
   @media (prefers-reduced-motion: reduce) {
-    .adr-slide-from-right,
-    .adr-slide-from-left,
-    .adr-slide-fade {
+    .floe-slide-from-right,
+    .floe-slide-from-left,
+    .floe-slide-fade {
       animation: none !important;
     }
   }

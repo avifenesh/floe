@@ -9,7 +9,7 @@ import {
 
 export type Theme = "light" | "dark";
 
-const KEY = "adr.theme";
+const KEY = "floe.theme";
 
 function initial(): Theme {
   if (typeof window === "undefined") return "light";

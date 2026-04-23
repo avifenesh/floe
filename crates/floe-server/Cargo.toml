@@ -1,0 +1,55 @@
+[package]
+name = "floe-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Axum orchestrator: POST /analyze, GET /analyze/:id, SSE progress stream."
+
+[[bin]]
+name = "floe-server"
+path = "src/main.rs"
+
+[dependencies]
+floe-core = { workspace = true }
+floe-parse = { workspace = true }
+floe-cfg = { workspace = true }
+floe-hunks = { workspace = true }
+floe-flows = { workspace = true }
+floe-mcp = { workspace = true }
+floe-evidence = { workspace = true }
+floe-cost = { workspace = true }
+floe-probe = { workspace = true }
+floe-lsp = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+uuid = { workspace = true }
+dashmap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }
+dotenvy = { workspace = true }
+libsql = { workspace = true }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-uuid-1"] }
+bb8 = "0.8"
+bb8-postgres = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+oauth2 = { workspace = true }
+axum-extra = { workspace = true }
+time = { workspace = true }
+hex = "0.4"
+url = "2"
+
+[dev-dependencies]
+reqwest = { workspace = true }
+tokio = { workspace = true }
+tempfile = "3"

@@ -24,7 +24,7 @@ function Dot({ delay }: { delay: string }) {
     <span
       className="inline-block w-1 h-1 rounded-full bg-muted-foreground/70"
       style={{
-        animation: "adrLoadingDot 1.2s ease-in-out infinite",
+        animation: "floeLoadingDot 1.2s ease-in-out infinite",
         animationDelay: delay,
       }}
     />

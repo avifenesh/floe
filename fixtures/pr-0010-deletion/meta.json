@@ -1,0 +1,4 @@
+{
+  "title": "Remove dead `legacyFormat` helper",
+  "description": "legacyFormat was the old string format; the new format lives in `canonicalFormat` and nothing calls the old one. Demonstrates the `deletion` hunk type."
+}

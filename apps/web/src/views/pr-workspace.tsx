@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Artifact, Flow } from "@/types/artifact";
 import { PR_SUB_TABS, type PrSubTab, type TopTab } from "./types";
 import { SlideSwitch } from "@/components/SlideSwitch";
-import { intentFitPillClass, proofPillClass, signedCostTextClass } from "@/lib/verdict-color";
+import { intentFitPillClass, proofPillClass, signedCostTextClass, signedCostArrow } from "@/lib/verdict-color";
 import { aggregateCostConfidence, CONFIDENCE_THRESHOLD } from "@/lib/cost-confidence";
 import { PrFlows } from "./pr/PrFlows";
 import { PrHeader } from "./pr/PrHeader";
@@ -10,6 +10,12 @@ import { PrStats } from "./pr/PrStats";
 import { PrHunks } from "./pr/PrHunks";
 import { SourceView } from "./source";
 import { BaselineDriftBanner } from "@/components/BaselineDriftBanner";
+import { computeShipReadiness, shipStateClass, shipStateLabel } from "@/lib/ship-readiness";
+import { clearReviewVerdict, exportInlineNotes, setReviewVerdict } from "@/api";
+import { useToast } from "@/components/Toast";
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { listPrAnalyses, type AnalysisRow } from "@/api";
+import { CompareView } from "@/views/compare-view";
 
 interface Props {
   artifact: Artifact;
@@ -18,6 +24,8 @@ interface Props {
   onTop: (t: TopTab) => void;
   onRebaseline?: () => void;
   rebaselining?: boolean;
+  onInlineNotesChange?: (next: import("@/types/artifact").InlineNote[]) => void;
+  onArtifactChange?: (next: Artifact) => void;
 }
 
 /**
@@ -29,22 +37,44 @@ interface Props {
  *   proof — intent + per-flow proof verdicts with claim breakdown.
  *   meta — identity header + stats + raw hunk list.
  */
-export function PrWorkspace({ artifact, jobId, sub, onTop, onRebaseline, rebaselining }: Props) {
+export function PrWorkspace({
+  artifact,
+  jobId,
+  sub,
+  onTop,
+  onRebaseline,
+  rebaselining,
+  onInlineNotesChange,
+  onArtifactChange,
+}: Props) {
   const order = PR_SUB_TABS.findIndex((t) => t.key === sub);
   const body = (() => {
     switch (sub) {
       case "flows-map":
         return <FlowsMap artifact={artifact} onTop={onTop} />;
       case "diff":
-        return <SourceView artifact={artifact} jobId={jobId} />;
+        return (
+          <SourceView
+            artifact={artifact}
+            jobId={jobId}
+            onInlineNotesChange={onInlineNotesChange}
+          />
+        );
       case "cost":
         return <PrCost artifact={artifact} />;
       case "proof":
         return <PrProof artifact={artifact} onTop={onTop} />;
       case "meta":
-        return <Meta artifact={artifact} />;
+        return (
+          <Meta
+            artifact={artifact}
+            jobId={jobId}
+            onInlineNotesChange={onInlineNotesChange}
+          />
+        );
     }
   })();
+  const ship = computeShipReadiness(artifact);
   return (
     <>
       <BaselineDriftBanner
@@ -52,10 +82,284 @@ export function PrWorkspace({ artifact, jobId, sub, onTop, onRebaseline, rebasel
         onRebaseline={onRebaseline}
         rebaselining={rebaselining}
       />
+      {artifact.notices && artifact.notices.length > 0 && (
+        <div className="mb-3 space-y-1.5">
+          {artifact.notices.map((n, i) => (
+            <div
+              key={i}
+              className="text-[12px] text-muted-foreground bg-muted/40 border border-border/60 rounded px-3 py-2"
+            >
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mb-5 space-y-3">
+        <OnboardingTour storageKey="pr-workspace" />
+        <PrHeader artifact={artifact} />
+        <ShipReadinessCard
+          ship={ship}
+          onOpenWeakest={(flowId) => onTop({ kind: "flow", flowId })}
+        />
+        <PrActions
+          jobId={jobId}
+          artifact={artifact}
+          notesCount={(artifact.inline_notes ?? []).length}
+          onArtifactChange={onArtifactChange}
+        />
+      </div>
       <SlideSwitch viewKey={`pr-${sub}`} order={order}>
         {body}
       </SlideSwitch>
     </>
+  );
+}
+
+/** One-sentence verdict card — the money-shot summary reviewers
+ *  need. Rolls up per-flow intent-fit + proof + cost into a
+ *  single "ship / caution / blocked / pending / no-intent" pill,
+ *  cites the weakest flow (if any), and jumps there on click. */
+function ShipReadinessCard({
+  ship,
+  onOpenWeakest,
+}: {
+  ship: import("@/lib/ship-readiness").ShipReadiness;
+  onOpenWeakest: (flowId: string) => void;
+}) {
+  return (
+    <section
+      className={
+        "rounded-md border px-3 py-2.5 flex items-start gap-3 " +
+        shipStateClass(ship.state)
+      }
+    >
+      <span className="shrink-0 text-[10px] font-mono font-semibold tracking-[0.12em] uppercase rounded border border-current/40 px-1.5 py-0.5 mt-0.5">
+        {shipStateLabel(ship.state)}
+      </span>
+      <div className="flex-1 min-w-0 space-y-1">
+        <p className="text-[13px] leading-relaxed">{ship.headline}</p>
+        {ship.counts.flows > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] font-mono opacity-80">
+            <span>
+              {ship.counts.delivers}/{ship.counts.flows} delivers
+            </span>
+            {ship.counts.partial > 0 && <span>{ship.counts.partial} partial</span>}
+            {ship.counts.unrelated > 0 && <span>{ship.counts.unrelated} unrelated</span>}
+            <span aria-hidden>·</span>
+            <span>{ship.counts.proof_strong} strong proof</span>
+            {ship.counts.proof_partial > 0 && <span>{ship.counts.proof_partial} partial proof</span>}
+            {ship.counts.proof_missing > 0 && <span>{ship.counts.proof_missing} missing proof</span>}
+          </div>
+        )}
+      </div>
+      {ship.weakest && (
+        <button
+          type="button"
+          onClick={() => onOpenWeakest(ship.weakest!.flowId)}
+          className="shrink-0 text-[11px] font-mono underline underline-offset-2 decoration-dotted hover:decoration-solid"
+        >
+          open flow →
+        </button>
+      )}
+    </section>
+  );
+}
+
+type VerdictKind = "approve" | "request-changes" | "comment";
+
+/** Compact strip of PR-level actions: review verdict (approve /
+ *  request-changes / comment), notes export, room for more. Verdict
+ *  persists on `artifact.review_verdict` — same reviewer sees their
+ *  own stance on repeat visits; second reviewer sees the first's. */
+function PrActions({
+  jobId,
+  artifact,
+  notesCount,
+  onArtifactChange,
+}: {
+  jobId: string;
+  artifact: Artifact;
+  notesCount: number;
+  onArtifactChange?: (next: Artifact) => void;
+}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [comparePair, setComparePair] = useState<[AnalysisRow, AnalysisRow] | null>(null);
+  const [compareBusy, setCompareBusy] = useState(false);
+  const currentVerdict = artifact.review_verdict?.verdict ?? null;
+  const openPrevCompare = async () => {
+    if (compareBusy) return;
+    setCompareBusy(true);
+    try {
+      const rows = await listPrAnalyses(50);
+      const current = rows.find((r) => r.id === jobId);
+      if (!current) {
+        toast.push({ title: "This run isn't in history yet", tone: "info" });
+        return;
+      }
+      const prior = rows.find(
+        (r) =>
+          r.id !== jobId &&
+          r.status === "ready" &&
+          r.repo === current.repo &&
+          r.head_sha !== current.head_sha,
+      );
+      if (!prior) {
+        toast.push({
+          title: "No prior analysis for this PR",
+          body: "Compare needs at least one earlier ready run on the same repo + PR.",
+          tone: "info",
+        });
+        return;
+      }
+      setComparePair([prior, current]);
+    } catch (e) {
+      toast.push({ title: "Couldn't load compare", body: String(e), tone: "error" });
+    } finally {
+      setCompareBusy(false);
+    }
+  };
+  const setVerdict = async (v: VerdictKind) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (currentVerdict === v) {
+        await clearReviewVerdict(jobId);
+        onArtifactChange?.({ ...artifact, review_verdict: null });
+      } else {
+        const rec = await setReviewVerdict(jobId, v);
+        onArtifactChange?.({ ...artifact, review_verdict: rec });
+      }
+    } catch (e) {
+      toast.push({
+        title: "Couldn't save verdict",
+        body: String(e),
+        tone: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const exportAll = async () => {
+    if (notesCount === 0) {
+      toast.push({
+        title: "No reviewer notes to export",
+        body: "Leave a 💬 note on any flow, entity, hunk, claim or line first.",
+        tone: "info",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const bundle = await exportInlineNotes(jobId);
+      await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+      toast.push({
+        title: `${notesCount} note${notesCount === 1 ? "" : "s"} copied`,
+        body: "Bundle includes each note's anchor + rehydrated context — paste into the coding agent.",
+        tone: "success",
+      });
+    } catch (e) {
+      toast.push({
+        title: "Export failed",
+        body: String(e),
+        tone: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <VerdictButton
+        label="approve"
+        active={currentVerdict === "approve"}
+        tone="good"
+        emphasis="primary"
+        onClick={() => setVerdict("approve")}
+      />
+      <VerdictButton
+        label="request changes"
+        active={currentVerdict === "request-changes"}
+        tone="bad"
+        onClick={() => setVerdict("request-changes")}
+      />
+      <VerdictButton
+        label="comment"
+        active={currentVerdict === "comment"}
+        tone="neutral"
+        onClick={() => setVerdict("comment")}
+      />
+      <span aria-hidden className="text-muted-foreground/50">·</span>
+      <button
+        type="button"
+        onClick={openPrevCompare}
+        disabled={compareBusy}
+        className="text-[11px] font-mono rounded border border-border/60 bg-background hover:bg-muted/40 px-2.5 py-1 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        title="Compare this analysis with the most recent prior analysis of the same PR."
+      >
+        {compareBusy ? "loading…" : "⇄ compare with previous"}
+      </button>
+      <button
+        type="button"
+        onClick={exportAll}
+        disabled={busy}
+        className="text-[11px] font-mono text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        title="Copy all reviewer notes as JSON for a coding agent"
+      >
+        {busy ? "exporting…" : "→ copy notes for agent"}
+        {notesCount > 0 && !busy && (
+          <span className="ml-1 opacity-70">· {notesCount}</span>
+        )}
+      </button>
+      {comparePair && (
+        <CompareView
+          a={comparePair[0]}
+          b={comparePair[1]}
+          onClose={() => setComparePair(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function VerdictButton({
+  label,
+  tone,
+  active,
+  onClick,
+  emphasis,
+}: {
+  label: string;
+  tone: "good" | "bad" | "neutral";
+  active: boolean;
+  onClick: () => void;
+  /** `primary` gives the button a filled background so the positive
+   *  action leads visually. The other two sit in secondary weight. */
+  emphasis?: "primary" | "secondary";
+}) {
+  const activeTone =
+    tone === "good"
+      ? "border-emerald-500 bg-emerald-500 text-background hover:bg-emerald-500/90 dark:bg-emerald-500 dark:text-foreground"
+      : tone === "bad"
+        ? "border-rose-500 bg-rose-50 text-rose-900 dark:bg-rose-400/20 dark:text-rose-100"
+        : "border-foreground/60 bg-muted/40 text-foreground";
+  const idleTone =
+    emphasis === "primary" && tone === "good"
+      ? "border-emerald-500/60 bg-emerald-50 text-emerald-900 hover:bg-emerald-500 hover:text-background dark:bg-emerald-400/10 dark:text-emerald-100"
+      : "border-border/60 bg-background hover:bg-muted/40 text-muted-foreground";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "text-[11px] font-mono rounded border px-2.5 py-1 transition-colors " +
+        (active ? activeTone : idleTone)
+      }
+      aria-pressed={active}
+    >
+      {active ? "✓ " : ""}
+      {label}
+    </button>
   );
 }
 
@@ -76,17 +380,30 @@ function FlowsMap({
   );
 }
 
-function Meta({ artifact }: { artifact: Artifact }) {
+function Meta({
+  artifact,
+  jobId,
+  onInlineNotesChange,
+}: {
+  artifact: Artifact;
+  jobId?: string;
+  onInlineNotesChange?: (next: import("@/types/artifact").InlineNote[]) => void;
+}) {
   return (
     <div className="space-y-6">
-      <PrHeader artifact={artifact} />
+      {/* PrHeader now lives above every PR sub-tab (see top-level),
+          so Meta skips it and opens on the stats. */}
       <PrStats artifact={artifact} />
       <ReviewerNotes notes={artifact.notes ?? ""} />
       <section className="space-y-4">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide">
           Architectural delta
         </h2>
-        <PrHunks artifact={artifact} />
+        <PrHunks
+          artifact={artifact}
+          jobId={jobId}
+          onInlineNotesChange={onInlineNotesChange}
+        />
       </section>
     </div>
   );
@@ -150,7 +467,7 @@ function PrCost({ artifact }: { artifact: Artifact }) {
         <h2 className="text-[13px] font-mono text-foreground">PR cost</h2>
         <p className="text-[12px] text-muted-foreground max-w-3xl">
           Cost unavailable — the probe pass isn't configured. Set
-          <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">ADR_PROBE_LLM</code>
+          <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">FLOE_PROBE_LLM</code>
           and re-run.
         </p>
       </div>
@@ -232,26 +549,29 @@ function PrCost({ artifact }: { artifact: Artifact }) {
             <>
               <span
                 className={
-                  "text-[22px] font-mono font-semibold tabular-nums leading-none " +
+                  "text-[26px] font-mono font-semibold tabular-nums leading-none inline-flex items-baseline gap-1.5 " +
                   heroColor
                 }
               >
+                <span aria-hidden className="text-[18px] opacity-60">
+                  {signedCostArrow(netPct)}
+                </span>
                 {formatPctHero(netPct)}
               </span>
-              <span className="text-[14px] font-mono tabular-nums text-muted-foreground">
-                <span className={lowConfidence ? "" : signedCostTextClass(totals.net)}>
-                  {formatSigned(totals.net)}
-                </span>{" "}
-                nav-cost units · of baseline
+              <span className="text-[13px] font-mono tabular-nums text-muted-foreground">
+                {formatSigned(totals.net)} nav-cost · of baseline
               </span>
             </>
           ) : (
             <span
               className={
-                "text-[22px] font-mono font-semibold tabular-nums leading-none " +
+                "text-[26px] font-mono font-semibold tabular-nums leading-none inline-flex items-baseline gap-1.5 " +
                 heroColor
               }
             >
+              <span aria-hidden className="text-[18px] opacity-60">
+                {signedCostArrow(totals.net)}
+              </span>
               {formatSigned(totals.net)}
             </span>
           )}

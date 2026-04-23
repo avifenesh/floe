@@ -30,7 +30,7 @@ interface Props {
 
 /** Dev-only sign-in panel. Only renders on localhost (so a deployed
  *  instance never shows it even by accident). Posts to the
- *  `ADR_ALLOW_DEV_LOGIN`-gated server route; surfaces the gate's
+ *  `FLOE_ALLOW_DEV_LOGIN`-gated server route; surfaces the gate's
  *  error if the env var isn't set. After success, hard-reload so
  *  App.tsx re-runs `fetchMe` and routes to the dashboard. */
 function DevLoginPanel() {
@@ -121,7 +121,7 @@ export function LandingPage({ onJob }: Props) {
   }, [pendingJobId]);
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <LandingHero
         signedIn={false}
         githubLoginUrl={githubLoginUrl}

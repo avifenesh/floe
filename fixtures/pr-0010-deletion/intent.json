@@ -1,0 +1,10 @@
+{
+  "title": "Drop legacyFormat",
+  "summary": "legacyFormat hasn't been called since canonicalFormat shipped. Delete it to shrink the export surface.",
+  "claims": [
+    {
+      "statement": "legacyFormat is removed.",
+      "evidence_type": "observation"
+    }
+  ]
+}

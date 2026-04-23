@@ -1,0 +1,4 @@
+{
+  "title": "Rename second parameter but not the docstring",
+  "description": "Signature changes `(id, count)` to `(id, n)`; JSDoc still says `@param count`. Demonstrates the `docs` hunk type."
+}

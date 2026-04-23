@@ -25,13 +25,13 @@ type: reference
 
 - `{{hunk_count}}` — total hunks in the artifact.
 - `{{initial_cluster_count}}` — structural clusters handed to the model.
-- `{{max_tool_calls}}` — per-run tool call budget (default 200, capped by adr-mcp).
+- `{{max_tool_calls}}` — per-run tool call budget (default 200, capped by floe-mcp).
 
 ## Host responsibilities
 
-Before the model sees this prompt, the host (adr-server) must:
+Before the model sees this prompt, the host (floe-server) must:
 
-1. Spawn `adr-mcp` and perform the MCP handshake.
+1. Spawn `floe-mcp` and perform the MCP handshake.
 2. Fetch `list_hunks` and `list_flows_initial` through the MCP child.
 3. Embed the two JSON payloads in the first user message, e.g.:
 

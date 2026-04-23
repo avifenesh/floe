@@ -20,7 +20,7 @@ interface Props {
 export function LandingHero({ signedIn, githubLoginUrl, onTrySample }: Props) {
   return (
     <section className="rounded-2xl border border-border/60 bg-muted/10 overflow-hidden">
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
         {/* Left: pitch */}
         <div className="p-6 md:p-8 space-y-5 min-w-0">
           <div className="space-y-2">
@@ -223,7 +223,7 @@ function MiniFlowCard({
   const proofTone: "ok" | "warn" | "miss" =
     proof === "strong" ? "ok" : proof === "partial" ? "warn" : "miss";
   return (
-    <article className="rounded-lg border border-border/60 bg-background/40 p-3 space-y-2">
+    <article className="rounded-lg border border-border/60 bg-background/40 p-3.5 space-y-2.5 shadow-sm">
       <header className="space-y-0.5">
         <p className="text-[12px] font-mono font-semibold text-foreground leading-tight">
           {name}

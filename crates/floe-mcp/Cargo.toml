@@ -1,0 +1,36 @@
+[package]
+name = "floe-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Host for the @adr/pi-extension tool contract. Validates LLM flow mutations against artifact invariants and produces the final Flow list."
+
+[[bin]]
+name = "floe-mcp"
+path = "src/bin/server.rs"
+
+[dependencies]
+floe-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+schemars.workspace = true
+anyhow.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+# Agent tool surface — read / grep / glob / lsp etc. See
+# `feedback_use_harness_tools` in memory. Replaces the hand-rolled
+# ripgrep+walkdir shim we had under `fs_tools.rs`.
+harness-tools = "0.1.1"
+ignore = { workspace = true }
+globset = { workspace = true }
+grep-searcher = { workspace = true }
+grep-regex = { workspace = true }
+grep-matcher = { workspace = true }
+
+[dev-dependencies]
+insta.workspace = true
+tempfile = "3"

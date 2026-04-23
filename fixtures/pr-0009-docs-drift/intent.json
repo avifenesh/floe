@@ -1,0 +1,10 @@
+{
+  "title": "Rename count to n in fetchBatch",
+  "summary": "fetchBatch's second parameter is renamed from `count` to `n` to match the callers' conventions. Docstring was not updated.",
+  "claims": [
+    {
+      "statement": "fetchBatch's signature gains `(id, n)`.",
+      "evidence_type": "observation"
+    }
+  ]
+}

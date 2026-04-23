@@ -1,17 +1,19 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/adr-core",
-    "crates/adr-parse",
-    "crates/adr-hunks",
-    "crates/adr-cfg",
-    "crates/adr-flows",
-    "crates/adr-server",
-    "crates/adr-cli",
-    "crates/adr-mcp",
-    "crates/adr-evidence",
-    "crates/adr-cost",
-    "crates/adr-probe",
+    "crates/floe-core",
+    "crates/floe-parse",
+    "crates/floe-parse-rust",
+    "crates/floe-hunks",
+    "crates/floe-cfg",
+    "crates/floe-flows",
+    "crates/floe-server",
+    "crates/floe-cli",
+    "crates/floe-mcp",
+    "crates/floe-evidence",
+    "crates/floe-cost",
+    "crates/floe-probe",
+    "crates/floe-lsp",
 ]
 
 [workspace.package]
@@ -19,7 +21,6 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/aviarchi/architetural-review"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -54,17 +55,24 @@ dashmap = "6"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+async-lsp = { version = "0.2", features = ["tokio", "stdio", "tracing"] }
+# lsp-types is re-exported from async-lsp — don't take a direct
+# version here, it'd conflict with async-lsp's internal pin and
+# break Uri↔Url type unification.
+tower = { version = "0.5", features = ["util"] }
 
-adr-core = { path = "crates/adr-core" }
-adr-parse = { path = "crates/adr-parse" }
-adr-hunks = { path = "crates/adr-hunks" }
-adr-cfg = { path = "crates/adr-cfg" }
-adr-flows = { path = "crates/adr-flows" }
-adr-server = { path = "crates/adr-server" }
-adr-mcp = { path = "crates/adr-mcp" }
-adr-evidence = { path = "crates/adr-evidence" }
-adr-cost = { path = "crates/adr-cost" }
-adr-probe = { path = "crates/adr-probe" }
+floe-core = { path = "crates/floe-core" }
+floe-parse = { path = "crates/floe-parse" }
+floe-parse-rust = { path = "crates/floe-parse-rust" }
+floe-hunks = { path = "crates/floe-hunks" }
+floe-cfg = { path = "crates/floe-cfg" }
+floe-flows = { path = "crates/floe-flows" }
+floe-server = { path = "crates/floe-server" }
+floe-mcp = { path = "crates/floe-mcp" }
+floe-evidence = { path = "crates/floe-evidence" }
+floe-cost = { path = "crates/floe-cost" }
+floe-probe = { path = "crates/floe-probe" }
+floe-lsp = { path = "crates/floe-lsp" }
 
 [profile.release]
 lto = "thin"
