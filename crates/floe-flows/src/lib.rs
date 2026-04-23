@@ -180,14 +180,20 @@ fn hunk_entities(hunk: &Hunk, artifact: &Artifact) -> Vec<String> {
             collect_name(&artifact.head, *node, &mut out);
             collect_name(&artifact.base, *node, &mut out);
         }
-        HunkKind::Lock { file, primitive, .. } => {
-            out.push(format!("{}:{}", file, primitive));
+        HunkKind::Lock { primitive, .. } => {
+            // Bare primitive tail so class-prefix bucketing sees a
+            // real identifier, not the file path. `async-mutex.Mutex`
+            // → `Mutex`. Matches how Function/Type entities read.
+            let tail = primitive.rsplit_once('.').map(|(_, t)| t).unwrap_or(primitive);
+            out.push(tail.to_string());
         }
-        HunkKind::Data { file, type_name, .. } => {
-            out.push(format!("{}:{}", file, type_name));
+        HunkKind::Data { type_name, .. } => {
+            out.push(type_name.clone());
         }
-        HunkKind::Docs { file, target, .. } => {
-            out.push(format!("{}:{}", file, target));
+        HunkKind::Docs { target, .. } => {
+            // `target` may be `ClassName.method` — keep as-is so the
+            // bucket resolves to `ClassName` like a Function hunk.
+            out.push(target.clone());
         }
         HunkKind::Deletion { entity_name, .. } => {
             out.push(entity_name.clone());
