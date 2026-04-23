@@ -3,17 +3,21 @@
 One happy-path smoke test: anon visitor → picks a sample → waits for
 pipeline READY → opens a flow workspace.
 
-## Run
+## Run locally
 
 ```
 cd apps/web
-npm i -D @playwright/test
-npx playwright install chromium
-npx playwright test
+npm ci                  # pulls @playwright/test from devDependencies
+npm run e2e:install     # downloads chromium once
+npm run e2e
 ```
 
-`playwright.config.ts` auto-spawns the Rust server + Vite dev server
-locally. In CI, set `CI=true` and have the server already running.
+`playwright.config.ts` auto-spawns the Rust server + Vite dev server.
+Postgres needs to be up first (`just db-up` from the repo root).
+
+Not in required CI yet — the e2e job was getting flaky with the
+postgres + cargo + Vite triplet. Fix + re-enable is tracked as a
+follow-up.
 
 ## Add a test
 
