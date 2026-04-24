@@ -34,18 +34,27 @@ pub fn list_hunks(s: &mut Session) -> Result<Vec<HunkSummary>, ToolError> {
 /// API of this repo" style questions where the model needs a starting
 /// set of qualified names. Kept out of the synthesis prompt (which works
 /// from hunks) but exposed to every caller that talks MCP.
+/// Hard cap on `list_entities` response size. A real codebase can
+/// return 1000+ entity descriptors (~150KB of JSON), which gets
+/// injected into the LLM's context window and ALL subsequent turns
+/// re-ship the same payload. Over this line we return an error and
+/// spill the full list to disk so the reviewer can inspect it; the
+/// caller must narrow the query (add `kind=` / `side=` or switch
+/// to `get_entity(id)` / `neighbors(id, hops=1)`).
+const LIST_ENTITIES_MAX: usize = 200;
+
 pub fn list_entities(
     s: &mut Session,
     side: Option<SnapshotSide>,
     kind: Option<EntityKindTag>,
 ) -> Result<Vec<EntityDescriptor>, ToolError> {
     s.charge_call()?;
-    let mut out: Vec<EntityDescriptor> = Vec::new();
+    let mut all: Vec<EntityDescriptor> = Vec::new();
     if side.is_none() || side == Some(SnapshotSide::Head) {
         for n in &s.artifact.head.nodes {
             let d = node_to_descriptor(n, SnapshotSide::Head);
             if kind.map_or(true, |k| k == d.kind) {
-                out.push(d);
+                all.push(d);
             }
         }
     }
@@ -53,11 +62,48 @@ pub fn list_entities(
         for n in &s.artifact.base.nodes {
             let d = node_to_descriptor(n, SnapshotSide::Base);
             if kind.map_or(true, |k| k == d.kind) {
-                out.push(d);
+                all.push(d);
             }
         }
     }
-    Ok(out)
+    if all.len() > LIST_ENTITIES_MAX {
+        let total = all.len();
+        let spill_dir = std::env::temp_dir().join("floe-spill");
+        let _ = std::fs::create_dir_all(&spill_dir);
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let fname = format!(
+            "list-entities-{}-{ts}.json",
+            side.map(|s| format!("{s:?}")).unwrap_or_else(|| "any".into()),
+        );
+        let path = spill_dir.join(fname);
+        let reason = match serde_json::to_vec_pretty(&all) {
+            Ok(bytes) => {
+                if std::fs::write(&path, &bytes).is_ok() {
+                    format!(
+                        "{total} entities match — above the {LIST_ENTITIES_MAX} safety cap. \
+                         Full list spilled to {}. Narrow the query with `kind=function|type|state` \
+                         or `side=head|base`, or switch to `get_entity(id)` / `neighbors(id, hops=1)`.",
+                        path.display()
+                    )
+                } else {
+                    format!(
+                        "{total} entities match — above the {LIST_ENTITIES_MAX} safety cap. \
+                         Spill write failed; narrow the query and retry."
+                    )
+                }
+            }
+            Err(_) => format!(
+                "{total} entities match — above the {LIST_ENTITIES_MAX} safety cap. \
+                 Narrow the query with kind= / side= and retry."
+            ),
+        };
+        tracing::warn!(total, cap = LIST_ENTITIES_MAX, "list_entities spilled");
+        return Err(ToolError::new(ErrorCode::ResultsTooLarge, reason));
+    }
+    Ok(all)
 }
 
 pub fn get_entity(s: &mut Session, id: &str) -> Result<EntityDescriptor, ToolError> {

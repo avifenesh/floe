@@ -10,6 +10,7 @@ import { PrStats } from "./pr/PrStats";
 import { PrHunks } from "./pr/PrHunks";
 import { SourceView } from "./source";
 import { BaselineDriftBanner } from "@/components/BaselineDriftBanner";
+import { ErroredAxesBanner } from "@/components/ErroredAxesBanner";
 import { computeShipReadiness, shipStateClass, shipStateLabel } from "@/lib/ship-readiness";
 import { clearReviewVerdict, exportInlineNotes, setReviewVerdict } from "@/api";
 import { useToast } from "@/components/Toast";
@@ -77,6 +78,7 @@ export function PrWorkspace({
   const ship = computeShipReadiness(artifact);
   return (
     <>
+      <ErroredAxesBanner jobId={jobId} artifact={artifact} />
       <BaselineDriftBanner
         artifact={artifact}
         onRebaseline={onRebaseline}

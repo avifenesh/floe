@@ -207,6 +207,7 @@ async fn run(artifact: &Artifact, cfg: &LlmConfig) -> Result<Vec<Flow>> {
                             evidence: Vec::new(),
                             cost: None,
                             intent_fit: None,
+                            membership: None,
                             proof: None,
                         });
                         order += 1;
@@ -601,6 +602,7 @@ mod tests {
             evidence: Vec::new(),
             cost: None,
             intent_fit: None,
+                            membership: None,
             proof: None,
         }
     }

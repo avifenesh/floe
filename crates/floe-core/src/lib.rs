@@ -10,6 +10,7 @@ pub mod hunks;
 pub mod cfg;
 pub mod evidence;
 pub mod flow;
+pub mod flow_membership;
 pub mod intent;
 pub mod inline_notes;
 pub mod artifact;
@@ -24,6 +25,10 @@ pub use evidence::{
 pub use intent::{EvidenceType, Intent, IntentClaim, IntentInput};
 pub use inline_notes::{FileLineSide, InlineNote, InlineNoteAnchor};
 pub use flow::{Flow, FlowSource};
+pub use flow_membership::{
+    FlowMembership, MembershipDiagram, MembershipEdge, MembershipGroup, MembershipMember,
+    MembershipShape,
+};
 pub use graph::{Edge, EdgeId, EdgeKind, Graph, Node, NodeId, NodeKind};
 pub use hunks::{Hunk, HunkKind};
 pub use provenance::Provenance;

@@ -77,6 +77,10 @@ pub struct IntentPipeline<'a> {
     pub repo_root: &'a Path,
     pub intent_fit_version: &'a str,
     pub proof_version: &'a str,
+    /// Optional per-turn progress sink. When present, each session
+    /// stamps `intent-fit:<flow_id>` / `proof:<flow_id>` keys so the
+    /// UI can render a 0–100 bar per flow.
+    pub turn_progress: Option<std::sync::Arc<crate::job::TurnProgressMap>>,
 }
 
 #[derive(Debug, Clone)]
@@ -158,6 +162,7 @@ impl<'a> IntentPipeline<'a> {
         let intent_fit_version: Arc<str> = Arc::from(self.intent_fit_version);
         let proof_version: Arc<str> = Arc::from(self.proof_version);
 
+        let progress_arc = self.turn_progress.clone();
         let flow_futures = artifact.flows.iter().map(|flow| {
             let flow_rendered = render_flow(artifact, flow);
             let notes_rendered = if artifact.notes.trim().is_empty() {
@@ -177,9 +182,16 @@ impl<'a> IntentPipeline<'a> {
             let root = Arc::clone(&repo_root);
             let ifv = Arc::clone(&intent_fit_version);
             let pv = Arc::clone(&proof_version);
+            let prog = progress_arc.clone();
             async move {
                 tracing::info!(flow_id = %flow_id, flow_name = %flow_name, "starting per-flow sessions");
                 let um = user_message;
+                let fit_key = prog
+                    .as_ref()
+                    .map(|p| (Arc::clone(p), format!("intent-fit:{flow_id}")));
+                let proof_key = prog
+                    .as_ref()
+                    .map(|p| (Arc::clone(p), format!("proof:{flow_id}")));
                 let (fit_res, proof_res) = tokio::join!(
                     run_session(
                         cfg.as_ref(),
@@ -188,6 +200,7 @@ impl<'a> IntentPipeline<'a> {
                         ifp.as_str(),
                         &um,
                         INTENT_FIT_MAX_TURNS,
+                        fit_key,
                     ),
                     run_session(
                         cfg.as_ref(),
@@ -196,6 +209,7 @@ impl<'a> IntentPipeline<'a> {
                         pp.as_str(),
                         &um,
                         PROOF_MAX_TURNS,
+                        proof_key,
                     ),
                 );
                 let mut errors: Vec<String> = Vec::new();
@@ -324,6 +338,7 @@ async fn run_session(
     system_prompt: &str,
     user_message: &str,
     max_turns: u32,
+    progress_key: Option<(std::sync::Arc<crate::job::TurnProgressMap>, String)>,
 ) -> Result<Value> {
     {
         tracing::info!(
@@ -381,6 +396,10 @@ async fn run_session(
         let mut budget_finalized = false;
         for turn in 0..max_turns {
             tracing::debug!(turn, "glm chat turn");
+            if let Some((map, key)) = progress_key.as_ref() {
+                // 1-indexed turn for the UI's decile-per-turn bar.
+                map.mark(key, turn + 1, max_turns);
+            }
             // Budget nudge landmarks: warn early, force emit late.
             if turn >= budget_warn_turn && !budget_warned {
                 tracing::info!(turn, "injecting budget-warn nudge");
@@ -434,6 +453,25 @@ async fn run_session(
                     return Err(anyhow!("LLM chat failed: {e:#}"));
                 }
             };
+            // Hard token cap — unrelated to the turn budget. A single
+            // big tool response can swell one turn's input past
+            // anything sane; every subsequent turn re-ships it.
+            // 80K covers a normal flow's investigation; beyond that
+            // the session is stuck in a context-explosion spiral.
+            const MAX_SESSION_TOKENS_IN: u32 = 80_000;
+            if resp.tokens_in > MAX_SESSION_TOKENS_IN {
+                tracing::warn!(
+                    turn,
+                    tokens_in = resp.tokens_in,
+                    cap = MAX_SESSION_TOKENS_IN,
+                    "intent/proof session aborted — token budget exceeded"
+                );
+                let _ = mcp.shutdown().await;
+                return Err(anyhow!(
+                    "session exceeded {MAX_SESSION_TOKENS_IN} input tokens (got {}); aborting to avoid runaway GLM cost",
+                    resp.tokens_in
+                ));
+            }
             let msg = resp.message;
             messages.push(msg.clone());
 

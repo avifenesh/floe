@@ -381,3 +381,34 @@ export async function fetchLlmConfig(): Promise<LlmConfigView> {
   if (!r.ok) throw new Error(`fetchLlmConfig: ${r.status}`);
   return r.json();
 }
+
+/** Per-pass turn progress. Keys: `proof`, `membership:<flow_id>`,
+ *  `probe:<probe_name>` etc. Absence = pass hasn't started or is
+ *  done. */
+export interface TurnProgressView {
+  current: number;
+  max: number;
+  updated_at: number;
+}
+
+export async function fetchProgress(
+  jobId: string,
+): Promise<Record<string, TurnProgressView>> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}/progress`, {
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`fetchProgress: ${r.status}`);
+  return r.json();
+}
+
+/** POST /analyze/:id/retry — re-run only the errored axes on an
+ *  existing job. Returns the list of axes the server kicked off. */
+export async function retryErroredAxes(jobId: string): Promise<string[]> {
+  const r = await fetch(`${BACKEND_BASE}/analyze/${jobId}/retry`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!r.ok) throw new Error(`retry failed: ${r.status}`);
+  const body = (await r.json()) as { retried?: string[] };
+  return body.retried ?? [];
+}

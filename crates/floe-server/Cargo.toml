@@ -10,6 +10,13 @@ description = "Axum orchestrator: POST /analyze, GET /analyze/:id, SSE progress 
 name = "floe-server"
 path = "src/main.rs"
 
+[[bin]]
+# Experimental probe for the LLM flow-membership pass. Not wired
+# into the server; run against a cached artifact to see raw GLM
+# output before we commit to a parser / pipeline slot.
+name = "floe-flow-membership"
+path = "src/bin/flow_membership.rs"
+
 [dependencies]
 floe-core = { workspace = true }
 floe-parse = { workspace = true }
@@ -38,6 +45,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 dotenvy = { workspace = true }
+clap = { workspace = true }
 libsql = { workspace = true }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-uuid-1"] }
 bb8 = "0.8"

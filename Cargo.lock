@@ -1062,6 +1062,7 @@ dependencies = [
  "bb8-postgres",
  "blake3",
  "chrono",
+ "clap",
  "dashmap",
  "dotenvy",
  "floe-cfg",

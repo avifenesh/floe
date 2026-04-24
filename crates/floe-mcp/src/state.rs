@@ -129,6 +129,7 @@ impl Session {
             evidence: Vec::new(),
             cost: None,
             intent_fit: None,
+            membership: None,
             proof: None,
         }
     }

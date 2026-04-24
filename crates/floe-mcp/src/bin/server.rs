@@ -342,15 +342,17 @@ fn proof_tools() -> Vec<Value> {
         tool("floe.read_file",
             "Read a file by path, returning newline-joined `L{n}: <text>` \
              lines. Use offset/limit to paginate large files; the file's \
-             total line count is returned so you know when to stop.",
+             total line count is returned so you know when to stop. \
+             `path` is the canonical parameter; `file_path` is accepted \
+             as a legacy alias.",
             json!({
                 "type": "object",
                 "properties": {
+                    "path": { "type": "string" },
                     "file_path": { "type": "string" },
                     "offset": { "type": "integer", "minimum": 1 },
                     "limit": { "type": "integer", "minimum": 1 }
                 },
-                "required": ["file_path"],
                 "additionalProperties": false
             })),
         tool("floe.grep",
@@ -549,6 +551,17 @@ async fn dispatch(server: &Server, name: &str, args: Value) -> DispatchResult {
             let Some(root) = server.fs_root.as_ref() else {
                 return DispatchResult::ProofOff("floe.read_file");
             };
+            // Alias `file_path` → `path`: models sometimes drift
+            // between the two. Harness expects `path`; fold the
+            // legacy key in when present and the canonical is absent.
+            let mut args = args;
+            if let Value::Object(ref mut m) = args {
+                if !m.contains_key("path") {
+                    if let Some(v) = m.remove("file_path") {
+                        m.insert("path".to_string(), v);
+                    }
+                }
+            }
             DispatchResult::Ok(fs_tools::read_file(root, args).await)
         }
         "floe.grep" => {
@@ -643,6 +656,7 @@ fn code_name(c: ErrorCode) -> &'static str {
         ErrorCode::FlowNotFound => "FLOW_NOT_FOUND",
         ErrorCode::CoverageBroken => "COVERAGE_BROKEN",
         ErrorCode::CallBudgetExceeded => "CALL_BUDGET_EXCEEDED",
+        ErrorCode::ResultsTooLarge => "RESULTS_TOO_LARGE",
     }
 }
 

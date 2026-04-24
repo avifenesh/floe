@@ -1112,6 +1112,17 @@
             }
           ]
         },
+        "membership": {
+          "description": "LLM-curated membership view (roles, shapes, summary groups). Populated by the per-flow GLM-4.7 membership pass; `None` when that pass hasn't run. When present, the Flow workspace renders this as the primary graph; the deterministic BFS propagation remains as the fallback floor.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/FlowMembership"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "description": "Reviewer-facing name. Structural flows use `<structural: <bucket>>`; LLM flows use an intent-shaped name.",
           "type": "string"
@@ -1161,6 +1172,50 @@
               "$ref": "#/definitions/FlowSource"
             }
           ]
+        }
+      }
+    },
+    "FlowMembership": {
+      "type": "object",
+      "properties": {
+        "diagrams": {
+          "description": "LLM-emitted flow diagrams. Typically two entries: `head` (current state) and, when base differs meaningfully, `base`. Head should use mermaid `classDef` to mark added / removed / unchanged nodes so the diff is visible without a second picture. Rendered by Mermaid.js in the UI.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MembershipDiagram"
+          }
+        },
+        "edges": {
+          "description": "Edges between members. `kind` is a free-form string (`call`, `data-flow`, `transition`, etc.) so the model can express relationships beyond our hunk kinds.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MembershipEdge"
+          }
+        },
+        "members": {
+          "description": "Entities the model considers first-class participants. Capped at ~10 by the prompt; UI renders these as full nodes.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MembershipMember"
+          }
+        },
+        "model": {
+          "description": "Stamp so the UI can show which model curated this view.",
+          "type": "string"
+        },
+        "shapes": {
+          "description": "Structural shapes (loops, branches, fan-outs) the model declared. Richer than flat edges; UI draws dedicated overlays.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MembershipShape"
+          }
+        },
+        "summary_groups": {
+          "description": "Coarse groupings that collapse periphery (test scaffolding, incidental helpers, peripheral types). UI renders as collapsible chips.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MembershipGroup"
+          }
         }
       }
     },
@@ -1755,6 +1810,141 @@
           "type": "string"
         }
       ]
+    },
+    "MembershipDiagram": {
+      "type": "object",
+      "required": [
+        "kind",
+        "source"
+      ],
+      "properties": {
+        "kind": {
+          "description": "Diagram notation — currently only `\"mermaid\"`; kept string- typed so the schema can widen (DOT, PlantUML) without a breaking bump.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Reviewer-facing label — typically `\"head\"` / `\"base\"` / `\"diff\"`, but free-form so the model can label specialised views (e.g. `\"retry loop only\"`).",
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "MembershipEdge": {
+      "type": "object",
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      }
+    },
+    "MembershipGroup": {
+      "type": "object",
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "count": {
+          "default": 0,
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "label": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "sample_entities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "MembershipMember": {
+      "type": "object",
+      "required": [
+        "entity"
+      ],
+      "properties": {
+        "entity": {
+          "type": "string"
+        },
+        "role": {
+          "description": "Free-form: typically `core` / `entrance` / `exit`.",
+          "type": "string"
+        },
+        "side": {
+          "description": "Free-form label for the model's grouping (`caller`, `flow center`, `transport`, etc.). Not machine-interpretable.",
+          "type": "string"
+        },
+        "why": {
+          "description": "One-sentence justification from the model.",
+          "type": "string"
+        }
+      }
+    },
+    "MembershipShape": {
+      "description": "`kind` drives which optional fields matter: - `loop`:   `nodes` cycle - `branch`: `at` + `paths` (each path is an ordered token list) - `fanout`: `from` + `to`\n\nShapes are allowed to reference tokens that aren't entity names (e.g. `\"return\"`, `\"continue\"`) so the model can model control-flow outcomes; the renderer treats those as labels, not node refs.",
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "Node": {
       "type": "object",

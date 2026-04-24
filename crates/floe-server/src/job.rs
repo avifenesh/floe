@@ -24,6 +24,43 @@ pub struct ProgressEvent {
 }
 
 #[derive(Debug)]
+#[derive(Clone, serde::Serialize)]
+pub struct TurnProgress {
+    pub current: u32,
+    pub max: u32,
+    /// Unix-ms timestamp of last turn advance. Lets the UI show
+    /// "stuck for Xs" when the turn doesn't advance within expected
+    /// latency — distinguishes "still chugging" from "frozen".
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Default)]
+pub struct TurnProgressMap(pub std::sync::RwLock<std::collections::HashMap<String, TurnProgress>>);
+
+impl TurnProgressMap {
+    /// Advance the named pass to `turn` of `max`. Stamps `updated_at`.
+    /// Safe to call from any LLM-loop turn boundary.
+    pub fn mark(&self, pass: &str, turn: u32, max: u32) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        if let Ok(mut g) = self.0.write() {
+            g.insert(
+                pass.to_string(),
+                TurnProgress {
+                    current: turn,
+                    max,
+                    updated_at: now,
+                },
+            );
+        }
+    }
+    pub fn snapshot(&self) -> std::collections::HashMap<String, TurnProgress> {
+        self.0.read().map(|g| g.clone()).unwrap_or_default()
+    }
+}
+
 pub struct Job {
     pub id: uuid::Uuid,
     pub status: RwLock<JobStatus>,
@@ -37,6 +74,23 @@ pub struct Job {
     /// a terminal `ready`/`error` event so a late subscriber still learns the
     /// outcome).
     pub progress: broadcast::Sender<ProgressEvent>,
+    /// Per-pass turn counters. Keys: `proof:<flow>`, `intent-fit:<flow>`,
+    /// `membership:<flow>`, `probe:<probe>`, `synth`. The UI polls
+    /// this to render a 0-100 progress bar per pass — each turn
+    /// advances one decile; between turns the FE interpolates.
+    /// `Arc` so spawned pipeline tasks can share the same live map
+    /// as the job owner.
+    pub turn_progress: Arc<TurnProgressMap>,
+}
+
+impl std::fmt::Debug for Job {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Job")
+            .field("id", &self.id)
+            .field("base_root", &self.base_root)
+            .field("head_root", &self.head_root)
+            .finish()
+    }
 }
 
 impl Job {
@@ -49,6 +103,7 @@ impl Job {
             base_root,
             head_root,
             progress: tx,
+            turn_progress: Arc::new(TurnProgressMap::default()),
         })
     }
 
@@ -70,6 +125,7 @@ impl Job {
             base_root,
             head_root,
             progress: tx,
+            turn_progress: Arc::new(TurnProgressMap::default()),
         })
     }
 }

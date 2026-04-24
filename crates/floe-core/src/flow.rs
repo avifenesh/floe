@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::evidence::{Claim, Cost};
+use crate::flow_membership::FlowMembership;
 use crate::intent::{IntentFit, Proof};
 
 /// A flow — the primary unit of review in v0.3.
@@ -69,6 +70,13 @@ pub struct Flow {
     /// the product, not a cost dimension.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proof: Option<Proof>,
+    /// LLM-curated membership view (roles, shapes, summary groups).
+    /// Populated by the per-flow GLM-4.7 membership pass; `None` when
+    /// that pass hasn't run. When present, the Flow workspace renders
+    /// this as the primary graph; the deterministic BFS propagation
+    /// remains as the fallback floor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub membership: Option<FlowMembership>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

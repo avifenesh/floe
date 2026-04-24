@@ -10,7 +10,9 @@ import { costConfidence, CONFIDENCE_THRESHOLD } from "@/lib/cost-confidence";
 import type { IntentFitVerdict, ProofVerdict } from "@/types/artifact";
 import { NodeDetailPanel } from "./node-detail-panel";
 import { SlideSwitch } from "@/components/SlideSwitch";
-import { LoadingDots } from "@/components/LoadingDots";
+import { TurnProgressBar } from "@/components/TurnProgressBar";
+import { MembershipGraph } from "@/components/MembershipGraph";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { FLOW_SUB_TABS } from "./types";
 import { SourceView } from "./source";
 import { InlineNotes } from "@/components/InlineNotes";
@@ -58,7 +60,7 @@ export function FlowWorkspace({
           />
         );
       case "morph":
-        return <FlowMorph artifact={artifact} flow={flow} />;
+        return <FlowMorph artifact={artifact} flow={flow} jobId={jobId} />;
       case "delta":
         return <FlowDelta artifact={artifact} flow={flow} />;
       case "source":
@@ -71,7 +73,7 @@ export function FlowWorkspace({
           />
         );
       case "cost":
-        return <FlowCost artifact={artifact} flow={flow} onJumpToSource={onJumpToSource} />;
+        return <FlowCost artifact={artifact} flow={flow} jobId={jobId} onJumpToSource={onJumpToSource} />;
       case "proof":
         return (
           <FlowProof
@@ -282,10 +284,12 @@ function kindToLabel(k: import("@/types/artifact").ClaimKind): string {
 function FlowCost({
   artifact,
   flow,
+  jobId,
   onJumpToSource,
 }: {
   artifact: Artifact;
   flow: Flow;
+  jobId?: string;
   onJumpToSource?: (entity?: string) => void;
 }) {
   const status = artifact.cost_status ?? "not-run";
@@ -293,19 +297,23 @@ function FlowCost({
 
   if (status === "analyzing") {
     return (
-      <div className="space-y-2">
-        <h2 className="text-[13px] font-mono text-foreground inline-flex items-baseline gap-2">
-          Cost
-          <span className="text-[11px] text-muted-foreground normal-case font-sans inline-flex items-baseline gap-1">
-            <LoadingDots />
-            <span>analysing</span>
-          </span>
-        </h2>
+      <div className="space-y-3">
+        <h2 className="text-[13px] font-mono text-foreground">Cost — analysing</h2>
         <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
           Measuring navigation cost on base and head snapshots in
           parallel. The delta lands here when both sides complete.
           Keep working in other tabs; it fills in when ready.
         </p>
+        {jobId && (
+          <div className="max-w-md">
+            <TurnProgressBar
+              jobId={jobId}
+              passKey="probe"
+              complete={false}
+              label="probe (base + head)"
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -696,7 +704,61 @@ function formatPctHero(n: number): import("react").ReactNode {
  *  This is the differentiator: nothing else in PR review tells you
  *  "the PR claimed X, this flow delivers it via these specific
  *  symbols, and here's the evidence the LLM found." */
-function FlowMorph({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
+function FlowMorph({
+  artifact,
+  flow,
+  jobId,
+}: {
+  artifact: Artifact;
+  flow: Flow;
+  jobId?: string;
+}) {
+  // Morph reads from intent-fit (synth pass) + proof (proof pass). If
+  // either is still analyzing on this flow and we have no data yet,
+  // render the same loading card cost/intent use. Partial data (e.g.
+  // intent_fit arrived, proof still running) falls through to the
+  // regular body so the reviewer sees what's there.
+  const proofStatus = artifact.proof_status ?? "not-run";
+  const hasNoData = !flow.intent_fit && !flow.proof;
+  if (proofStatus === "analyzing" && hasNoData) {
+    return (
+      <div className="space-y-3">
+        <h2 className="text-[13px] font-mono text-foreground inline-flex items-baseline gap-2">
+          Morph
+          <span className="text-[11px] text-muted-foreground normal-case font-sans">
+            analysing
+          </span>
+        </h2>
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+          Matching this flow to the PR's stated intent and hunting for
+          proof. Keep working in other tabs; it fills in when ready.
+        </p>
+        {jobId && (
+          <div className="max-w-md">
+            <TurnProgressBar
+              jobId={jobId}
+              passKey="proof"
+              complete={false}
+              label="intent + proof"
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (proofStatus === "errored" && hasNoData) {
+    return (
+      <div className="space-y-2">
+        <h2 className="text-[13px] font-mono text-foreground">Morph · errored</h2>
+        <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
+          The intent-fit / proof pass errored before this flow got a
+          verdict. Use the rebaseline button in the PR header to retry
+          the affected pass.
+        </p>
+      </div>
+    );
+  }
+
   const intent = artifact.intent;
   const intentClaims = intent && typeof intent !== "string" ? intent.claims ?? [] : [];
   const intentSummary =
@@ -811,6 +873,16 @@ function FlowMorph({ artifact, flow }: { artifact: Artifact; flow: Flow }) {
       ) : !intent ? (
         <p className="text-[12px] text-muted-foreground italic">
           No intent supplied — pass a PR description to see Intent vs Result.
+        </p>
+      ) : proofStatus === "ready" ? (
+        <p className="text-[12px] text-muted-foreground italic">
+          No per-claim breakdown for this flow — intent was raw text
+          without indexed claims, or the proof pass emitted none.
+        </p>
+      ) : proofStatus === "errored" ? (
+        <p className="text-[12px] text-muted-foreground italic">
+          Proof pass errored before this flow got per-claim breakdown —
+          retry via the drift banner.
         </p>
       ) : (
         <p className="text-[12px] text-muted-foreground italic">
@@ -1180,6 +1252,23 @@ function FlowGraph({
         </p>
       ) : (
         <>
+          {flow.membership ? (
+            <MembershipPanel flow={flow} />
+          ) : artifact.proof_status === "analyzing" && jobId ? (
+            <section className="rounded-md border border-border/60 bg-muted/60 shadow-sm px-4 py-3 space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                  LLM membership · curating
+                </h3>
+              </div>
+              <TurnProgressBar
+                jobId={jobId}
+                passKey={`membership:${flow.id}`}
+                complete={false}
+                label="membership"
+              />
+            </section>
+          ) : null}
           <PropagationStrip flow={flow} />
           <EntityGraph
             items={items}
@@ -1483,14 +1572,17 @@ function EntityGraph({
         {sortedItems.map((it) => (
           <li
             key={it.name}
-            className="flex items-baseline gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30"
+            className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30"
             onClick={() => onSelect(it.name)}
+            title={it.name}
           >
-            <span className="text-[12px] font-mono font-medium text-foreground truncate flex-1 min-w-0">
-              {it.name}
+            <span className="text-[12px] font-mono font-medium text-foreground flex-1 min-w-0 break-all leading-snug">
+              {renderQualifiedName(it.name)}
             </span>
-            <SideStatusChip present={!!it.base} label="base" status={it.status} />
-            <SideStatusChip present={!!it.head} label="head" status={it.status} />
+            <div className="flex items-center gap-1 shrink-0 pt-0.5">
+              <SideStatusChip present={!!it.base} label="base" status={it.status} />
+              <SideStatusChip present={!!it.head} label="head" status={it.status} />
+            </div>
           </li>
         ))}
       </ul>
@@ -1654,6 +1746,22 @@ function EntityCard({
  *  Shows whether an entity is present on this snapshot and, when
  *  present, hints the morph status (added/removed/changed) via the
  *  same tone tokens the SVG nodes use. Not rendered on ≥md. */
+/** Render a qualified entity name with word-break hints at dot
+ *  boundaries. `<wbr>` lets the browser break cleanly between
+ *  class and method when a line is tight — better than letting
+ *  `break-all` split mid-identifier. Falls back to `break-all`
+ *  for pathologically long single tokens. */
+function renderQualifiedName(name: string): import("react").ReactNode {
+  const parts = name.split(".");
+  if (parts.length === 1) return name;
+  return parts.map((p, i) => (
+    <span key={i}>
+      {p}
+      {i < parts.length - 1 && <>.<wbr /></>}
+    </span>
+  ));
+}
+
 function SideStatusChip({
   present,
   label,
@@ -1804,6 +1912,153 @@ function Chip({
  *  Populated from `Flow.propagation_edges` (1-hop in v0). Split into
  *  "→ in" (external entity → flow entity) and "out →" (flow entity
  *  → external) columns so the reviewer sees both directions. */
+/** Render the LLM-curated membership view when present.
+ *  v0: compact text-forward panel above the deterministic graph so
+ *  we can eyeball what the model picked without committing to a
+ *  full SVG re-draw. Real graph rendering lands after we see the
+ *  membership holds up on several real PRs. */
+function MembershipPanel({ flow }: { flow: Flow }) {
+  const m = flow.membership;
+  if (!m) return null;
+  return (
+    <section className="space-y-3">
+      <header className="flex items-baseline justify-between gap-2">
+        <h3 className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+          LLM membership
+        </h3>
+        <span className="text-[10px] font-mono text-muted-foreground/70">
+          {m.model || "glm"} · {(m.members ?? []).length} members ·{" "}
+          {(m.shapes ?? []).length} shapes
+        </span>
+      </header>
+
+      {(m.diagrams ?? []).length > 0 ? (
+        <div
+          className={
+            (m.diagrams ?? []).length > 1
+              ? "grid grid-cols-1 lg:grid-cols-2 gap-3"
+              : "space-y-3"
+          }
+        >
+          {(m.diagrams ?? []).map((d, i) => (
+            <MermaidDiagram
+              key={`${d.label || "diagram"}-${i}`}
+              source={d.source}
+              label={d.label || d.kind}
+            />
+          ))}
+        </div>
+      ) : (
+        <MembershipGraph membership={m} />
+      )}
+
+      {(m.shapes ?? []).some(
+        (s) => s.kind === "branch" && (s.paths ?? []).length > 0,
+      ) && (
+        <section className="space-y-1 pt-2">
+          <h4 className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+            branches
+          </h4>
+          <ul className="text-[11px] font-mono text-foreground space-y-0.5">
+            {(m.shapes ?? [])
+              .filter((s) => s.kind === "branch")
+              .map((s, i) => (
+                <li key={i}>
+                  <span className="text-muted-foreground">@ {s.at}</span>
+                  {(s.paths ?? []).length > 0 && (
+                    <span className="ml-2">
+                      {(s.paths ?? [])
+                        .map((p) => p.join(" → "))
+                        .join("  |  ")}
+                    </span>
+                  )}
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
+
+      {(m.members ?? []).some((x) => x.why) && (
+        <details className="text-[11px]">
+          <summary className="cursor-pointer select-none text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground">
+            member notes ({(m.members ?? []).length})
+          </summary>
+          <ul className="mt-2 space-y-1.5">
+            {(m.members ?? []).map((mem) => (
+              <li
+                key={mem.entity}
+                className="rounded border border-border/50 bg-background px-3 py-1.5"
+              >
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[12px] font-mono font-medium text-foreground">
+                    {mem.entity}
+                  </span>
+                  {mem.role && (
+                    <span className="text-[9px] font-mono uppercase tracking-wide text-muted-foreground">
+                      {mem.role}
+                    </span>
+                  )}
+                  {mem.side && (
+                    <span className="text-[9px] font-mono text-muted-foreground/70">
+                      · {mem.side}
+                    </span>
+                  )}
+                </div>
+                {mem.why && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                    {mem.why}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {(m.summary_groups ?? []).length > 0 && (
+        <section className="space-y-2 pt-3 mt-1 border-t border-border/40">
+          <h4 className="text-[12px] font-semibold text-foreground">
+            Summarised periphery
+          </h4>
+          <ul className="space-y-2">
+            {(m.summary_groups ?? []).map((g, i) => (
+              <li
+                key={i}
+                className="rounded-md border border-border/60 bg-background px-3 py-2"
+              >
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-medium text-foreground">
+                    {g.label}
+                  </span>
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    +{g.count}
+                  </span>
+                </div>
+                {g.note && (
+                  <p className="text-[12px] text-muted-foreground mt-1 leading-snug">
+                    {g.note}
+                  </p>
+                )}
+                {(g.sample_entities ?? []).length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {(g.sample_entities ?? []).map((s) => (
+                      <span
+                        key={s}
+                        className="text-[10px] font-mono text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </section>
+  );
+}
+
 function PropagationStrip({ flow }: { flow: Flow }) {
   const edges = flow.propagation_edges ?? [];
   if (edges.length === 0) return null;
@@ -2094,19 +2349,31 @@ function FlowProof({
 
   if (status === "analyzing") {
     return (
-      <div className="space-y-2">
-        <h2 className="text-[13px] font-mono text-foreground inline-flex items-baseline gap-2">
-          Intent &amp; Proof
-          <span className="text-[11px] text-muted-foreground normal-case font-sans inline-flex items-baseline gap-1">
-            <LoadingDots />
-            <span>analysing</span>
-          </span>
+      <div className="space-y-3">
+        <h2 className="text-[13px] font-mono text-foreground">
+          Intent &amp; Proof — analysing
         </h2>
         <p className="text-[12px] text-muted-foreground max-w-3xl leading-relaxed">
           Matching this flow to the PR's stated intent, then hunting for
           evidence — example files, claim-asserting tests, reviewer notes.
           Keep working in other tabs; results fill in when ready.
         </p>
+        {jobId && (
+          <div className="max-w-md space-y-2">
+            <TurnProgressBar
+              jobId={jobId}
+              passKey={`intent-fit:${flow.id}`}
+              complete={!!flow.intent_fit}
+              label="intent-fit"
+            />
+            <TurnProgressBar
+              jobId={jobId}
+              passKey={`proof:${flow.id}`}
+              complete={!!flow.proof}
+              label="proof"
+            />
+          </div>
+        )}
       </div>
     );
   }

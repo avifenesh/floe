@@ -41,13 +41,22 @@ pub fn cluster(artifact: &Artifact) -> Vec<Flow> {
 /// For each flow, scan head graph edges and keep the ones where one
 /// endpoint is a flow entity and the other isn't — those are 1-hop
 /// propagation boundaries.
-/// Max call-graph hops to walk outward from flow entities when
-/// computing propagation context. Reviewers want "entrance → flow →
-/// end" end-to-end, not just the immediate caller / callee; but
-/// unbounded BFS over a large repo floods the graph with unrelated
-/// code. Three hops covers the common component shape (request
-/// handler → service → helper → leaf) without runaway growth.
-const PROPAGATION_MAX_HOPS: u32 = 3;
+/// Max call-graph hops to walk outward from flow entities. Reviewers
+/// want entrance→flow→end end-to-end, not just the immediate hop;
+/// but unbounded BFS over a branchy codebase balloons the entity
+/// set into the hundreds. 2 hops is the sweet spot — it reveals the
+/// caller-of-caller / callee-of-callee chain in almost every real
+/// component without tipping into fan-out explosions that blow up
+/// downstream probe / proof LLM sessions.
+const PROPAGATION_MAX_HOPS: u32 = 2;
+
+/// Hard cap on propagation entities added per flow, regardless of
+/// hop depth. A single function with 50 callers would otherwise
+/// shove all of them into the flow's reach set. The proof/probe
+/// passes then spend their token budget reading unrelated callers.
+/// 20 is large enough to capture a real component, small enough
+/// that the LLM passes stay scoped.
+const PROPAGATION_MAX_REACH: usize = 20;
 
 fn populate_propagation(flows: &mut [Flow], artifact: &Artifact) {
     use floe_core::graph::EdgeKind;
@@ -111,19 +120,32 @@ fn populate_propagation(flows: &mut [Flow], artifact: &Artifact) {
         let mut reach: std::collections::HashSet<floe_core::graph::NodeId> =
             seed_ids.clone();
         let mut frontier = seed_ids.clone();
-        for _hop in 0..PROPAGATION_MAX_HOPS {
+        let max_reach = seed_ids.len() + PROPAGATION_MAX_REACH;
+        'bfs: for _hop in 0..PROPAGATION_MAX_HOPS {
             let mut next: std::collections::HashSet<floe_core::graph::NodeId> =
                 std::collections::HashSet::new();
             for &id in &frontier {
                 for &c in out_edges.get(&id).into_iter().flatten() {
-                    if !reach.contains(&c) {
+                    if !reach.contains(&c) && !next.contains(&c) {
                         next.insert(c);
+                        if reach.len() + next.len() >= max_reach {
+                            break;
+                        }
                     }
                 }
+                if reach.len() + next.len() >= max_reach {
+                    break 'bfs;
+                }
                 for &c in in_edges.get(&id).into_iter().flatten() {
-                    if !reach.contains(&c) {
+                    if !reach.contains(&c) && !next.contains(&c) {
                         next.insert(c);
+                        if reach.len() + next.len() >= max_reach {
+                            break;
+                        }
                     }
+                }
+                if reach.len() + next.len() >= max_reach {
+                    break 'bfs;
                 }
             }
             if next.is_empty() {
@@ -240,6 +262,7 @@ fn make_flow(index: usize, bucket: &str, refs: &[HunkRef]) -> Flow {
         evidence: Vec::new(),
         cost: None,
         intent_fit: None,
+        membership: None,
         proof: None,
     }
 }

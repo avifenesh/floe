@@ -163,10 +163,51 @@
   .floe-slide-from-right { animation: floe-slide-from-right 260ms ease-out; }
   .floe-slide-from-left { animation: floe-slide-from-left 260ms ease-out; }
   .floe-slide-fade { animation: floe-slide-fade 220ms ease-out; }
+
+  /* Progress-bar animations. Keep the bar reading as "alive" even
+     when the turn count is stalled — GLM sessions can sit mid-turn
+     for 30-60s. */
+  @keyframes floe-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  @keyframes floe-pulse-flash {
+    0%   { background-color: hsl(0 0% 100% / 0.25); }
+    100% { background-color: transparent; }
+  }
+  @keyframes floe-dot-pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 1; }
+  }
+  .floe-shimmer {
+    background-image: linear-gradient(
+      110deg,
+      transparent 0%,
+      transparent 40%,
+      hsl(0 0% 100% / 0.25) 50%,
+      transparent 60%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: floe-shimmer 1.6s linear infinite;
+    pointer-events: none;
+  }
+  .floe-pulse-flash {
+    animation: floe-pulse-flash 600ms ease-out 1;
+    pointer-events: none;
+  }
+  .floe-dot-pulse {
+    display: inline-block;
+    animation: floe-dot-pulse 1.2s ease-in-out infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .floe-slide-from-right,
     .floe-slide-from-left,
-    .floe-slide-fade {
+    .floe-slide-fade,
+    .floe-shimmer,
+    .floe-pulse-flash,
+    .floe-dot-pulse {
       animation: none !important;
     }
   }

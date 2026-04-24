@@ -21,6 +21,7 @@
 //! model calls `floe.finalize`.
 
 pub mod config;
+pub mod flow_membership;
 pub mod glm_client;
 pub mod intent_pipeline;
 pub mod mcp_client;

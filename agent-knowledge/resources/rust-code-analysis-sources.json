@@ -1,0 +1,441 @@
+{
+  "topic": "Rust code analysis pipeline phases B-D: call graph, diagnostics, workspace topology, test output, unsafe detection, claim anchoring",
+  "slug": "rust-code-analysis",
+  "generated": "2026-04-23T00:00:00Z",
+  "depth": "deep",
+  "totalSources": 38,
+  "sources": [
+    {
+      "url": "https://doc.rust-lang.org/cargo/reference/external-tools.html",
+      "title": "External Tools -- The Cargo Book",
+      "qualityScore": 98,
+      "scores": { "authority": 10, "recency": 9, "depth": 10, "examples": 9, "uniqueness": 8 },
+      "keyInsights": [
+        "Canonical JSON schema for --message-format=json output",
+        "compiler-message, compiler-artifact, build-script-executed, build-finished reason types",
+        "package_id and target fields on every message"
+      ]
+    },
+    {
+      "url": "https://doc.rust-lang.org/rustc/json.html",
+      "title": "JSON Output -- The rustc Book",
+      "qualityScore": 97,
+      "scores": { "authority": 10, "recency": 9, "depth": 10, "examples": 10, "uniqueness": 7 },
+      "keyInsights": [
+        "Full diagnostic object schema with spans, children, rendered",
+        "All level values: error, warning, note, help, failure-note, ICE",
+        "suggestion_applicability: MachineApplicable, MaybeIncorrect, HasPlaceholders, Unspecified",
+        "Span fields: file_name, byte_start, byte_end, line_start, line_end, column_start, column_end, is_primary"
+      ]
+    },
+    {
+      "url": "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+      "title": "cargo metadata -- The Cargo Book",
+      "qualityScore": 97,
+      "scores": { "authority": 10, "recency": 9, "depth": 10, "examples": 9, "uniqueness": 7 },
+      "keyInsights": [
+        "packages[], workspace_members[], workspace_default_members[], resolve, workspace_root, target_directory",
+        "source field discriminates path vs registry vs git deps",
+        "dependency kind: null=normal, dev, build",
+        "resolve.nodes[].deps[].dep_kinds for resolved dependency classification"
+      ]
+    },
+    {
+      "url": "https://docs.rs/cargo_metadata/latest/cargo_metadata/",
+      "title": "cargo_metadata crate -- docs.rs",
+      "qualityScore": 90,
+      "scores": { "authority": 9, "recency": 8, "depth": 8, "examples": 8, "uniqueness": 6 },
+      "keyInsights": [
+        "Typed Rust parser for cargo metadata JSON output",
+        "MetadataCommand::new().run() returns Metadata struct",
+        "workspace_packages() iterator over workspace-member packages"
+      ]
+    },
+    {
+      "url": "https://nexte.st/docs/machine-readable/",
+      "title": "About output formats -- cargo-nextest",
+      "qualityScore": 92,
+      "scores": { "authority": 9, "recency": 9, "depth": 8, "examples": 7, "uniqueness": 8 },
+      "keyInsights": [
+        "JUnit XML is the stable output format for test runs",
+        "libtest-json is experimental, schema documented as TODO",
+        "cargo nextest list --message-format json-pretty for test enumeration"
+      ]
+    },
+    {
+      "url": "https://nexte.st/docs/machine-readable/junit/",
+      "title": "JUnit support -- cargo-nextest",
+      "qualityScore": 93,
+      "scores": { "authority": 9, "recency": 9, "depth": 9, "examples": 9, "uniqueness": 7 },
+      "keyInsights": [
+        "testsuite name = test binary, testcase name = test function",
+        "time attribute is decimal seconds duration",
+        "failure, flakyFailure, rerunFailure child elements",
+        "Written to target/nextest/ci/junit.xml with --profile ci"
+      ]
+    },
+    {
+      "url": "https://github.com/nextest-rs/quick-junit",
+      "title": "nextest-rs/quick-junit",
+      "qualityScore": 88,
+      "scores": { "authority": 8, "recency": 9, "depth": 7, "examples": 8, "uniqueness": 7 },
+      "keyInsights": [
+        "Official JUnit library used by nextest itself",
+        "Always in sync with nextest JUnit schema",
+        "Report > TestSuite > TestCase hierarchy"
+      ]
+    },
+    {
+      "url": "https://nexte.st/docs/machine-readable/libtest-json/",
+      "title": "Libtest JSON output -- cargo-nextest",
+      "qualityScore": 70,
+      "scores": { "authority": 8, "recency": 9, "depth": 4, "examples": 3, "uniqueness": 6 },
+      "keyInsights": [
+        "Experimental; requires NEXTEST_EXPERIMENTAL_LIBTEST_JSON=1",
+        "libtest-json and libtest-json-plus variants",
+        "Format spec marked as TODO in docs as of 2026-04",
+        "Version 0.1 as of 2023-12"
+      ]
+    },
+    {
+      "url": "https://rust-lang.github.io/rust-project-goals/2025h1/libtest-json.html",
+      "title": "Finish the libtest json output experiment -- Rust Project Goals",
+      "qualityScore": 85,
+      "scores": { "authority": 9, "recency": 10, "depth": 6, "examples": 3, "uniqueness": 8 },
+      "keyInsights": [
+        "libtest JSON is NOT yet stable as of 2026-04",
+        "Accepted 2025H1 project goal but stabilization work still in progress",
+        "Plan is to move reporting to Cargo level"
+      ]
+    },
+    {
+      "url": "https://rust-lang.github.io/rfcs/3558-libtest-json.html",
+      "title": "RFC 3558 libtest-json",
+      "qualityScore": 82,
+      "scores": { "authority": 9, "recency": 7, "depth": 7, "examples": 4, "uniqueness": 7 },
+      "keyInsights": [
+        "The formal RFC for libtest JSON stabilization",
+        "Required reading to understand what schema is coming"
+      ]
+    },
+    {
+      "url": "https://bheisler.github.io/criterion.rs/book/cargo_criterion/external_tools.html",
+      "title": "External Tools -- Criterion.rs Documentation",
+      "qualityScore": 90,
+      "scores": { "authority": 9, "recency": 7, "depth": 9, "examples": 9, "uniqueness": 9 },
+      "keyInsights": [
+        "cargo-criterion --message-format=json emits benchmark-complete JSON per line",
+        "Fields: id, iteration_count, measured_values, unit, typical, mean, median, change",
+        "change.change: NoChange, Improved, Regressed",
+        "slope may be null; not all benchmarks support it",
+        "target/criterion JSON files are undocumented internals"
+      ]
+    },
+    {
+      "url": "https://github.com/BurntSushi/critcmp",
+      "title": "BurntSushi/critcmp",
+      "qualityScore": 78,
+      "scores": { "authority": 7, "recency": 7, "depth": 6, "examples": 6, "uniqueness": 7 },
+      "keyInsights": [
+        "Compares criterion baselines; reads undocumented internal JSON",
+        "Useful for CI regression detection"
+      ]
+    },
+    {
+      "url": "https://docs.rs/ra_ap_ide/latest/ra_ap_ide/",
+      "title": "ra_ap_ide -- docs.rs",
+      "qualityScore": 85,
+      "scores": { "authority": 8, "recency": 9, "depth": 7, "examples": 5, "uniqueness": 8 },
+      "keyInsights": [
+        "v0.0.329 as of 2026-04; published weekly; no semver guarantees",
+        "Exposes CallHierarchyConfig, CallItem, Analysis::call_hierarchy()",
+        "FindAllRefsConfig, ReferenceSearchResult for reference queries",
+        "Usable as library but 0.0.x means weekly breakage risk"
+      ]
+    },
+    {
+      "url": "https://rust-lang.github.io/rust-analyzer/rust_analyzer/cli/scip/index.html",
+      "title": "rust_analyzer::cli::scip",
+      "qualityScore": 88,
+      "scores": { "authority": 9, "recency": 9, "depth": 7, "examples": 6, "uniqueness": 9 },
+      "keyInsights": [
+        "CLI: rust-analyzer scip <path> --output <path> --exclude-vendored-libraries",
+        "Outputs SCIP protobuf index",
+        "Batch analysis; no LSP handshake needed"
+      ]
+    },
+    {
+      "url": "https://deepwiki.com/rust-lang/rust-analyzer/9.2-scip-and-lsif-indexing",
+      "title": "SCIP and LSIF Indexing -- rust-lang/rust-analyzer DeepWiki",
+      "qualityScore": 87,
+      "scores": { "authority": 7, "recency": 9, "depth": 9, "examples": 7, "uniqueness": 9 },
+      "keyInsights": [
+        "StaticIndex::compute() analyzes whole project; produces TokenStaticData with references field",
+        "Moniker system: hierarchical identifiers for cross-repo navigation",
+        "LSIF: rust-analyzer lsif <path> to stdout as line-delimited JSON",
+        "SCIP: single index.scip protobuf file"
+      ]
+    },
+    {
+      "url": "https://github.com/sourcegraph/scip-rust",
+      "title": "sourcegraph/scip-rust",
+      "qualityScore": 85,
+      "scores": { "authority": 8, "recency": 8, "depth": 6, "examples": 5, "uniqueness": 8 },
+      "keyInsights": [
+        "Thin wrapper around rust-analyzer to generate SCIP data",
+        "Production pattern: shell to rust-analyzer scip binary",
+        "Used by Sourcegraph for production Rust code intelligence"
+      ]
+    },
+    {
+      "url": "https://github.com/Beneficial-AI-Foundation/scip-callgraph",
+      "title": "Beneficial-AI-Foundation/scip-callgraph",
+      "qualityScore": 82,
+      "scores": { "authority": 6, "recency": 9, "depth": 8, "examples": 7, "uniqueness": 10 },
+      "keyInsights": [
+        "v5.0.0 with CI; builds call graph from SCIP JSON",
+        "Pipeline: rust-analyzer scip -> scip print --json -> graph extraction",
+        "Outputs DOT/SVG/D3/CSV formats",
+        "Rust + TypeScript codebase"
+      ]
+    },
+    {
+      "url": "https://crates.io/crates/scip",
+      "title": "scip -- crates.io",
+      "qualityScore": 80,
+      "scores": { "authority": 8, "recency": 8, "depth": 5, "examples": 5, "uniqueness": 6 },
+      "keyInsights": [
+        "v0.3.x; Rust SCIP protobuf parser",
+        "Use Index::parse_from_bytes() to deserialize index.scip"
+      ]
+    },
+    {
+      "url": "https://github.com/rust-lang/project-stable-mir",
+      "title": "rust-lang/project-stable-mir",
+      "qualityScore": 80,
+      "scores": { "authority": 9, "recency": 9, "depth": 6, "examples": 3, "uniqueness": 9 },
+      "keyInsights": [
+        "Renamed to Rustc Librarification Project; crates named rustc_public",
+        "Nightly-only; no stability guarantees as of 2026-04",
+        "Goal: semver-stable API over MIR for external tools",
+        "Not viable for production today"
+      ]
+    },
+    {
+      "url": "https://github.com/endorlabs/MIRAI",
+      "title": "endorlabs/MIRAI",
+      "qualityScore": 75,
+      "scores": { "authority": 7, "recency": 7, "depth": 7, "examples": 5, "uniqueness": 8 },
+      "keyInsights": [
+        "Abstract interpreter over Rust MIR",
+        "Supports --call_graph_config for call graph generation",
+        "Linter mode for finding unintentional panics",
+        "Taint analysis and constant-time analysis modes"
+      ]
+    },
+    {
+      "url": "https://github.com/geiger-rs/cargo-geiger",
+      "title": "geiger-rs/cargo-geiger",
+      "qualityScore": 88,
+      "scores": { "authority": 8, "recency": 9, "depth": 8, "examples": 7, "uniqueness": 9 },
+      "keyInsights": [
+        "v0.13.0 (August 2025); v0.12.0 (April 2025)",
+        "cargo geiger --output-format=Json for machine-readable unsafe report",
+        "Tracks: unsafe functions, expressions, item_impls, item_traits, methods per crate",
+        "Issue #71 (undercounting) fixed in 0.12+"
+      ]
+    },
+    {
+      "url": "https://docs.rs/cargo-geiger-serde/latest/cargo_geiger_serde/",
+      "title": "cargo-geiger-serde -- docs.rs",
+      "qualityScore": 82,
+      "scores": { "authority": 8, "recency": 8, "depth": 6, "examples": 5, "uniqueness": 8 },
+      "keyInsights": [
+        "SafetyReport, QuickSafetyReport, ReportEntry, UnsafeInfo, CounterBlock structs",
+        "Count struct tracks safe vs unsafe_ counts",
+        "Deserialize geiger JSON output with serde"
+      ]
+    },
+    {
+      "url": "https://github.com/rust-lang/rust-clippy/blob/master/clippy_lints/src/undocumented_unsafe_blocks.rs",
+      "title": "clippy undocumented_unsafe_blocks source",
+      "qualityScore": 85,
+      "scores": { "authority": 9, "recency": 8, "depth": 8, "examples": 6, "uniqueness": 9 },
+      "keyInsights": [
+        "Detects BlockCheckMode::UnsafeBlock(UnsafeSource::UserProvided) on HIR Block nodes",
+        "check_block(), check_item(), check_stmt() entry points",
+        "Distinguishes user-written vs compiler-generated unsafe blocks",
+        "Adaptable pattern for tree-sitter or syn detection"
+      ]
+    },
+    {
+      "url": "https://github.com/rust-lang/rust-clippy/blob/master/clippy_lints/src/multiple_unsafe_ops_per_block.rs",
+      "title": "clippy multiple_unsafe_ops_per_block source",
+      "qualityScore": 78,
+      "scores": { "authority": 9, "recency": 8, "depth": 6, "examples": 5, "uniqueness": 7 },
+      "keyInsights": [
+        "Counts distinct unsafe operations within a single unsafe block",
+        "Reference for understanding what constitutes an unsafe operation"
+      ]
+    },
+    {
+      "url": "https://github.com/tree-sitter/tree-sitter-rust",
+      "title": "tree-sitter/tree-sitter-rust",
+      "qualityScore": 90,
+      "scores": { "authority": 9, "recency": 9, "depth": 7, "examples": 7, "uniqueness": 6 },
+      "keyInsights": [
+        "v0.23.x (2025); handles Rust 2024 edition including unsafe extern blocks",
+        "unsafe_block, function_item with unsafe, impl_item with unsafe, extern_block",
+        "call_expression with scoped_identifier for concurrency primitive detection"
+      ]
+    },
+    {
+      "url": "https://github.com/rust-lang/rust-analyzer/pull/17554",
+      "title": "fix: Fix callHierarchy LSP violation -- rust-analyzer PR #17554",
+      "qualityScore": 80,
+      "scores": { "authority": 9, "recency": 8, "depth": 5, "examples": 4, "uniqueness": 8 },
+      "keyInsights": [
+        "Fixes panic in callHierarchy/outgoingCalls",
+        "Pin rust-analyzer to post-2024-10 release to avoid this bug"
+      ]
+    },
+    {
+      "url": "https://github.com/rust-lang/rust-analyzer/issues/17762",
+      "title": "rust-analyzer panic when call callHierarchy/outgoingCalls -- Issue #17762",
+      "qualityScore": 75,
+      "scores": { "authority": 8, "recency": 7, "depth": 4, "examples": 3, "uniqueness": 7 },
+      "keyInsights": [
+        "Documents the outgoing calls panic bug",
+        "Fixed in PR #17554"
+      ]
+    },
+    {
+      "url": "https://medium.com/@selfint/lsp-outside-the-editor-431f77a9a4be",
+      "title": "LSP outside the editor -- Tom Selfin",
+      "qualityScore": 82,
+      "scores": { "authority": 5, "recency": 7, "depth": 8, "examples": 9, "uniqueness": 9 },
+      "keyInsights": [
+        "Full Rust code example for subprocess LSP client",
+        "Command::new + stdin Stdio::piped + stdout Stdio::piped pattern",
+        "Content-Length header framing for JSON-RPC messages",
+        "Initialize -> initialized notification -> requests sequence"
+      ]
+    },
+    {
+      "url": "https://rust-analyzer.github.io/book/contributing/architecture.html",
+      "title": "Architecture -- rust-analyzer",
+      "qualityScore": 88,
+      "scores": { "authority": 9, "recency": 8, "depth": 8, "examples": 4, "uniqueness": 7 },
+      "keyInsights": [
+        "stdout is used for LSP communication exclusively; println breaks the server",
+        "rust-analyzer is the only crate that knows about LSP and JSON serialization",
+        "handlers/request.rs implements all LSP requests"
+      ]
+    },
+    {
+      "url": "https://users.rust-lang.org/t/implementing-a-call-graph-generator-as-a-cargo-extension/127739",
+      "title": "Implementing a call graph generator as a cargo extension -- Rust Forum",
+      "qualityScore": 85,
+      "scores": { "authority": 6, "recency": 10, "depth": 8, "examples": 5, "uniqueness": 10 },
+      "keyInsights": [
+        "April 2025: no mature production-ready call graph tool exists",
+        "Rupta, Crabviz, cargo-call-stack all have memory/compatibility issues",
+        "project-stable-mir recommended as best approach for new tools",
+        "Acceptable tradeoff: sacrifice call graph coverage for performance"
+      ]
+    },
+    {
+      "url": "https://github.com/robinmoussu/cargo-callgraph",
+      "title": "robinmoussu/cargo-callgraph",
+      "qualityScore": 50,
+      "scores": { "authority": 4, "recency": 2, "depth": 5, "examples": 4, "uniqueness": 6 },
+      "keyInsights": [
+        "Abandoned; locked to a 2021 nightly rustc version",
+        "Do not use for new projects"
+      ]
+    },
+    {
+      "url": "https://docs.rs/ra_ap_hir/latest/ra_ap_hir/",
+      "title": "ra_ap_hir -- docs.rs",
+      "qualityScore": 78,
+      "scores": { "authority": 8, "recency": 8, "depth": 6, "examples": 4, "uniqueness": 6 },
+      "keyInsights": [
+        "HIR provides high-level object-oriented access to Rust code",
+        "Bound to a particular crate instance with cfg flags and features applied",
+        "Alternative to MIR for source-level analysis"
+      ]
+    },
+    {
+      "url": "https://doc.rust-lang.org/nightly/nightly-rustc/rustc_public/index.html",
+      "title": "rustc_public -- nightly rustc docs",
+      "qualityScore": 72,
+      "scores": { "authority": 9, "recency": 9, "depth": 4, "examples": 2, "uniqueness": 7 },
+      "keyInsights": [
+        "rustc_public is the new name for stable-MIR API crate",
+        "Nightly-only; not on crates.io yet",
+        "Contains type definitions for external tools interacting with compiler"
+      ]
+    },
+    {
+      "url": "https://dl.acm.org/doi/10.1145/3640537.3641574",
+      "title": "A Context-Sensitive Pointer Analysis Framework for Rust -- ACM CC 2024",
+      "qualityScore": 75,
+      "scores": { "authority": 8, "recency": 8, "depth": 9, "examples": 5, "uniqueness": 9 },
+      "keyInsights": [
+        "Rupta: context-sensitive pointer analysis on Rust MIR",
+        "On-the-fly call graph construction for Rust",
+        "Academic reference; not a production tool"
+      ]
+    },
+    {
+      "url": "https://github.com/rust-lang/cargo/blob/master/tests/testsuite/message_format.rs",
+      "title": "cargo message_format tests -- rust-lang/cargo",
+      "qualityScore": 80,
+      "scores": { "authority": 9, "recency": 8, "depth": 6, "examples": 8, "uniqueness": 6 },
+      "keyInsights": [
+        "Canonical test cases showing expected JSON output shapes",
+        "Good reference for edge cases in message parsing"
+      ]
+    },
+    {
+      "url": "https://github.com/rust-lang/cargo/pull/14598",
+      "title": "fix: correct error count for cargo check --message-format json -- PR #14598",
+      "qualityScore": 72,
+      "scores": { "authority": 9, "recency": 8, "depth": 4, "examples": 3, "uniqueness": 5 },
+      "keyInsights": [
+        "Recent fix to error counting in JSON mode",
+        "Confirms build-finished.success is reliable signal"
+      ]
+    },
+    {
+      "url": "https://crates.io/crates/cargo-geiger",
+      "title": "cargo-geiger -- crates.io",
+      "qualityScore": 80,
+      "scores": { "authority": 7, "recency": 9, "depth": 5, "examples": 5, "uniqueness": 5 },
+      "keyInsights": [
+        "v0.13.0 published August 2025; v0.12.0 April 2025",
+        "Confirms active maintenance"
+      ]
+    },
+    {
+      "url": "https://internals.rust-lang.org/t/a-benchmark-for-rust-call-graph-generators/11273",
+      "title": "A benchmark for Rust call-graph generators -- Rust Internals",
+      "qualityScore": 65,
+      "scores": { "authority": 7, "recency": 4, "depth": 7, "examples": 4, "uniqueness": 8 },
+      "keyInsights": [
+        "Historical evaluation of call graph tools; most are now outdated",
+        "Confirms no dominant production tool has emerged"
+      ]
+    },
+    {
+      "url": "https://users.rust-lang.org/t/call-graph-of-monomorphized-mir-functions/34312",
+      "title": "Call Graph of Monomorphized MIR Functions? -- Rust Forum",
+      "qualityScore": 62,
+      "scores": { "authority": 5, "recency": 4, "depth": 6, "examples": 4, "uniqueness": 7 },
+      "keyInsights": [
+        "collect_crate_mono_items for monomorphized call graph entry points",
+        "TerminatorKind::Call is the MIR node to walk for call edges"
+      ]
+    }
+  ]
+}

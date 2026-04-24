@@ -111,6 +111,22 @@ impl ProbeClient for McpProbeClient {
             keep_alive: self.keep_alive.clone(),
         };
         let resp = self.backing.chat(req).await?;
+        // Hard per-turn input-token cap. Same pattern as the
+        // intent/membership passes: a big `neighbors` or `read_file`
+        // response can balloon one turn's input past anything sane,
+        // and every subsequent turn re-ships the payload.
+        const PROBE_MAX_TOKENS_IN: u32 = 80_000;
+        if resp.tokens_in > PROBE_MAX_TOKENS_IN {
+            tracing::warn!(
+                tokens_in = resp.tokens_in,
+                cap = PROBE_MAX_TOKENS_IN,
+                "probe session aborted — token budget exceeded"
+            );
+            return Err(anyhow!(
+                "probe session exceeded {PROBE_MAX_TOKENS_IN} input tokens (got {}); aborting",
+                resp.tokens_in
+            ));
+        }
         Ok(ChatReply {
             message: Msg {
                 role: resp.message.role,

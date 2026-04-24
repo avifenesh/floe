@@ -17,6 +17,10 @@ pub enum ErrorCode {
     FlowNotFound,
     CoverageBroken,
     CallBudgetExceeded,
+    /// The tool would return more rows than is safe to inject into
+    /// the LLM context. Full result spilled to disk; reason includes
+    /// the path + total count. Caller should narrow the query.
+    ResultsTooLarge,
 }
 
 /// Wire-level error returned by mutation handlers.

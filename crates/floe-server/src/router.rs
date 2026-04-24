@@ -89,11 +89,18 @@ impl axum::extract::FromRef<AppState> for Arc<AuthConfig> {
 
 impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {
     fn from_ref(s: &AppState) -> Self {
-        s.auth
-            .as_ref()
-            .expect("auth routes require AuthConfig")
-            .session_key
-            .clone()
+        // When auth isn't configured (e.g. FLOE_SESSION_SECRET unset
+        // in dev), non-auth routes that pull a `PrivateCookieJar`
+        // extractor still hit this FromRef. Previously that panicked;
+        // returning a deterministic zero-derived Key lets those routes
+        // continue — the jar finds no valid signed cookies and
+        // `Session::from_jar` returns None, which is the intended
+        // "anonymous" path. Anything that *does* require auth checks
+        // `Session::from_jar(...)?` and returns 401 on its own.
+        if let Some(auth) = s.auth.as_ref() {
+            return auth.session_key.clone();
+        }
+        axum_extra::extract::cookie::Key::from(&[0u8; 64])
     }
 }
 
@@ -103,6 +110,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/analyze/url", post(analyze_url))
         .route("/analyze/:id", get(get_job))
         .route("/analyze/:id/stream", get(stream_job))
+        .route("/analyze/:id/progress", get(get_progress))
         .route("/analyze/:id/file", get(get_file))
         .route("/analyses", get(list_pr_analyses))
         .route("/analyses/:id", axum::routing::delete(delete_analysis))
@@ -110,6 +118,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/samples", get(list_samples))
         .route("/analyze/sample/:id", post(analyze_sample))
         .route("/analyze/:id/rebaseline", post(rebaseline))
+        .route("/analyze/:id/retry", post(retry_axes))
         .route("/analyze/:id/notes", post(add_inline_note).get(list_inline_notes))
         .route("/analyze/:id/notes/export", get(export_inline_notes))
         .route("/analyze/:id/notes/:note_id", axum::routing::delete(delete_inline_note))
@@ -794,6 +803,145 @@ async fn analyze_sample(
         inflight.remove_if(&dedupe_key, |_, v| *v == job_id);
     });
     Ok(Json(AnalyzeResponse { job_id }))
+}
+
+/// `POST /analyze/:id/retry` — re-run only the axes that errored
+/// on this job. No body (server derives the axis list from the
+/// current artifact state). Reuses in-memory job + artifact; does
+/// not rebuild hunks/flows. 404 when the job isn't in memory — the
+/// server restart path loses in-memory state, so the caller must
+/// rebaseline instead.
+///
+/// This is a lighter sibling of `/rebaseline` for the common case
+/// "one LLM axis blew its budget, others succeeded — re-run just
+/// the broken one". Keeps synth names, flow ids, cost data that
+/// did land. Real checkpoint-based resume (pick up mid-session
+/// from saved turn state) is a next-session addition.
+async fn retry_axes(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let Some(job_ref) = state.jobs.get(&id).map(|r| r.clone()) else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            "job not in memory — use /rebaseline to rebuild".into(),
+        ));
+    };
+    let Some(mut artifact) = job_ref.artifact.read().await.clone() else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "job has no artifact yet; wait for READY".into(),
+        ));
+    };
+    let head_path = job_ref.head_root.clone();
+    let base_path = job_ref.base_root.clone();
+
+    // Cache write-back on retry is skipped: the retried result lands
+    // in the in-memory job only. Reason: deriving the exact cache key
+    // requires intent_fp + llm_sig that aren't on the artifact alone.
+    // Write-back happens on the next full rebaseline. UI still sees
+    // fresh values via the existing poll.
+    let key = format!("retry-{id}");
+    let mut retried: Vec<&'static str> = Vec::new();
+
+    // Proof / intent-fit retry.
+    if matches!(artifact.proof_status, floe_core::ProofStatus::Errored)
+        && artifact.intent.is_some()
+    {
+        if let Some(proof_cfg) = crate::llm::LlmConfig::from_env_proof() {
+            artifact.proof_status = floe_core::ProofStatus::Analyzing;
+            *job_ref.artifact.write().await = Some(artifact.clone());
+            let job_bg = job_ref.clone();
+            let cache_bg = state.cache.clone();
+            let key_bg = key.clone();
+            let cfg_bg = proof_cfg.clone();
+            let head_bg = head_path.clone();
+            let artifact_clone = artifact.clone();
+            tokio::spawn(async move {
+                crate::worker::run_intent_pass_public(
+                    job_bg,
+                    cache_bg,
+                    false,
+                    key_bg,
+                    artifact_clone,
+                    cfg_bg,
+                    head_bg,
+                )
+                .await;
+            });
+            retried.push("proof");
+
+            if artifact.flows.iter().any(|f| f.membership.is_none()) {
+                let job_bg = job_ref.clone();
+                let cache_bg = state.cache.clone();
+                let key_bg = key.clone();
+                let head_bg = head_path.clone();
+                let artifact_clone = artifact.clone();
+                tokio::spawn(async move {
+                    crate::worker::run_membership_pass_public(
+                        job_bg,
+                        cache_bg,
+                        key_bg,
+                        artifact_clone,
+                        proof_cfg,
+                        head_bg,
+                    )
+                    .await;
+                });
+                retried.push("membership");
+            }
+        }
+    }
+
+    // Cost / probe retry.
+    if matches!(artifact.cost_status, floe_core::CostStatus::Errored) {
+        if let Some(probe_cfg) = crate::llm::LlmConfig::from_env_probe() {
+            artifact.cost_status = floe_core::CostStatus::Analyzing;
+            *job_ref.artifact.write().await = Some(artifact.clone());
+            let job_bg = job_ref.clone();
+            let cache_bg = state.cache.clone();
+            let key_bg = key.clone();
+            tokio::spawn(async move {
+                crate::worker::run_probe_pass_public(crate::worker::ProbePassInputs {
+                    job: job_bg,
+                    cache: cache_bg,
+                    cache_eligible: false,
+                    key: key_bg,
+                    artifact,
+                    probe_cfg,
+                    base_path,
+                    head_path,
+                })
+                .await;
+            });
+            retried.push("probe");
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "retried": retried })))
+}
+
+/// `GET /analyze/:id/progress` — per-pass turn counters.
+///
+/// Lightweight polling endpoint for the UI's progress bars. Returns
+/// a map of pass name → `{current, max, updated_at}`. Passes that
+/// haven't started emit no entry; passes that finished stop
+/// advancing their counter (UI jumps to 100 when the artifact's
+/// status for that pass flips to ready/errored).
+///
+/// Pass-name convention: `proof` / `membership:<flow_id>` /
+/// `probe:<probe_name>` etc.
+async fn get_progress(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let Some(job) = state.jobs.get(&id).map(|r| r.clone()) else {
+        // Not in memory — either never existed or expired. Return
+        // empty map instead of 404 so the FE poller doesn't noisily
+        // error; absence of progress reads as "done / not applicable".
+        return Ok(Json(serde_json::json!({})));
+    };
+    Ok(Json(serde_json::json!(job.turn_progress.snapshot())))
 }
 
 /// `POST /analyze/:id/rebaseline` — spawn a fresh analysis for the

@@ -588,15 +588,39 @@ async fn run_inner(req: PipelineRequest) -> Result<()> {
         let key_bg = key.clone();
         let cache_eligible = true;
         let head_path = head.to_path_buf();
-        let proof_cfg = proof_cfg.expect("gated by will_run_proof");
+        let proof_cfg_clone = proof_cfg.clone().expect("gated by will_run_proof");
+        // Clone so the membership spawn below can still use artifact +
+        // config; intent_pass moves its copy.
+        let artifact_for_intent = artifact.clone();
         tokio::spawn(async move {
             run_intent_pass(
                 job_bg,
                 cache_bg,
                 cache_eligible,
                 key_bg,
+                artifact_for_intent,
+                proof_cfg_clone,
+                head_path,
+            )
+            .await;
+        });
+
+        // Membership pass — per-flow LLM curation of who participates
+        // in the story. Runs in parallel with intent + proof; its
+        // writeback touches `flow.membership` only so there's no
+        // conflict with proof's per-flow `intent_fit` / `proof`.
+        let job_bg = Arc::clone(job);
+        let cache_bg = Arc::clone(cache);
+        let key_bg = key.clone();
+        let head_path = head.to_path_buf();
+        let proof_cfg_mem = proof_cfg.expect("gated by will_run_proof");
+        tokio::spawn(async move {
+            run_membership_pass(
+                job_bg,
+                cache_bg,
+                key_bg,
                 artifact,
-                proof_cfg,
+                proof_cfg_mem,
                 head_path,
             )
             .await;
@@ -812,15 +836,15 @@ async fn run_synth_pass(
 /// Inputs for [`run_probe_pass`] — a spawned tokio task, so all args
 /// are owned. Bundled as a struct so the spawn site reads field-by-
 /// field instead of 8 positional args.
-struct ProbePassInputs {
-    job: Arc<Job>,
-    cache: Arc<Cache>,
-    cache_eligible: bool,
-    key: String,
-    artifact: Artifact,
-    probe_cfg: LlmConfig,
-    base_path: PathBuf,
-    head_path: PathBuf,
+pub struct ProbePassInputs {
+    pub job: Arc<Job>,
+    pub cache: Arc<Cache>,
+    pub cache_eligible: bool,
+    pub key: String,
+    pub artifact: Artifact,
+    pub probe_cfg: LlmConfig,
+    pub base_path: PathBuf,
+    pub head_path: PathBuf,
 }
 
 /// Background task: drive the probe pass, update the artifact's
@@ -841,6 +865,10 @@ async fn run_probe_pass(inputs: ProbePassInputs) {
         percent: 0,
         message: "Probing the repo for navigation cost (base + head)".into(),
     });
+    // Coarse progress — probe has 6 internal steps (3 probes × 2 sides).
+    // We can't peek into floe-probe's per-turn state without an API
+    // change; a coarse 0/6 → 6/6 gives the UI a usable bar.
+    job.turn_progress.mark("probe", 1, 6);
     // Baseline storage root: `<cache_dir>/../baseline`. Cache dir lives
     // at `.floe/cache` by default, so sibling `.floe/baseline` is the
     // natural home for probe output.
@@ -960,6 +988,99 @@ async fn emit(job: &Arc<Job>, stage: &str, percent: u8, message: &str) {
 /// Background task: run intent-fit + proof-verification LLM passes
 /// per flow. Mirrors `run_probe_pass`: stamps `proof_status`
 /// accordingly, writes back to cache on completion.
+/// Per-flow membership probe. One GLM session per flow, results
+/// merge back into `flow.membership` independently. Soft-fail: any
+/// flow whose probe errors just leaves `membership = None`, the UI
+/// falls back to the deterministic propagation graph.
+async fn run_membership_pass(
+    job: Arc<Job>,
+    cache: Arc<Cache>,
+    key: String,
+    artifact: Artifact,
+    llm_cfg: LlmConfig,
+    head_path: PathBuf,
+) {
+    let _ = job.progress.send(ProgressEvent {
+        stage: "membership".into(),
+        percent: 0,
+        message: "Curating per-flow membership".into(),
+    });
+    // Write a tmp artifact the MCP children can load. Same shape as
+    // intent_pipeline's helper — inline here to avoid exposing it.
+    let tmp_path = match write_membership_tmp(&artifact) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "membership: tmp artifact write failed");
+            return;
+        }
+    };
+
+    let flow_ids: Vec<String> = artifact.flows.iter().map(|f| f.id.clone()).collect();
+    let total = flow_ids.len();
+    let mut done = 0usize;
+    for flow_id in flow_ids {
+        let res = crate::llm::flow_membership::probe(
+            &artifact,
+            &flow_id,
+            &llm_cfg,
+            &head_path,
+            &tmp_path,
+            Some(&job.turn_progress),
+        )
+        .await;
+        done += 1;
+        match res {
+            Ok(raw) => {
+                match crate::llm::flow_membership::parse_response(&raw) {
+                    Ok(parsed) => {
+                        let mut m = crate::llm::flow_membership::sanitize(parsed);
+                        m.model = llm_cfg.model.clone();
+                        let fid = flow_id.clone();
+                        let key_bg = key.clone();
+                        merge_into_artifact(&job, &cache, true, &key_bg, move |a| {
+                            if let Some(f) = a.flows.iter_mut().find(|f| f.id == fid) {
+                                f.membership = Some(m);
+                            }
+                        })
+                        .await;
+                    }
+                    Err(e) => {
+                        tracing::warn!(flow = %flow_id, error = %e, "membership parse failed");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(flow = %flow_id, error = %format!("{e:#}"), "membership probe failed");
+            }
+        }
+        let pct = if total == 0 {
+            100
+        } else {
+            (done * 100 / total) as u8
+        };
+        let _ = job.progress.send(ProgressEvent {
+            stage: "membership".into(),
+            percent: pct,
+            message: format!("Membership {done}/{total}"),
+        });
+    }
+
+    let _ = std::fs::remove_file(&tmp_path);
+}
+
+fn write_membership_tmp(artifact: &Artifact) -> Result<PathBuf> {
+    // Membership probe runs with proof-mode fs tools; send the
+    // full artifact (not side-only) so the model can read head
+    // source through the MCP fs root while also seeing flow context.
+    let dir = std::env::temp_dir();
+    let fname = format!("floe-membership-{}.json", uuid::Uuid::new_v4());
+    let path = dir.join(fname);
+    let bytes = serde_json::to_vec(artifact)?;
+    std::fs::write(&path, &bytes)
+        .with_context(|| format!("writing membership tmp artifact to {}", path.display()))?;
+    Ok(path)
+}
+
 async fn run_intent_pass(
     job: Arc<Job>,
     cache: Arc<Cache>,
@@ -980,6 +1101,7 @@ async fn run_intent_pass(
         repo_root: &head_path,
         intent_fit_version: "v0.1.0",
         proof_version: "v0.1.0",
+        turn_progress: Some(job.turn_progress.clone()),
     };
 
     match pipeline.run(&artifact).await {
@@ -1311,3 +1433,37 @@ mod tests {
         );
     }
 }
+
+// --- Public re-exports for the retry endpoint. -----------------------
+//
+// The retry path in router.rs needs to invoke individual pass helpers
+// without running the full worker pipeline. These wrappers are thin
+// aliases so the router doesn't depend on private module items.
+
+pub async fn run_intent_pass_public(
+    job: Arc<Job>,
+    cache: Arc<Cache>,
+    cache_eligible: bool,
+    key: String,
+    artifact: Artifact,
+    proof_cfg: LlmConfig,
+    head_path: PathBuf,
+) {
+    run_intent_pass(job, cache, cache_eligible, key, artifact, proof_cfg, head_path).await;
+}
+
+pub async fn run_membership_pass_public(
+    job: Arc<Job>,
+    cache: Arc<Cache>,
+    key: String,
+    artifact: Artifact,
+    llm_cfg: LlmConfig,
+    head_path: PathBuf,
+) {
+    run_membership_pass(job, cache, key, artifact, llm_cfg, head_path).await;
+}
+
+pub async fn run_probe_pass_public(inputs: ProbePassInputs) {
+    run_probe_pass(inputs).await;
+}
+
