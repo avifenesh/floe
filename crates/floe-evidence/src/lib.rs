@@ -662,6 +662,7 @@ mod tests {
             cost: None,
             intent_fit: None,
             proof: None,
+            membership: None,
         }
     }
 
