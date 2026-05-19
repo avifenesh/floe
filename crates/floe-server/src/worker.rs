@@ -1053,11 +1053,10 @@ async fn run_membership_pass(
                 tracing::warn!(flow = %flow_id, error = %format!("{e:#}"), "membership probe failed");
             }
         }
-        let pct = if total == 0 {
-            100
-        } else {
-            (done * 100 / total) as u8
-        };
+        let pct = (done * 100)
+            .checked_div(total)
+            .map(|v| v as u8)
+            .unwrap_or(100);
         let _ = job.progress.send(ProgressEvent {
             stage: "membership".into(),
             percent: pct,
@@ -1368,6 +1367,40 @@ fn write_artifact_tmp(artifact: &Artifact) -> Result<PathBuf> {
     Ok(path)
 }
 
+// --- Public re-exports for the retry endpoint. -----------------------
+//
+// The retry path in router.rs needs to invoke individual pass helpers
+// without running the full worker pipeline. These wrappers are thin
+// aliases so the router doesn't depend on private module items.
+
+pub async fn run_intent_pass_public(
+    job: Arc<Job>,
+    cache: Arc<Cache>,
+    cache_eligible: bool,
+    key: String,
+    artifact: Artifact,
+    proof_cfg: LlmConfig,
+    head_path: PathBuf,
+) {
+    run_intent_pass(job, cache, cache_eligible, key, artifact, proof_cfg, head_path).await;
+}
+
+pub async fn run_membership_pass_public(
+    job: Arc<Job>,
+    cache: Arc<Cache>,
+    key: String,
+    artifact: Artifact,
+    llm_cfg: LlmConfig,
+    head_path: PathBuf,
+) {
+    run_membership_pass(job, cache, key, artifact, llm_cfg, head_path).await;
+}
+
+pub async fn run_probe_pass_public(inputs: ProbePassInputs) {
+    run_probe_pass(inputs).await;
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1433,37 +1466,3 @@ mod tests {
         );
     }
 }
-
-// --- Public re-exports for the retry endpoint. -----------------------
-//
-// The retry path in router.rs needs to invoke individual pass helpers
-// without running the full worker pipeline. These wrappers are thin
-// aliases so the router doesn't depend on private module items.
-
-pub async fn run_intent_pass_public(
-    job: Arc<Job>,
-    cache: Arc<Cache>,
-    cache_eligible: bool,
-    key: String,
-    artifact: Artifact,
-    proof_cfg: LlmConfig,
-    head_path: PathBuf,
-) {
-    run_intent_pass(job, cache, cache_eligible, key, artifact, proof_cfg, head_path).await;
-}
-
-pub async fn run_membership_pass_public(
-    job: Arc<Job>,
-    cache: Arc<Cache>,
-    key: String,
-    artifact: Artifact,
-    llm_cfg: LlmConfig,
-    head_path: PathBuf,
-) {
-    run_membership_pass(job, cache, key, artifact, llm_cfg, head_path).await;
-}
-
-pub async fn run_probe_pass_public(inputs: ProbePassInputs) {
-    run_probe_pass(inputs).await;
-}
-
