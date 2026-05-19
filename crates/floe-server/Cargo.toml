@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Axum orchestrator: POST /analyze, GET /analyze/:id, SSE progress stream."
+default-run = "floe-server"
 
 [[bin]]
 name = "floe-server"
