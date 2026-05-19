@@ -104,6 +104,7 @@ fn fixture() -> Artifact {
             cost: None,
             intent_fit: None,
             proof: None,
+            membership: None,
         },
         floe_core::Flow {
             id: "flow-struct-1".into(),
@@ -119,6 +120,7 @@ fn fixture() -> Artifact {
             cost: None,
             intent_fit: None,
             proof: None,
+            membership: None,
         },
     ];
     a
