@@ -33,7 +33,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, Key, SameSite, SignedCookieJar};
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    RedirectUrl, Scope, TokenResponse, TokenUrl,
+    EndpointNotSet, EndpointSet, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use serde::Deserialize;
 use time::Duration as TimeDuration;
@@ -157,20 +157,22 @@ impl Session {
 }
 
 /// Build a configured `BasicClient` for GitHub. Kept inline in the
-/// per-request handler rather than cached on AppState — `BasicClient`
+/// per-request handler rather than cached on AppState — the client
 /// is cheap to construct.
-fn github_client(cfg: &GithubConfig) -> BasicClient {
-    BasicClient::new(
-        cfg.client_id.clone(),
-        Some(cfg.client_secret.clone()),
-        AuthUrl::new("https://github.com/login/oauth/authorize".into())
-            .expect("github auth url"),
-        Some(
+fn github_client(
+    cfg: &GithubConfig,
+) -> BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet> {
+    BasicClient::new(cfg.client_id.clone())
+        .set_client_secret(cfg.client_secret.clone())
+        .set_auth_uri(
+            AuthUrl::new("https://github.com/login/oauth/authorize".into())
+                .expect("github auth url"),
+        )
+        .set_token_uri(
             TokenUrl::new("https://github.com/login/oauth/access_token".into())
                 .expect("github token url"),
-        ),
-    )
-    .set_redirect_uri(cfg.redirect_url.clone())
+        )
+        .set_redirect_uri(cfg.redirect_url.clone())
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -261,9 +263,21 @@ pub async fn github_callback(
     }
 
     let client = github_client(gh);
+    // oauth2 v5: pass an explicit HTTP client. Redirects disabled per
+    // the oauth2 docs — following redirects on the token endpoint is
+    // an SSRF vector.
+    let http = oauth2::reqwest::ClientBuilder::new()
+        .redirect(oauth2::reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("http client build failed: {e}"),
+            )
+        })?;
     let token = client
         .exchange_code(AuthorizationCode::new(q.code))
-        .request_async(oauth2::reqwest::async_http_client)
+        .request_async(&http)
         .await
         .map_err(|e| {
             (

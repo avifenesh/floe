@@ -41,7 +41,7 @@ grep-regex = "0.1"
 grep-matcher = "0.1"
 dotenvy = "0.15"
 libsql = { version = "0.9", default-features = false, features = ["core", "serde"] }
-oauth2 = "4"
+oauth2 = "5"
 axum-extra = { version = "0.9", features = ["cookie", "cookie-signed"] }
 time = { version = "0.3", features = ["serde"] }
 insta = { version = "1", features = ["json", "redactions"] }
