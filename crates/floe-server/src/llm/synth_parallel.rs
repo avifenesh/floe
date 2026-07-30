@@ -192,7 +192,7 @@ async fn run(artifact: &Artifact, cfg: &LlmConfig) -> Result<Vec<Flow>> {
                             .cloned()
                             .collect();
                         out.push(Flow {
-                            id: format!("flow-{}", &sub.hunk_ids.join("|"))
+                            id: format!("flow-{}", sub.hunk_ids.join("|"))
                                 .chars()
                                 .take(72)
                                 .collect(),
