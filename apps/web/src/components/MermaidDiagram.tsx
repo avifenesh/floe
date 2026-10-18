@@ -30,12 +30,18 @@ export function MermaidDiagram({
     `mermaid-${Math.random().toString(36).slice(2, 10)}`,
   );
 
+  const renderCount = useRef(0);
+
   useEffect(() => {
     let cancelled = false;
+    // Mermaid removes an existing SVG with the requested ID before rendering.
+    // Effect reruns need distinct IDs so stale work cannot remove a live SVG.
+    const renderId = `${idRef.current}-${++renderCount.current}`;
     setErr(null);
     (async () => {
       try {
         const mod = await import("mermaid");
+        if (cancelled) return;
         const mermaid = mod.default;
         mermaid.initialize({
           startOnLoad: false,
@@ -48,7 +54,7 @@ export function MermaidDiagram({
           securityLevel: "strict",
           fontFamily: "inherit",
         });
-        const { svg } = await mermaid.render(idRef.current, source);
+        const { svg } = await mermaid.render(renderId, source);
         if (cancelled || !hostRef.current) return;
         // DOMPurify returns a TrustedHTML-compatible NODE when we
         // pass `RETURN_DOM_FRAGMENT: true`. We then append the
