@@ -75,14 +75,14 @@ export function MermaidDiagram({
     return (
       <div className="rounded-md border border-amber-400/40 bg-amber-500/5 px-3 py-2 text-[11px] font-mono text-amber-800 dark:text-amber-200 space-y-1">
         <div>Mermaid parse failed — showing raw source.</div>
-        <pre className="whitespace-pre-wrap break-words text-[10px] text-muted-foreground">
+        <pre className="whitespace-pre-wrap wrap-break-word text-[10px] text-muted-foreground">
           {source}
         </pre>
       </div>
     );
   }
   return (
-    <figure className="rounded-md border border-border/60 bg-muted/40 shadow-sm p-3">
+    <figure className="rounded-md border border-border/60 bg-muted/40 shadow-xs p-3">
       {label && (
         <figcaption className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
           {label}

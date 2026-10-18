@@ -189,7 +189,7 @@ function TopTabButton({
       <button
         onClick={onClick}
         className={cn(
-          "text-[12px] tracking-tight transition-colors shrink-0 whitespace-nowrap px-2.5 py-1 rounded border",
+          "text-[12px] tracking-tight transition-colors shrink-0 whitespace-nowrap px-2.5 py-1 rounded-sm border",
           active
             ? "text-foreground font-semibold border-foreground/60 bg-muted/60"
             : "text-muted-foreground font-medium border-border/50 hover:text-foreground hover:border-border",
@@ -213,7 +213,7 @@ function TopTabButton({
       {active && (
         <span
           aria-hidden
-          className="absolute left-0 right-0 -bottom-[1px] h-[2px] rounded-full bg-foreground"
+          className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full bg-foreground"
         />
       )}
     </button>
@@ -243,7 +243,7 @@ function SubTabButton({
       {active && (
         <span
           aria-hidden
-          className="absolute left-0 right-0 -bottom-[1px] h-[1.5px] bg-foreground/70 rounded-full"
+          className="absolute left-0 right-0 -bottom-px h-[1.5px] bg-foreground/70 rounded-full"
         />
       )}
     </button>

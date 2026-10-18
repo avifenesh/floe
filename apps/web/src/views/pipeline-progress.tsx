@@ -175,7 +175,7 @@ export function PipelineProgress({ jobId, backendBase }: Props) {
           return (
             <li
               key={s.id}
-              className={`grid grid-cols-[1.5rem,1fr] gap-3 py-2 px-3 border-l-2 rounded-r transition-colors ${
+              className={`grid grid-cols-[1.5rem_1fr] gap-3 py-2 px-3 border-l-2 rounded-r transition-colors ${
                 isActive
                   ? "border-foreground bg-foreground/5"
                   : isErrored

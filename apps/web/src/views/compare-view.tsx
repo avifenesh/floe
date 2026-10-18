@@ -109,7 +109,7 @@ function SideHeader({
   side: CompareResponse["a"];
 }) {
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-3 py-2 space-y-0.5">
+    <div className="rounded-sm border border-border/60 bg-muted/20 px-3 py-2 space-y-0.5">
       <div className="flex items-baseline gap-2">
         <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
           {label}
@@ -139,7 +139,7 @@ function PinBanner({ matches }: { matches: boolean }) {
   return (
     <div
       className={
-        "rounded border px-3 py-1.5 text-[11px] font-mono " +
+        "rounded-sm border px-3 py-1.5 text-[11px] font-mono " +
         (matches
           ? "border-emerald-400/50 bg-emerald-50 text-emerald-900 dark:bg-emerald-400/10 dark:text-emerald-200"
           : "border-amber-400/50 bg-amber-50 text-amber-900 dark:bg-amber-400/10 dark:text-amber-200")
@@ -175,7 +175,7 @@ function AggregateRow({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border border-border/60 bg-background px-2 py-1">
+    <div className="rounded-sm border border-border/60 bg-background px-2 py-1">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
@@ -197,7 +197,7 @@ function FlowDiff({ flows }: { flows: CompareFlow[] }) {
       <h3 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
         Per-flow verdict diff ({flows.length})
       </h3>
-      <ul className="divide-y divide-border/50 rounded border border-border/50">
+      <ul className="divide-y divide-border/50 rounded-sm border border-border/50">
         {flows.map((f) => (
           <li key={f.name + f.presence} className="px-3 py-2 space-y-1">
             <div className="flex items-baseline gap-2">

@@ -78,7 +78,7 @@ export function OnboardingTour({ storageKey }: { storageKey: string }) {
   const s = steps[step] ?? steps[0];
   const last = step === steps.length - 1;
   return (
-    <section className="rounded-md border border-dashed border-border/70 bg-muted/40 px-3.5 py-3 space-y-2 text-[11px] text-foreground shadow-sm">
+    <section className="rounded-md border border-dashed border-border/70 bg-muted/40 px-3.5 py-3 space-y-2 text-[11px] text-foreground shadow-xs">
       <header className="flex items-baseline justify-between gap-2">
         <p className="font-semibold text-[12px]">{s.title}</p>
         <div className="flex items-baseline gap-3">
@@ -116,7 +116,7 @@ export function OnboardingTour({ storageKey }: { storageKey: string }) {
             <button
               type="button"
               onClick={() => setStep((x) => Math.max(0, x - 1))}
-              className="text-[11px] font-mono rounded border border-border/60 bg-background hover:bg-muted/40 px-2 py-0.5 transition-colors"
+              className="text-[11px] font-mono rounded-sm border border-border/60 bg-background hover:bg-muted/40 px-2 py-0.5 transition-colors"
             >
               back
             </button>
@@ -126,7 +126,7 @@ export function OnboardingTour({ storageKey }: { storageKey: string }) {
             onClick={() =>
               last ? finish() : setStep((x) => Math.min(steps.length - 1, x + 1))
             }
-            className="text-[11px] font-mono rounded border border-foreground/70 bg-foreground text-background hover:bg-foreground/90 px-2.5 py-0.5 transition-colors"
+            className="text-[11px] font-mono rounded-sm border border-foreground/70 bg-foreground text-background hover:bg-foreground/90 px-2.5 py-0.5 transition-colors"
           >
             {last ? "got it" : "next →"}
           </button>

@@ -134,7 +134,7 @@ export function NodeDetailPanel({
                 <li key={f.id}>
                   <button
                     onClick={() => onJumpFlow?.(f.id)}
-                    className="text-[11px] font-mono text-foreground hover:bg-muted/40 border border-border/60 rounded px-2 py-0.5 transition-colors"
+                    className="text-[11px] font-mono text-foreground hover:bg-muted/40 border border-border/60 rounded-sm px-2 py-0.5 transition-colors"
                     title={f.rationale}
                   >
                     {f.name}
@@ -188,7 +188,7 @@ export function NodeDetailPanel({
 function CostCell({ label, value }: { label: string; value: number }) {
   const rounded = Math.round(value);
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-2.5 py-1.5">
+    <div className="rounded-sm border border-border/60 bg-muted/20 px-2.5 py-1.5">
       <div className="text-[9px] font-mono uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
@@ -256,7 +256,7 @@ function SourceSnippet({
     );
   }
   return (
-    <pre className="text-[11px] font-mono leading-snug whitespace-pre-wrap bg-muted/20 border border-border/60 rounded px-2 py-1.5 max-h-72 overflow-y-auto text-foreground">
+    <pre className="text-[11px] font-mono leading-snug whitespace-pre-wrap bg-muted/20 border border-border/60 rounded-sm px-2 py-1.5 max-h-72 overflow-y-auto text-foreground">
       {text}
     </pre>
   );

@@ -41,7 +41,7 @@ export function FileSidebar({ files, selected, onSelect, hunkCounts, flowsByFile
                 onClick={() => onSelect(f.path)}
                 className={cn(
                   "w-full text-left px-1.5 py-0.5 text-[11px] font-mono flex items-center gap-1.5 min-w-0",
-                  "transition-colors rounded-sm",
+                  "transition-colors rounded-xs",
                   active
                     ? "bg-muted/50 text-foreground"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/30",

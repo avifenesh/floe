@@ -141,7 +141,7 @@ export function Palette({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] bg-black/40 backdrop-blur-xs"
       onClick={() => setOpen(false)}
     >
       <div
@@ -170,7 +170,7 @@ export function Palette({
               }
             }}
             placeholder="Jump to flow or view…"
-            className="w-full bg-transparent text-[13px] font-mono placeholder:text-muted-foreground/60 focus:outline-none"
+            className="w-full bg-transparent text-[13px] font-mono placeholder:text-muted-foreground/60 focus:outline-hidden"
           />
         </div>
         <ul className="max-h-[50vh] overflow-y-auto py-1">

@@ -43,7 +43,7 @@ export function PrHunks({
 
 function HunkRow({ artifact, hunk }: { artifact: Artifact; hunk: Hunk }) {
   return (
-    <div className="grid grid-cols-[68px,1fr] gap-3 items-start">
+    <div className="grid grid-cols-[68px_1fr] gap-3 items-start">
       <div className="pt-0.5">
         <TypeBadge kind={hunk.kind.kind} />
       </div>
@@ -292,14 +292,14 @@ function EdgeRow({
   return (
     <div
       className={cn(
-        "text-[13px] font-mono flex items-center gap-2 px-2 py-0.5 rounded",
+        "text-[13px] font-mono flex items-center gap-2 px-2 py-0.5 rounded-sm",
         kind === "add" &&
           (hasSegments
-            ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
+            ? "bg-emerald-50 dark:bg-emerald-400/6"
             : "bg-emerald-200 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
         kind === "remove" &&
           (hasSegments
-            ? "bg-rose-50 dark:bg-rose-400/[0.06]"
+            ? "bg-rose-50 dark:bg-rose-400/6"
             : "bg-rose-200 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
       )}
     >
@@ -401,7 +401,7 @@ function VariantChip({ kind, value }: { kind: "add" | "remove"; value: string })
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[12px] font-mono px-2 py-0.5 rounded",
+        "inline-flex items-center gap-1 text-[12px] font-mono px-2 py-0.5 rounded-sm",
         kind === "add" && "bg-emerald-200 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50",
         kind === "remove" && "bg-rose-200 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50",
       )}
@@ -464,21 +464,21 @@ function SignatureRow({
   return (
     <div
       className={cn(
-        "text-[12px] font-mono flex items-start gap-2 px-2 py-0.5 rounded min-w-0",
+        "text-[12px] font-mono flex items-start gap-2 px-2 py-0.5 rounded-sm min-w-0",
         kind === "add" &&
           (hasSegments
-            ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
+            ? "bg-emerald-50 dark:bg-emerald-400/6"
             : "bg-emerald-200 dark:bg-emerald-400/30 text-emerald-950 dark:text-emerald-50"),
         kind === "remove" &&
           (hasSegments
-            ? "bg-rose-50 dark:bg-rose-400/[0.06]"
+            ? "bg-rose-50 dark:bg-rose-400/6"
             : "bg-rose-200 dark:bg-rose-400/30 text-rose-950 dark:text-rose-50"),
       )}
     >
       <span className="w-3 inline-block text-center tabular-nums text-muted-foreground shrink-0" aria-hidden>
         {kind === "add" ? "+" : "−"}
       </span>
-      <span className="whitespace-pre-wrap break-words">
+      <span className="whitespace-pre-wrap wrap-break-word">
         {segments ? <SegmentedText segments={segments} kind={kind} /> : text}
       </span>
     </div>

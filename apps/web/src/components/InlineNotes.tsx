@@ -80,7 +80,7 @@ export function InlineNotes({
           {mine.map((n) => (
             <li
               key={n.id}
-              className="rounded border border-border/60 bg-background px-2 py-1.5 text-[11px] space-y-1"
+              className="rounded-sm border border-border/60 bg-background px-2 py-1.5 text-[11px] space-y-1"
             >
               <div className="flex items-baseline gap-2 text-muted-foreground">
                 <span className="font-mono text-[10px]">{n.author}</span>
@@ -116,7 +116,7 @@ export function InlineNotes({
             onChange={(e) => setText(e.target.value)}
             placeholder={`Leave a ${label}…`}
             rows={3}
-            className="w-full rounded border border-border/60 bg-background px-2 py-1 text-[12px] font-mono"
+            className="w-full rounded-sm border border-border/60 bg-background px-2 py-1 text-[12px] font-mono"
             disabled={busy}
           />
           <div className="flex items-center gap-2">
@@ -124,7 +124,7 @@ export function InlineNotes({
               type="button"
               onClick={submit}
               disabled={busy || !text.trim()}
-              className="rounded border border-border/60 px-2 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
+              className="rounded-sm border border-border/60 px-2 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
             >
               save
             </button>

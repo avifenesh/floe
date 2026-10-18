@@ -49,7 +49,7 @@ export function DiffView({
   const notesByLine = useLineNotesIndex(inlineNotes ?? [], file);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   return (
-    <div className="text-[12.5px] font-mono rounded border overflow-hidden">
+    <div className="text-[12.5px] font-mono rounded-sm border overflow-hidden">
       {entries.map((entry, i) => {
         if (isSkip(entry)) {
           const isOpen = expanded.has(i);
@@ -117,7 +117,7 @@ function Skip({
           )}
           aria-label={`Collapse ${block.hidden} unchanged lines`}
         >
-          <div className="w-[6rem] shrink-0 flex items-center justify-center py-0.5 bg-muted/40 text-[10px] tracking-wide uppercase text-muted-foreground select-none">
+          <div className="w-24 shrink-0 flex items-center justify-center py-0.5 bg-muted/40 text-[10px] tracking-wide uppercase text-muted-foreground select-none">
             collapse
           </div>
           <div className="flex-1" />
@@ -145,7 +145,7 @@ function Skip({
       )}
       aria-label={`Expand ${block.hidden} unchanged line${block.hidden === 1 ? "" : "s"}`}
     >
-      <div className="w-[6rem] shrink-0 flex items-center justify-center py-1 text-[10px] tracking-wide uppercase text-muted-foreground group-hover:text-foreground select-none">
+      <div className="w-24 shrink-0 flex items-center justify-center py-1 text-[10px] tracking-wide uppercase text-muted-foreground group-hover:text-foreground select-none">
         {block.hidden}
       </div>
       <div className="flex-1 px-3 py-1 text-[12px] text-muted-foreground group-hover:text-foreground">
@@ -204,18 +204,18 @@ function Row({
           "flex items-stretch relative group",
           isAdd &&
             (hasSegments
-              ? "bg-emerald-50 dark:bg-emerald-400/[0.06]"
+              ? "bg-emerald-50 dark:bg-emerald-400/6"
               : "bg-emerald-100 dark:bg-emerald-400/35"),
           isRem &&
             (hasSegments
-              ? "bg-rose-50 dark:bg-rose-400/[0.06]"
+              ? "bg-rose-50 dark:bg-rose-400/6"
               : "bg-rose-100 dark:bg-rose-400/35"),
         )}
       >
         <Gutter value={row.baseLine} mark={isRem ? "−" : null} tone={isRem ? "rem" : "equal"} />
         <Gutter value={row.headLine} mark={isAdd ? "+" : null} tone={isAdd ? "add" : "equal"} />
         <ArchStrip kinds={archKinds} />
-        <pre className="flex-1 min-w-0 px-3 py-[1px] whitespace-pre-wrap break-words leading-5">
+        <pre className="flex-1 min-w-0 px-3 py-px whitespace-pre-wrap wrap-break-word leading-5">
           <LineContent tokens={tokens} segments={row.segments ?? null} kind={row.kind} fallback={row.text} />
         </pre>
         {flagged && <ArchChip kinds={archKinds} />}
@@ -260,11 +260,11 @@ function LineNoteSlot({
   // here, or (b) the reviewer clicked the "+ note" hover affordance.
   if (rowNotes.length === 0 && !open) {
     return (
-      <div className="flex items-center pl-[12rem] pr-3 py-0 leading-none h-0 group/slot relative">
+      <div className="flex items-center pl-48 pr-3 py-0 leading-none h-0 group/slot relative">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="opacity-0 group-hover/slot:opacity-100 translate-y-[-10px] text-[10px] font-mono text-muted-foreground hover:text-foreground bg-background border border-border/60 rounded px-1.5 py-0.5 transition-opacity"
+          className="opacity-0 group-hover/slot:opacity-100 translate-y-[-10px] text-[10px] font-mono text-muted-foreground hover:text-foreground bg-background border border-border/60 rounded-sm px-1.5 py-0.5 transition-opacity"
           title={`Add note on ${side}:${line}`}
         >
           + note
@@ -274,7 +274,7 @@ function LineNoteSlot({
   }
   return (
     <div className="flex items-start border-y border-border/40 bg-muted/20 py-1">
-      <div className="w-[12rem] shrink-0 text-[10px] font-mono text-muted-foreground pt-2 pl-3">
+      <div className="w-48 shrink-0 text-[10px] font-mono text-muted-foreground pt-2 pl-3">
         {side}:{line}
       </div>
       <div className="flex-1 min-w-0 pr-3">
@@ -359,7 +359,7 @@ function ArchStrip({ kinds }: { kinds: Set<HunkClass> }) {
     >
       {/* invisible pointer padding — strip is 3 px visually, hit box ~11 px */}
       <div
-        className="absolute inset-y-0 -inset-x-[4px]"
+        className="absolute inset-y-0 inset-x-[-4px]"
         style={{ pointerEvents: "auto" }}
       />
       <div className="w-full h-full bg-amber-500/70 hover:bg-amber-500 dark:bg-amber-400/60 dark:hover:bg-amber-400 relative transition-colors" />
@@ -517,7 +517,7 @@ function ArchChip({ kinds }: { kinds: Set<HunkClass> }) {
       className={cn(
         "absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none",
         "opacity-0 peer-hover/strip:opacity-100 transition-opacity duration-100",
-        "text-[10px] font-mono font-medium tracking-wide rounded px-1.5 py-0.5",
+        "text-[10px] font-mono font-medium tracking-wide rounded-sm px-1.5 py-0.5",
         "bg-amber-100 text-amber-900 border border-amber-300",
         "dark:bg-amber-400/15 dark:text-amber-200 dark:border-amber-400/30",
       )}
