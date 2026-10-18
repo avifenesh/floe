@@ -1,0 +1,75 @@
+{
+  "me": null,
+  "samples": [
+    {
+      "id": "qa-rendering",
+      "title": "QA rendering fixture",
+      "description": "Valid and invalid Mermaid diagrams through the production React component."
+    }
+  ],
+  "analyze": {
+    "job_id": "qa-job"
+  },
+  "job": {
+    "status": "ready",
+    "artifact": {
+      "schema_version": "0.1",
+      "base": {
+        "nodes": [],
+        "edges": []
+      },
+      "head": {
+        "nodes": [],
+        "edges": []
+      },
+      "hunks": [],
+      "pr": {
+        "repo": "qa/floe",
+        "base_sha": "aaaaaaaa",
+        "head_sha": "bbbbbbbb"
+      },
+      "flows": [
+        {
+          "id": "flow-qa",
+          "name": "QA rendering",
+          "order": 0,
+          "entities": [
+            "qa.request"
+          ],
+          "extra_entities": [],
+          "hunk_ids": [],
+          "rationale": "Explicit API fixture for production component QA",
+          "source": {
+            "kind": "llm",
+            "model": "qa-fixture",
+            "version": "1"
+          },
+          "membership": {
+            "model": "qa-fixture",
+            "members": [],
+            "edges": [],
+            "shapes": [],
+            "summary_groups": [],
+            "diagrams": [
+              {
+                "kind": "mermaid",
+                "label": "QA valid flowchart",
+                "source": "flowchart LR\n A[Request] -->|validate| B{Allowed}\n B -->|yes| C[Render SVG]\n B -->|no| D[Fallback]"
+              },
+              {
+                "kind": "mermaid",
+                "label": "QA invalid flowchart",
+                "source": "flowchart LR\n A[Broken --> B"
+              }
+            ]
+          }
+        }
+      ],
+      "inline_notes": [],
+      "cost_status": "not-run",
+      "proof_status": "not-run",
+      "synth_status": "not-run"
+    }
+  },
+  "llmConfig": {}
+}

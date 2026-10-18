@@ -40,6 +40,11 @@ export function MermaidDiagram({
         mermaid.initialize({
           startOnLoad: false,
           theme: theme === "dark" ? "dark" : "default",
+          layout: "dagre",
+          look: "classic",
+          // SVG labels survive the SVG-only sanitizer without allowing HTML.
+          htmlLabels: false,
+          suppressErrorRendering: true,
           securityLevel: "strict",
           fontFamily: "inherit",
         });

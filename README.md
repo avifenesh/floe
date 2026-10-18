@@ -42,7 +42,8 @@ Nothing is published to crates.io or npm yet. Run it locally.
 ## Quickstart
 
 ```bash
-# Prereqs: Rust stable, Node 20+, Docker (for Postgres), Just
+# Prereqs: Rust stable, Node 24+, Docker (for Postgres), Just
+# Browser: ES2024 support; Mermaid diagrams require Safari 17.4+ on Safari.
 git clone https://github.com/avifenesh/floe
 cd floe
 cp .env.example .env          # fill in at minimum FLOE_GLM_API_KEY or leave blank
