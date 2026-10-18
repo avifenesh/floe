@@ -143,7 +143,7 @@ function PitchBullet({
   return (
     <li className="flex items-baseline gap-3">
       <span
-        className="inline-flex items-center justify-center w-5 h-5 rounded bg-muted-foreground/10 text-muted-foreground text-[11px] font-mono shrink-0"
+        className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-muted-foreground/10 text-muted-foreground text-[11px] font-mono shrink-0"
         aria-hidden
       >
         {glyph}
@@ -223,7 +223,7 @@ function MiniFlowCard({
   const proofTone: "ok" | "warn" | "miss" =
     proof === "strong" ? "ok" : proof === "partial" ? "warn" : "miss";
   return (
-    <article className="rounded-lg border border-border/60 bg-background/40 p-3.5 space-y-2.5 shadow-sm">
+    <article className="rounded-lg border border-border/60 bg-background/40 p-3.5 space-y-2.5 shadow-xs">
       <header className="space-y-0.5">
         <p className="text-[12px] font-mono font-semibold text-foreground leading-tight">
           {name}

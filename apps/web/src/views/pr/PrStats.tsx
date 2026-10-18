@@ -27,7 +27,7 @@ export function PrStats({ artifact }: { artifact: Artifact }) {
 
 function Stat({ value, label }: { value: number; label: string }) {
   return (
-    <div className="rounded-md border border-border/60 bg-muted/60 shadow-sm px-3 py-2.5 flex items-baseline justify-between gap-3">
+    <div className="rounded-md border border-border/60 bg-muted/60 shadow-xs px-3 py-2.5 flex items-baseline justify-between gap-3">
       <span className="text-[22px] font-mono font-semibold tabular-nums text-foreground leading-none">
         {value}
       </span>

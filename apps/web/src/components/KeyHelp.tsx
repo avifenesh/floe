@@ -55,7 +55,7 @@ export function KeyHelp() {
                 {s.keys.map((k) => (
                   <kbd
                     key={k}
-                    className="rounded border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono"
+                    className="rounded-sm border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono"
                   >
                     {k}
                   </kbd>

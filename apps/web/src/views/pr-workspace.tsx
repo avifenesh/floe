@@ -89,7 +89,7 @@ export function PrWorkspace({
           {artifact.notices.map((n, i) => (
             <div
               key={i}
-              className="text-[12px] text-muted-foreground bg-muted/40 border border-border/60 rounded px-3 py-2"
+              className="text-[12px] text-muted-foreground bg-muted/40 border border-border/60 rounded-sm px-3 py-2"
             >
               {n}
             </div>
@@ -135,7 +135,7 @@ function ShipReadinessCard({
         shipStateClass(ship.state)
       }
     >
-      <span className="shrink-0 text-[10px] font-mono font-semibold tracking-[0.12em] uppercase rounded border border-current/40 px-1.5 py-0.5 mt-0.5">
+      <span className="shrink-0 text-[10px] font-mono font-semibold tracking-[0.12em] uppercase rounded-sm border border-current/40 px-1.5 py-0.5 mt-0.5">
         {shipStateLabel(ship.state)}
       </span>
       <div className="flex-1 min-w-0 space-y-1">
@@ -296,7 +296,7 @@ function PrActions({
         type="button"
         onClick={openPrevCompare}
         disabled={compareBusy}
-        className="text-[11px] font-mono rounded border border-border/60 bg-background hover:bg-muted/40 px-2.5 py-1 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="text-[11px] font-mono rounded-sm border border-border/60 bg-background hover:bg-muted/40 px-2.5 py-1 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         title="Compare this analysis with the most recent prior analysis of the same PR."
       >
         {compareBusy ? "loading…" : "⇄ compare with previous"}
@@ -354,7 +354,7 @@ function VerdictButton({
       type="button"
       onClick={onClick}
       className={
-        "text-[11px] font-mono rounded border px-2.5 py-1 transition-colors " +
+        "text-[11px] font-mono rounded-sm border px-2.5 py-1 transition-colors " +
         (active ? activeTone : idleTone)
       }
       aria-pressed={active}
@@ -418,7 +418,7 @@ function Meta({
 function ReviewerNotes({ notes }: { notes: string }) {
   if (!notes.trim()) {
     return (
-      <section className="space-y-2 rounded border border-border/60 bg-muted/10 px-4 py-3 shadow-sm">
+      <section className="space-y-2 rounded-sm border border-border/60 bg-muted/10 px-4 py-3 shadow-xs">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Reviewer notes
         </h2>
@@ -433,7 +433,7 @@ function ReviewerNotes({ notes }: { notes: string }) {
     );
   }
   return (
-    <section className="space-y-2 rounded border border-border/60 bg-muted/10 px-4 py-3 shadow-sm">
+    <section className="space-y-2 rounded-sm border border-border/60 bg-muted/10 px-4 py-3 shadow-xs">
       <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
         Reviewer notes
       </h2>
@@ -469,7 +469,7 @@ function PrCost({ artifact }: { artifact: Artifact }) {
         <h2 className="text-[13px] font-mono text-foreground">PR cost</h2>
         <p className="text-[12px] text-muted-foreground max-w-3xl">
           Cost unavailable — the probe pass isn't configured. Set
-          <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">FLOE_PROBE_LLM</code>
+          <code className="mx-1 rounded-sm bg-muted/50 px-1 text-[11px] font-mono">FLOE_PROBE_LLM</code>
           and re-run.
         </p>
       </div>
@@ -687,7 +687,7 @@ function TokensRow({
   const width = pct === null ? 0 : Math.min(100, Math.abs(pct));
   return (
     <div
-      className="rounded border border-border/60 bg-muted/10 px-3 py-2 space-y-1"
+      className="rounded-sm border border-border/60 bg-muted/10 px-3 py-2 space-y-1"
       title="Total token-usage delta across all flows, as % of base probe run's total tokens. Direct proxy for per-user API billing impact."
     >
       <div className="flex items-baseline justify-between">
@@ -738,7 +738,7 @@ function AxisRow({
         return (
           <div
             key={it.key}
-            className="rounded border border-border/60 bg-muted/10 px-3 py-2 space-y-1"
+            className="rounded-sm border border-border/60 bg-muted/10 px-3 py-2 space-y-1"
             title={
               denom && denom > 0
                 ? `${it.key}: ${formatSigned(it.value)} of ${denom} baseline cost (${pctLabel})`
@@ -784,7 +784,7 @@ function FlowContribRow({
   const width = pctOfBaseline(net, denom);
   const pctLabel = denom > 0 ? formatPct((net / denom) * 100) : null;
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5">
+    <div className="rounded-sm border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5">
       <div className="flex items-baseline gap-3">
         <span className="text-[12px] text-foreground">{name}</span>
         <span className="ml-auto text-[11px] font-mono tabular-nums text-foreground">
@@ -868,7 +868,7 @@ function PrProof({
         />
       )}
       {status === "errored" && (
-        <div className="rounded border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground">
+        <div className="rounded-sm border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground">
           Proof pass reported errors on at least one flow — partial claims may
           be shown.
         </div>
@@ -925,7 +925,7 @@ function PerFlowVerdictRow({ flow, onOpen }: { flow: Flow; onOpen: () => void })
   const rationale = flow.proof?.reasoning ?? flow.intent_fit?.reasoning ?? "";
   const hasRationale = rationale.trim().length > 0;
   return (
-    <div className="rounded border border-border/60 bg-muted/20 hover:bg-muted/30 px-3 py-2.5 space-y-1.5 transition-colors">
+    <div className="rounded-sm border border-border/60 bg-muted/20 hover:bg-muted/30 px-3 py-2.5 space-y-1.5 transition-colors">
       <div className="flex items-baseline gap-3">
         <button
           onClick={onOpen}
@@ -980,7 +980,7 @@ function PrIntentSummary({
   const isStructured = typeof intent !== "string";
   const rawText = !isStructured ? intent : null;
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2">
+    <section className="rounded-sm border border-border/60 bg-muted/10 px-4 py-3 space-y-2">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Intent
@@ -1017,7 +1017,7 @@ function PrIntentSummary({
                 {showOriginal ? "hide original" : "show original PR description"}
               </button>
               {showOriginal && (
-                <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap font-sans max-h-40 overflow-y-auto rounded border border-border/40 bg-background/40 px-2 py-1.5">
+                <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap font-sans max-h-40 overflow-y-auto rounded-sm border border-border/40 bg-background/40 px-2 py-1.5">
                   {rawText}
                 </pre>
               )}

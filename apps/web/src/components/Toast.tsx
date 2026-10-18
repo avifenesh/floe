@@ -117,7 +117,7 @@ function ToastCard({ t, onClose }: { t: ToastEntry; onClose: () => void }) {
       role="status"
       aria-live="polite"
       className={
-        "pointer-events-auto rounded-md border px-3 py-2.5 shadow-sm space-y-1.5 transition-all duration-200 " +
+        "pointer-events-auto rounded-md border px-3 py-2.5 shadow-xs space-y-1.5 transition-all duration-200 " +
         toneClass(t.tone) +
         (shown ? " opacity-100 translate-x-0" : " opacity-0 translate-x-4")
       }
@@ -134,7 +134,7 @@ function ToastCard({ t, onClose }: { t: ToastEntry; onClose: () => void }) {
         </button>
       </div>
       {t.body && (
-        <p className="text-[11px] leading-relaxed font-mono opacity-85 whitespace-pre-wrap break-words">
+        <p className="text-[11px] leading-relaxed font-mono opacity-85 whitespace-pre-wrap wrap-break-word">
           {t.body}
         </p>
       )}

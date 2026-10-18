@@ -185,7 +185,7 @@ function FileDiff({
   const [search, setSearch] = useState("");
   if (err) {
     return (
-      <div className="text-[12px] font-mono text-destructive border border-destructive/40 rounded px-3 py-2">
+      <div className="text-[12px] font-mono text-destructive border border-destructive/40 rounded-sm px-3 py-2">
         {err}
       </div>
     );
@@ -213,7 +213,7 @@ function FileDiff({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="search in this diff…"
           aria-label="Search in diff"
-          className="flex-1 max-w-sm text-[11px] font-mono rounded border border-border/60 bg-background px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="flex-1 max-w-sm text-[11px] font-mono rounded-sm border border-border/60 bg-background px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
         {q && (
           <span className="text-[10px] font-mono text-muted-foreground">

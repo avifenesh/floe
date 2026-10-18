@@ -73,7 +73,7 @@ export function FileLineNotes({
   }
 
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-3 py-2 space-y-2">
+    <section className="rounded-sm border border-border/60 bg-muted/10 px-3 py-2 space-y-2">
       <h3 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
         Line notes · {file}
       </h3>
@@ -84,7 +84,7 @@ export function FileLineNotes({
             return (
               <li
                 key={n.id}
-                className="rounded border border-border/60 bg-background px-2 py-1.5 text-[11px] space-y-1"
+                className="rounded-sm border border-border/60 bg-background px-2 py-1.5 text-[11px] space-y-1"
               >
                 <div className="flex items-baseline gap-2 text-muted-foreground">
                   <span className="font-mono text-[10px]">
@@ -128,7 +128,7 @@ export function FileLineNotes({
             <select
               value={side}
               onChange={(e) => setSide(e.target.value as "base" | "head")}
-              className="rounded border border-border/60 bg-background text-[11px] px-1 py-0.5"
+              className="rounded-sm border border-border/60 bg-background text-[11px] px-1 py-0.5"
               disabled={busy}
             >
               <option value="head">head</option>
@@ -140,7 +140,7 @@ export function FileLineNotes({
               min={1}
               value={line}
               onChange={(e) => setLine(e.target.value)}
-              className="w-20 rounded border border-border/60 bg-background text-[11px] px-1 py-0.5"
+              className="w-20 rounded-sm border border-border/60 bg-background text-[11px] px-1 py-0.5"
               disabled={busy}
             />
           </div>
@@ -149,7 +149,7 @@ export function FileLineNotes({
             onChange={(e) => setText(e.target.value)}
             placeholder="Note…"
             rows={2}
-            className="w-full rounded border border-border/60 bg-background px-2 py-1 text-[12px] font-mono"
+            className="w-full rounded-sm border border-border/60 bg-background px-2 py-1 text-[12px] font-mono"
             disabled={busy}
           />
           <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export function FileLineNotes({
               type="button"
               onClick={submit}
               disabled={busy || !text.trim() || !line}
-              className="rounded border border-border/60 px-2 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
+              className="rounded-sm border border-border/60 px-2 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
             >
               save
             </button>

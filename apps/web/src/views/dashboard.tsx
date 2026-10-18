@@ -405,7 +405,7 @@ function Feed({
         {selected.length === 2 ? (
           <button
             onClick={openCompare}
-            className="text-[10px] font-mono rounded border border-foreground/60 bg-foreground/90 text-background px-2 py-0.5 hover:bg-foreground"
+            className="text-[10px] font-mono rounded-sm border border-foreground/60 bg-foreground/90 text-background px-2 py-0.5 hover:bg-foreground"
           >
             ⇄ compare 2
           </button>
@@ -518,7 +518,7 @@ function FeedCard({
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           {canOpen && (
             <label
-              className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50 cursor-pointer"
+              className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded-sm hover:bg-muted/50 cursor-pointer"
               title="Pick two ready rows to compare"
             >
               <input
@@ -533,14 +533,14 @@ function FeedCard({
           {canRetry && (
             <button
               onClick={onRetry}
-              className="text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50"
+              className="text-[10px] font-mono text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded-sm hover:bg-muted/50"
             >
               retry
             </button>
           )}
           <button
             onClick={onDismiss}
-            className="text-[10px] font-mono text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-muted/50"
+            className="text-[10px] font-mono text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded-sm hover:bg-muted/50"
             title="Archive — removes from the list; cached artifact stays."
           >
             archive
@@ -652,12 +652,12 @@ function AnalyseCard({
                 if (e.key === "Enter" && urlValid && !busy) onAnalyseUrl();
               }}
               placeholder="https://github.com/owner/repo/pull/123"
-              className="flex-1 text-[12px] font-mono border rounded px-2 py-1.5 bg-background placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
+              className="flex-1 text-[12px] font-mono border rounded-sm px-2 py-1.5 bg-background placeholder:text-muted-foreground/60 focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
             <button
               onClick={onAnalyseUrl}
               disabled={busy || !urlValid}
-              className="text-[12px] font-medium rounded border border-foreground/80 bg-foreground text-background px-3 py-1.5 hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="text-[12px] font-medium rounded-sm border border-foreground/80 bg-foreground text-background px-3 py-1.5 hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {busy ? "Analysing…" : "Analyse"}
             </button>
@@ -697,7 +697,7 @@ function AnalyseCard({
               machine unless a remote LLM backend is configured for the
               intent/proof passes.
             </p>
-            <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-2 items-center">
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center">
               <label
                 htmlFor="base"
                 className="text-[11px] font-mono text-muted-foreground"
@@ -706,7 +706,7 @@ function AnalyseCard({
               </label>
               <input
                 id="base"
-                className="text-[12px] font-mono border rounded px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                className="text-[12px] font-mono border rounded-sm px-2 py-1.5 bg-background focus:outline-hidden focus:ring-1 focus:ring-ring"
                 placeholder="/absolute/path/to/pr/base"
                 value={base}
                 onChange={(e) => onBase(e.target.value)}
@@ -719,7 +719,7 @@ function AnalyseCard({
               </label>
               <input
                 id="head"
-                className="text-[12px] font-mono border rounded px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                className="text-[12px] font-mono border rounded-sm px-2 py-1.5 bg-background focus:outline-hidden focus:ring-1 focus:ring-ring"
                 placeholder="/absolute/path/to/pr/head"
                 value={head}
                 onChange={(e) => onHead(e.target.value)}
@@ -768,7 +768,7 @@ function ErrorCard({ raw, onDismiss }: { raw: string; onDismiss: () => void }) {
         <summary className="cursor-pointer select-none hover:text-rose-900 dark:hover:text-rose-100">
           technical detail
         </summary>
-        <pre className="mt-1 whitespace-pre-wrap break-words">{raw}</pre>
+        <pre className="mt-1 whitespace-pre-wrap wrap-break-word">{raw}</pre>
       </details>
     </section>
   );

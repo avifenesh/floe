@@ -81,7 +81,7 @@ export function MembershipGraph({
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border/60 bg-muted/60 shadow-sm">
+    <div className="overflow-x-auto rounded-md border border-border/60 bg-muted/60 shadow-xs">
       <svg
         viewBox={`0 0 ${totalW} ${totalH}`}
         className="block w-full"

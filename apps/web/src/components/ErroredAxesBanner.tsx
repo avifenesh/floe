@@ -50,7 +50,7 @@ export function ErroredAxesBanner({
   return (
     <div
       role="alert"
-      className="mb-3 rounded-md border border-rose-400/40 bg-rose-500/5 px-3 py-2 text-[12px] font-mono text-foreground shadow-sm"
+      className="mb-3 rounded-md border border-rose-400/40 bg-rose-500/5 px-3 py-2 text-[12px] font-mono text-foreground shadow-xs"
     >
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="text-rose-500 font-semibold">axes errored</span>

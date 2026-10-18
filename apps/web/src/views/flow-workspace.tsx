@@ -189,7 +189,7 @@ function ClaimRow({
   const kindLabel = kindToLabel(claim.kind);
   const refs = claim.source_refs ?? [];
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-3 py-2.5 space-y-1.5">
+    <div className="rounded-sm border border-border/60 bg-muted/20 px-3 py-2.5 space-y-1.5">
       <div className="flex items-baseline gap-2">
         <StrengthPips strength={claim.strength} />
         <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
@@ -219,7 +219,7 @@ function ClaimRow({
           {claim.entities.slice(0, 6).map((e) => (
             <span
               key={e}
-              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-background/60 border border-border/50 text-foreground/80"
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm bg-background/60 border border-border/50 text-foreground/80"
             >
               {e}
             </span>
@@ -470,7 +470,7 @@ function TokensRow({ delta, pct }: { delta: number; pct: number | null }) {
     pct === null ? "no baseline" : `${sign}${Math.abs(pct).toFixed(1)}%`;
   return (
     <div
-      className="rounded-md border border-border/60 bg-muted/60 px-3 py-2 space-y-1 shadow-sm"
+      className="rounded-md border border-border/60 bg-muted/60 px-3 py-2 space-y-1 shadow-xs"
       title="Token-usage delta on the flow's entities, as % of the base probe run's total token usage. Direct proxy for per-user API billing impact."
     >
       <div className="flex items-baseline justify-between">
@@ -522,7 +522,7 @@ function AxisRow({
         return (
           <div
             key={it.key}
-            className="rounded-md border border-border/60 bg-muted/60 px-3 py-2.5 space-y-1.5 shadow-sm"
+            className="rounded-md border border-border/60 bg-muted/60 px-3 py-2.5 space-y-1.5 shadow-xs"
             title={
               denom && denom > 0
                 ? `${it.key}: ${formatSigned(it.value)} of ${denom} baseline cost (${pctLabel})`
@@ -591,14 +591,14 @@ function CostDriverRow({
         ).toFixed(1)}%`
       : null;
   return (
-    <div className="rounded-md border border-border/60 bg-muted/60 px-3 py-2 space-y-1.5 shadow-sm">
+    <div className="rounded-md border border-border/60 bg-muted/60 px-3 py-2 space-y-1.5 shadow-xs">
       <div className="flex items-baseline gap-3">
         <span className="text-[12px] text-foreground">{driver.label}</span>
         {onJumpToSource && (
           <button
             type="button"
             onClick={() => onJumpToSource(jumpTarget)}
-            className="text-[10px] font-mono rounded border border-border/60 bg-background px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+            className="text-[10px] font-mono rounded-sm border border-border/60 bg-background px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
             title={
               jumpTarget
                 ? `Jump to source for ${jumpTarget}`
@@ -852,7 +852,7 @@ function FlowMorph({
 
       {/* Intent vs Result — two columns, one row per claim. */}
       {panels.length > 0 ? (
-        <section className="rounded border border-border/60 overflow-hidden shadow-sm">
+        <section className="rounded-sm border border-border/60 overflow-hidden shadow-xs">
           <div className="grid grid-cols-2 text-[10px] font-mono uppercase tracking-wide text-muted-foreground bg-muted/20 border-b border-border/60">
             <div className="px-3 py-1.5">Intent</div>
             <div className="px-3 py-1.5 border-l border-border/60">Result</div>
@@ -1010,7 +1010,7 @@ function ResultCell({
             return (
               <span
                 key={name}
-                className="inline-flex items-center gap-1 text-[10px] font-mono text-foreground rounded px-1 py-[1px] bg-background/60 border border-border/60"
+                className="inline-flex items-center gap-1 text-[10px] font-mono text-foreground rounded-sm px-1 py-px bg-background/60 border border-border/60"
                 title={`${name} · ${s}`}
               >
                 <span className={"w-1 h-1 rounded-full " + STATUS_DOT[s]} aria-hidden />
@@ -1050,7 +1050,7 @@ interface ClaimPanelData {
 
 function ReplacementRow({ from, to, file }: { from: string; to: string; file: string }) {
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-3 py-2 flex items-baseline gap-2 flex-wrap">
+    <div className="rounded-sm border border-border/60 bg-muted/20 px-3 py-2 flex items-baseline gap-2 flex-wrap">
       <span className="inline-flex items-center gap-1.5 text-[12px] font-mono text-foreground">
         <span className="w-1.5 h-1.5 rounded-full bg-rose-500/80" aria-hidden />
         {from}
@@ -1255,7 +1255,7 @@ function FlowGraph({
           {flow.membership ? (
             <MembershipPanel flow={flow} />
           ) : artifact.proof_status === "analyzing" && jobId ? (
-            <section className="rounded-md border border-border/60 bg-muted/60 shadow-sm px-4 py-3 space-y-2">
+            <section className="rounded-md border border-border/60 bg-muted/60 shadow-xs px-4 py-3 space-y-2">
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
                   LLM membership · curating
@@ -1563,7 +1563,7 @@ function EntityGraph({
   };
 
   return (
-    <div className="relative w-full min-w-0 max-w-full overflow-y-auto rounded border border-border/60 bg-muted/10 shadow-sm">
+    <div className="relative w-full min-w-0 max-w-full overflow-y-auto rounded-sm border border-border/60 bg-muted/10 shadow-xs">
       {/* Mobile fallback: below md the SVG scales down so far that
           entity names become unreadable. Render a stacked list
           (one row per entity, base/head status chips inline) —
@@ -1787,7 +1787,7 @@ function SideStatusChip({
   return (
     <span
       className={
-        "text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border " +
+        "text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-sm border " +
         tone
       }
     >
@@ -1987,7 +1987,7 @@ function MembershipPanel({ flow }: { flow: Flow }) {
             {(m.members ?? []).map((mem) => (
               <li
                 key={mem.entity}
-                className="rounded border border-border/50 bg-background px-3 py-1.5"
+                className="rounded-sm border border-border/50 bg-background px-3 py-1.5"
               >
                 <div className="flex items-baseline gap-2">
                   <span className="text-[12px] font-mono font-medium text-foreground">
@@ -2043,7 +2043,7 @@ function MembershipPanel({ flow }: { flow: Flow }) {
                     {(g.sample_entities ?? []).map((s) => (
                       <span
                         key={s}
-                        className="text-[10px] font-mono text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5"
+                        className="text-[10px] font-mono text-muted-foreground bg-muted/40 rounded-sm px-1.5 py-0.5"
                       >
                         {s}
                       </span>
@@ -2073,7 +2073,7 @@ function PropagationStrip({ flow }: { flow: Flow }) {
   }
   if (incoming.length === 0 && outgoing.length === 0) return null;
   return (
-    <div className="rounded border border-border/60 bg-muted/5 px-3 py-2 text-[11px] font-mono space-y-1.5">
+    <div className="rounded-sm border border-border/60 bg-muted/5 px-3 py-2 text-[11px] font-mono space-y-1.5">
       {incoming.length > 0 && (
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-muted-foreground uppercase tracking-wide text-[10px]">
@@ -2082,7 +2082,7 @@ function PropagationStrip({ flow }: { flow: Flow }) {
           {incoming.map((p, i) => (
             <span
               key={`in-${i}`}
-              className="inline-flex items-baseline gap-1 rounded border border-dashed border-border/60 bg-background/60 px-1.5 py-0.5 text-foreground"
+              className="inline-flex items-baseline gap-1 rounded-sm border border-dashed border-border/60 bg-background/60 px-1.5 py-0.5 text-foreground"
               title={`${p.external} → ${p.into}`}
             >
               {p.external}
@@ -2100,7 +2100,7 @@ function PropagationStrip({ flow }: { flow: Flow }) {
           {outgoing.map((p, i) => (
             <span
               key={`out-${i}`}
-              className="inline-flex items-baseline gap-1 rounded border border-dashed border-border/60 bg-background/60 px-1.5 py-0.5 text-foreground"
+              className="inline-flex items-baseline gap-1 rounded-sm border border-dashed border-border/60 bg-background/60 px-1.5 py-0.5 text-foreground"
               title={`${p.from} → ${p.external}`}
             >
               <span className="text-muted-foreground">{p.from}</span>
@@ -2271,11 +2271,11 @@ function FlowDelta({ flow }: { artifact: Artifact; flow: Flow }) {
 
 const TONE_BORDER: Record<"good" | "partial" | "bad" | "neutral", string> = {
   good:
-    "border-l-emerald-500/70 bg-emerald-50/60 dark:bg-emerald-400/[0.05]",
+    "border-l-emerald-500/70 bg-emerald-50/60 dark:bg-emerald-400/5",
   partial:
-    "border-l-amber-500/70 bg-amber-50/60 dark:bg-amber-400/[0.05]",
+    "border-l-amber-500/70 bg-amber-50/60 dark:bg-amber-400/5",
   bad:
-    "border-l-rose-500/70 bg-rose-50/60 dark:bg-rose-400/[0.05]",
+    "border-l-rose-500/70 bg-rose-50/60 dark:bg-rose-400/5",
   neutral: "border-l-border/60 bg-muted/10",
 };
 
@@ -2293,7 +2293,7 @@ function DeltaCard({
   return (
     <div
       className={
-        "rounded border border-border/60 border-l-[3px] px-3 py-2 space-y-0.5 " +
+        "rounded-sm border border-border/60 border-l-[3px] px-3 py-2 space-y-0.5 " +
         TONE_BORDER[tone]
       }
     >
@@ -2387,15 +2387,15 @@ function FlowProof({
         {!hasIntent ? (
           <p className="text-[12px] text-muted-foreground max-w-3xl">
             No intent supplied for this PR. Pass{" "}
-            <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">
+            <code className="mx-1 rounded-sm bg-muted/50 px-1 text-[11px] font-mono">
               intent
             </code>{" "}
             (structured or raw text) or{" "}
-            <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">
+            <code className="mx-1 rounded-sm bg-muted/50 px-1 text-[11px] font-mono">
               --intent-file
             </code>{" "}
             /{" "}
-            <code className="mx-1 rounded bg-muted/50 px-1 text-[11px] font-mono">
+            <code className="mx-1 rounded-sm bg-muted/50 px-1 text-[11px] font-mono">
               --intent-pr
             </code>{" "}
             on the CLI — without an intent the passes have nothing to verify
@@ -2426,7 +2426,7 @@ function FlowProof({
         />
       )}
       {status === "errored" && (
-        <div className="rounded border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground">
+        <div className="rounded-sm border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground">
           Proof pass reported errors on at least one flow — partial claims may
           be shown. Server logs hold the specific failures.
         </div>
@@ -2528,7 +2528,7 @@ function IntentCard({
   // IntentInput is Intent | string.
   const isStructured = typeof intent !== "string";
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2 shadow-sm">
+    <section className="rounded-sm border border-border/60 bg-muted/10 px-4 py-3 space-y-2 shadow-xs">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Intent
@@ -2555,13 +2555,13 @@ function IntentCard({
                     <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-5">
                       {i}.
                     </span>
-                    <span className="text-[10px] font-mono uppercase text-muted-foreground w-[4.5rem]">
+                    <span className="text-[10px] font-mono uppercase text-muted-foreground w-18">
                       {c.evidence_type}
                     </span>
                     <span className="text-foreground">{c.statement}</span>
                   </div>
                   {jobId && onInlineNotesChange && (
-                    <div className="pl-[5.75rem]">
+                    <div className="pl-23">
                       <InlineNotes
                         jobId={jobId}
                         anchor={{ kind: "intent-claim", claim_index: i }}
@@ -2629,7 +2629,7 @@ function MiniMarkdown({ source }: { source: string }) {
                   <span
                     aria-hidden
                     className={
-                      "inline-flex items-center justify-center w-3 h-3 rounded-[3px] border text-[9px] font-mono translate-y-[1px] " +
+                      "inline-flex items-center justify-center w-3 h-3 rounded-[3px] border text-[9px] font-mono translate-y-px " +
                       (it.done
                         ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
                         : "border-border/60 bg-background/60 text-transparent")
@@ -2752,7 +2752,7 @@ function InlineMd({ text }: { text: string }) {
       parts.push(
         <code
           key={`c-${idx}`}
-          className="font-mono text-[11px] px-1 py-[1px] rounded bg-muted/60 text-foreground"
+          className="font-mono text-[11px] px-1 py-px rounded-sm bg-muted/60 text-foreground"
         >
           {token.slice(1, -1)}
         </code>,
@@ -2782,7 +2782,7 @@ function IntentFitCard({
   fit: import("@/types/artifact").IntentFit | null;
 }) {
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5 shadow-sm">
+    <section className="rounded-sm border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5 shadow-xs">
       <div className="flex items-baseline justify-between">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Intent fit
@@ -2824,7 +2824,7 @@ function ProofCard({
   proof: import("@/types/artifact").Proof | null;
 }) {
   return (
-    <section className="rounded border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5 shadow-sm">
+    <section className="rounded-sm border border-border/60 bg-muted/10 px-4 py-3 space-y-2.5 shadow-xs">
       <div className="flex items-baseline justify-between">
         <h2 className="text-[11px] font-medium text-muted-foreground tracking-wide uppercase">
           Proof
@@ -2858,7 +2858,7 @@ function ClaimProofRow({
   claim: import("@/types/artifact").ClaimProofStatus;
 }) {
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-3 py-2.5 space-y-1.5">
+    <div className="rounded-sm border border-border/60 bg-muted/20 px-3 py-2.5 space-y-1.5">
       <div className="flex items-baseline gap-2">
         <VerdictPill verdict={claim.status} kind="claim" small />
         <StrengthPips strength={claim.strength} />
@@ -2879,12 +2879,12 @@ function ClaimProofRow({
               key={i}
               className="text-[11px] text-muted-foreground leading-relaxed"
             >
-              <span className="inline-block w-[4.5rem] text-[10px] font-mono uppercase tracking-wide">
+              <span className="inline-block w-18 text-[10px] font-mono uppercase tracking-wide">
                 {e.evidence_type}
               </span>
               <span>{e.detail}</span>
               {e.path && (
-                <code className="ml-2 rounded bg-background/60 border border-border/50 px-1 text-[10px] font-mono text-foreground/80">
+                <code className="ml-2 rounded-sm bg-background/60 border border-border/50 px-1 text-[10px] font-mono text-foreground/80">
                   {e.path}
                 </code>
               )}

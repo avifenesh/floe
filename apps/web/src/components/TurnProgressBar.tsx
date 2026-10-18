@@ -143,7 +143,7 @@ export function TurnProgressBar({
         {/* Base fill with gradient. */}
         <div
           className={
-            "absolute inset-y-0 left-0 rounded-full bg-gradient-to-r " +
+            "absolute inset-y-0 left-0 rounded-full bg-linear-to-r " +
             fillTone
           }
           style={{ width: `${pct}%` }}

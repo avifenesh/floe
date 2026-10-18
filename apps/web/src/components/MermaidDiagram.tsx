@@ -30,20 +30,31 @@ export function MermaidDiagram({
     `mermaid-${Math.random().toString(36).slice(2, 10)}`,
   );
 
+  const renderCount = useRef(0);
+
   useEffect(() => {
     let cancelled = false;
+    // Mermaid removes an existing SVG with the requested ID before rendering.
+    // Effect reruns need distinct IDs so stale work cannot remove a live SVG.
+    const renderId = `${idRef.current}-${++renderCount.current}`;
     setErr(null);
     (async () => {
       try {
         const mod = await import("mermaid");
+        if (cancelled) return;
         const mermaid = mod.default;
         mermaid.initialize({
           startOnLoad: false,
           theme: theme === "dark" ? "dark" : "default",
+          layout: "dagre",
+          look: "classic",
+          // SVG labels survive the SVG-only sanitizer without allowing HTML.
+          htmlLabels: false,
+          suppressErrorRendering: true,
           securityLevel: "strict",
           fontFamily: "inherit",
         });
-        const { svg } = await mermaid.render(idRef.current, source);
+        const { svg } = await mermaid.render(renderId, source);
         if (cancelled || !hostRef.current) return;
         // DOMPurify returns a TrustedHTML-compatible NODE when we
         // pass `RETURN_DOM_FRAGMENT: true`. We then append the
@@ -70,14 +81,14 @@ export function MermaidDiagram({
     return (
       <div className="rounded-md border border-amber-400/40 bg-amber-500/5 px-3 py-2 text-[11px] font-mono text-amber-800 dark:text-amber-200 space-y-1">
         <div>Mermaid parse failed — showing raw source.</div>
-        <pre className="whitespace-pre-wrap break-words text-[10px] text-muted-foreground">
+        <pre className="whitespace-pre-wrap wrap-break-word text-[10px] text-muted-foreground">
           {source}
         </pre>
       </div>
     );
   }
   return (
-    <figure className="rounded-md border border-border/60 bg-muted/40 shadow-sm p-3">
+    <figure className="rounded-md border border-border/60 bg-muted/40 shadow-xs p-3">
       {label && (
         <figcaption className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
           {label}

@@ -50,7 +50,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       # `artifact.ts` is generated from Rust and gitignored; regenerate
@@ -79,7 +79,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: cargo run -q -p floe-cli -- schema > schema.json
@@ -113,7 +113,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - uses: Swatinem/rust-cache@v2

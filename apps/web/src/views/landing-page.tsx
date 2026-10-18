@@ -54,7 +54,7 @@ function DevLoginPanel() {
     }
   }
   return (
-    <details className="mt-4 mx-auto max-w-md rounded border border-border/50 bg-muted/10 px-3 py-2 text-[11px] font-mono">
+    <details className="mt-4 mx-auto max-w-md rounded-sm border border-border/50 bg-muted/10 px-3 py-2 text-[11px] font-mono">
       <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">
         dev sign-in (local only)
       </summary>
@@ -63,12 +63,12 @@ function DevLoginPanel() {
           value={handle}
           onChange={(e) => setHandle(e.target.value)}
           placeholder="handle"
-          className="flex-1 border rounded px-2 py-1 bg-background"
+          className="flex-1 border rounded-sm px-2 py-1 bg-background"
         />
         <button
           onClick={() => void go()}
           disabled={busy || !handle.trim()}
-          className="px-3 py-1 rounded border border-foreground/70 bg-foreground/90 text-background hover:bg-foreground disabled:opacity-40"
+          className="px-3 py-1 rounded-sm border border-foreground/70 bg-foreground/90 text-background hover:bg-foreground disabled:opacity-40"
         >
           {busy ? "…" : "sign in"}
         </button>
@@ -143,7 +143,7 @@ export function LandingPage({ onJob }: Props) {
         />
       )}
       {err && !pendingJobId && (
-        <section className="text-[12px] font-mono text-destructive border border-destructive/40 rounded px-3 py-2">
+        <section className="text-[12px] font-mono text-destructive border border-destructive/40 rounded-sm px-3 py-2">
           {err}
         </section>
       )}

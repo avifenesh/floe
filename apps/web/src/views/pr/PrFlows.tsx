@@ -52,7 +52,7 @@ export function PrFlows({ artifact, onPick }: Props) {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="filter flows by name or entity…"
           aria-label="Filter flows"
-          className="flex-1 max-w-xs text-[11px] font-mono rounded border border-border/60 bg-background px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="flex-1 max-w-xs text-[11px] font-mono rounded-sm border border-border/60 bg-background px-2 py-1 placeholder:text-muted-foreground/60 focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
         <span
           className="text-[10px] font-mono text-muted-foreground/70 shrink-0 hidden sm:inline"
@@ -98,7 +98,7 @@ function ScaleStrip({ artifact }: { artifact: Artifact }) {
   const entities = new Set<string>();
   for (const f of artifact.flows ?? []) for (const e of f.entities) entities.add(e);
   return (
-    <div className="rounded border border-border/60 bg-muted/20 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+    <div className="rounded-sm border border-border/60 bg-muted/20 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
       <Stat value={files} label={files === 1 ? "file" : "files"} />
       <Stat value={counts.total} label={counts.total === 1 ? "hunk" : "hunks"} />
       <Stat value={flows} label={flows === 1 ? "flow" : "flows"} />
@@ -194,14 +194,14 @@ function FlowCard({
         </span>
         {isStructural ? (
           <span
-            className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground"
+            className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded-sm border border-border/60 text-muted-foreground"
             title="Flow cluster came from structural analysis only (no LLM)"
           >
             structural
           </span>
         ) : (
           <span
-            className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-400/15 dark:text-emerald-200 dark:border-emerald-400/30"
+            className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded-sm bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-400/15 dark:text-emerald-200 dark:border-emerald-400/30"
             title={
               source.model
                 ? `Flow named by an LLM synthesis pass (${source.model}@${source.version})`
@@ -229,7 +229,7 @@ function FlowCard({
         {topEntities.map((e) => (
           <span
             key={e}
-            className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-background/60 border border-border/50 text-foreground/80"
+            className="text-[11px] font-mono px-1.5 py-0.5 rounded-sm bg-background/60 border border-border/50 text-foreground/80"
           >
             {e}
           </span>
