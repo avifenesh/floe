@@ -52,8 +52,12 @@ just dev                      # server + web in parallel
 # Open http://localhost:5173, click a sample
 ```
 
-No Just? `docker compose up -d postgres && cargo run -p floe-server` in one
+No Just? `docker compose up -d db && cargo run -p floe-server` in one
 shell, `cd apps/web && npm install && npm run dev` in another.
+
+The server uses Postgres only when `FLOE_DATABASE_URL` is set. For the
+compose database that is `postgres://adr:adr@localhost:5433/adr`.
+Without it, the server falls back to a local SQLite file.
 
 ## What gets emitted
 
@@ -90,7 +94,7 @@ crates/
   floe-lsp          TypeScript LSP client (async-lsp)
   floe-mcp          MCP-over-stdio host for the synthesis LLM
   floe-server       HTTP server (axum) + Postgres persistence
-  floe-cli          One-shot CLI (schema, diff)
+  floe-cli          One-shot CLI (diff, schema, calibrate, baseline)
 apps/web            React + Vite frontend
 fixtures/           Sample PRs (base/ + head/ + intent.json + meta.json)
 docs/               Architecture, RFC, hunk-type reference

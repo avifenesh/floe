@@ -36,7 +36,7 @@ web:
 # ─── Database ────────────────────────────────────────────────────
 # Bring up Postgres via docker compose. Idempotent.
 db-up:
-    docker compose up -d postgres
+    docker compose up -d db
 
 # Stop Postgres.
 db-down:
@@ -44,7 +44,7 @@ db-down:
 
 # Open a psql shell against the dev database.
 db-shell:
-    docker compose exec postgres psql -U postgres -d adr
+    docker compose exec db psql -U adr -d adr
 
 # ─── Validation ──────────────────────────────────────────────────
 # Run the full test + lint + typecheck suite the way CI runs it.
