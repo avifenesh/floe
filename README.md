@@ -55,9 +55,10 @@ just dev                      # server + web in parallel
 No Just? `docker compose up -d db && cargo run -p floe-server` in one
 shell, `cd apps/web && npm install && npm run dev` in another.
 
-The server uses Postgres only when `FLOE_DATABASE_URL` is set. For the
-compose database that is `postgres://adr:adr@localhost:5433/adr`.
-Without it, the server falls back to a local SQLite file.
+The server uses Postgres when `FLOE_DATABASE_URL` (or `DATABASE_URL`)
+holds a `postgres://` URL. For the compose database that is
+`postgres://adr:adr@localhost:5433/adr`. Without one, the server falls
+back to a local SQLite file.
 
 ## What gets emitted
 
